@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>首页综合看板 - AI Learn Prototype</title>
+          <link rel="stylesheet" href="../assets/styles.css" />
+        </head>
+        <body data-page="dashboard">
+          <div class="shell">
+            <aside class="rail"></aside>
+            <main class="workspace">
+              <section class="hero">
+                <p class="eyebrow">AI Learn Prototype / Cross Domain</p>
+                <h1>首页综合看板</h1>
+                <p class="hero-copy">把库存、生产、质量、设备、告警与 AI 摘要统一放在首页，作为六条演示主线的总入口。</p>
+              </section>
+              <section class="meta-grid">
+                <article class="card">
+                  <h2>权限点</h2>
+                  <ul class="tag-list">
+        <li class="tag">dashboard:view</li>
+<li class="tag">inventory:summary:view</li>
+<li class="tag">production:summary:view</li>
+<li class="tag">device:summary:view</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>关键接口</h2>
+                  <ul class="muted-list">
+        <li>GET /api/dashboard/inventory</li>
+<li>GET /api/dashboard/production</li>
+<li>GET /api/dashboard/quality</li>
+<li>GET /api/dashboard/device</li>
+<li>GET /api/dashboard/alarms</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>状态标签</h2>
+                  <ul class="tag-list">
+        <li class="tag">实时刷新</li>
+<li class="tag">按时间范围过滤</li>
+<li class="tag">异常高亮</li>
+<li class="tag">按租户隔离</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>主要动作</h2>
+                  <ul class="tag-list">
+        <li class="tag">切换时间范围</li>
+<li class="tag">跳转采购/销售/工单/设备</li>
+<li class="tag">查看告警详情</li>
+<li class="tag">生成 AI 日报</li>
+                  </ul>
+                </article>
+              </section>
+              <section class="panel">
+  <h2>核心指标卡</h2>
+  <div class="kpi-grid">
+    <div class="kpi"><span class="kpi-label">可用库存</span><span class="kpi-value">18,240</span></div>
+    <div class="kpi"><span class="kpi-label">在制工单</span><span class="kpi-value">27</span></div>
+    <div class="kpi"><span class="kpi-label">设备在线率</span><span class="kpi-value">96.8%</span></div>
+    <div class="kpi"><span class="kpi-label">未恢复告警</span><span class="kpi-value">12</span></div>
+  </div>
+</section>
+<section class="triple-grid">
+  <article class="panel">
+    <h2>库存趋势</h2>
+    <div class="chart-placeholder">
+      <div class="chart-bars">
+        <span style="height: 34%;"></span>
+        <span style="height: 48%;"></span>
+        <span style="height: 42%;"></span>
+        <span style="height: 66%;"></span>
+        <span style="height: 58%;"></span>
+        <span style="height: 78%;"></span>
+      </div>
+    </div>
+  </article>
+  <article class="panel">
+    <h2>生产进度</h2>
+    <ul class="timeline">
+      <li>WO-240630-018 装配 72%，等待工序三报工</li>
+      <li>WO-240630-021 质检阻塞，2 件不良待返工</li>
+      <li>WO-240630-026 已完工待成品入库</li>
+    </ul>
+  </article>
+  <article class="panel">
+    <h2>告警摘要</h2>
+    <div class="status-row">
+      <span class="status-chip bad">冲压机温度过高</span>
+      <span class="status-chip warn">立库堆垛机心跳超时</span>
+      <span class="status-chip good">包装线已恢复</span>
+    </div>
+    <div class="toolbar">
+      <span class="btn">跳到地图定位</span>
+      <span class="btn primary">AI 解释原因</span>
+    </div>
+  </article>
+</section>
+              <p class="footer-note">当前原型只使用假数据，目的是冻结页面结构、字段、状态、接口与权限，不代表最终视觉稿或真实业务实现。</p>
+            </main>
+          </div>
+          <script src="../assets/app.js"></script>
+        </body>
+        </html>

@@ -1,0 +1,82 @@
+name: ai-learn-platform
+version: 1
+description: 适用于 ai_learn 项目的 Codex 规划审核 + Antigravity 执行协作流程
+
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    description: 变更目标、范围和风险边界
+    template: proposal.md
+    instruction: |
+      生成本次变更的业务提案。重点说明为什么做、改什么、不改什么、哪些现有事实文档必须同步回写，以及是否允许 AI 直接实现高风险业务。
+    requires: []
+
+  - id: spec
+    generates: spec.md
+    description: 本次变更的行为规格
+    template: spec.md
+    instruction: |
+      使用 requirement 和 scenario 描述本次变更的行为要求，覆盖正常、异常和边界场景，并写明会影响哪些既有 specs。
+    requires:
+      - proposal
+
+  - id: design
+    generates: design.md
+    description: 技术设计方案
+    template: design.md
+    instruction: |
+      说明实现方案、涉及模块、关键状态流、接口流、UI 交互流、验证方式以及禁止修改范围。
+    requires:
+      - proposal
+      - spec
+
+  - id: tasks
+    generates: tasks.md
+    description: 可执行的实现清单
+    template: tasks.md
+    instruction: |
+      将设计拆成 Antigravity 可顺序执行的任务，每项任务都尽量落到具体文件、具体模块或具体验证动作。
+    requires:
+      - design
+
+  - id: worker-brief
+    generates: worker-brief.md
+    description: 给 Antigravity 的执行说明
+    template: worker-brief.md
+    instruction: |
+      生成给 worker 的执行说明，强调边界、禁止事项、必须同步更新的文档、输出格式和阻塞处理方式。
+    requires:
+      - tasks
+
+  - id: self-review
+    generates: self-review.md
+    description: 给 Antigravity 的实现后自检记录
+    template: self-review.md
+    instruction: |
+      生成给 worker 使用的自检记录模板。要求其在实现完成后，对照 proposal、spec、design 和 tasks 进行一次自检。
+    requires:
+      - worker-brief
+
+  - id: review
+    generates: review.md
+    description: 审核记录
+    template: review.md
+    instruction: |
+      生成用于 Codex 最终审核的记录模板，便于沉淀结论、问题和返工要求。
+    requires:
+      - self-review
+
+  - id: retrospective
+    generates: retrospective.md
+    description: 失败经验与提示优化沉淀
+    template: retrospective.md
+    instruction: |
+      生成用于 Codex 复盘和后续优化的记录模板。
+    requires:
+      - review
+
+apply:
+  requires:
+    - tasks
+    - worker-brief
+  tracks: tasks.md

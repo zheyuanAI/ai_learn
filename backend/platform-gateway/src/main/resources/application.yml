@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: platform-gateway
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

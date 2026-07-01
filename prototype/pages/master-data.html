@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>商品 / 仓库 / 库位管理 - AI Learn Prototype</title>
+          <link rel="stylesheet" href="../assets/styles.css" />
+        </head>
+        <body data-page="master-data">
+          <div class="shell">
+            <aside class="rail"></aside>
+            <main class="workspace">
+              <section class="hero">
+                <p class="eyebrow">AI Learn Prototype / ERP / WMS</p>
+                <h1>商品 / 仓库 / 库位管理</h1>
+                <p class="hero-copy">主数据页面用于冻结商品基础字段、仓库层级和库位编码规则，所有 ERP/WMS 与 MES 业务都依赖这里的命名与结构。</p>
+              </section>
+              <section class="meta-grid">
+                <article class="card">
+                  <h2>权限点</h2>
+                  <ul class="tag-list">
+        <li class="tag">product:view</li>
+<li class="tag">warehouse:view</li>
+<li class="tag">location:view</li>
+<li class="tag">product:create</li>
+<li class="tag">warehouse:create</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>关键接口</h2>
+                  <ul class="muted-list">
+        <li>GET /api/products</li>
+<li>POST /api/products</li>
+<li>GET /api/warehouses</li>
+<li>GET /api/locations</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>状态标签</h2>
+                  <ul class="tag-list">
+        <li class="tag">启用</li>
+<li class="tag">停用</li>
+<li class="tag">可拣货</li>
+<li class="tag">冻结库位</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>主要动作</h2>
+                  <ul class="tag-list">
+        <li class="tag">新建商品</li>
+<li class="tag">新建仓库</li>
+<li class="tag">新建库位</li>
+<li class="tag">查看库存分布</li>
+                  </ul>
+                </article>
+              </section>
+              <section class="section-grid">
+  <article class="panel">
+    <h2>商品列表字段</h2>
+    <div class="table-shell">
+      <table>
+        <thead>
+          <tr><th>SKU</th><th>商品名称</th><th>规格</th><th>单位</th><th>批次管理</th><th>序列号管理</th><th>状态</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>FG-1001</td><td>伺服电机总成</td><td>220V / 1.5KW</td><td>台</td><td>是</td><td>否</td><td>启用</td></tr>
+          <tr><td>RM-2033</td><td>轴承组件</td><td>6008-2RS</td><td>件</td><td>否</td><td>否</td><td>启用</td></tr>
+          <tr><td>PK-0088</td><td>出货包装箱</td><td>L 号</td><td>个</td><td>否</td><td>否</td><td>停用</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
+  <article class="panel">
+    <h2>仓库与库位详情</h2>
+    <div class="field-grid">
+      <div class="field"><span class="field-label">仓库编码</span><span class="field-value">WH-FG-01</span></div>
+      <div class="field"><span class="field-label">仓库名称</span><span class="field-value">成品仓一号库</span></div>
+      <div class="field"><span class="field-label">库位编码</span><span class="field-value">A-01-03</span></div>
+      <div class="field"><span class="field-label">库位类型</span><span class="field-value">拣货位 / 存储位 / 冻结位</span></div>
+      <div class="field"><span class="field-label">容量上限</span><span class="field-value">600 件</span></div>
+      <div class="field"><span class="field-label">所属租户</span><span class="field-value">tenant_demo_a</span></div>
+    </div>
+    <p class="note">冻结要求：商品和库位必须确定批次、序列号、保质期等维度是否启用，避免后续库存模型返工。</p>
+  </article>
+</section>
+              <p class="footer-note">当前原型只使用假数据，目的是冻结页面结构、字段、状态、接口与权限，不代表最终视觉稿或真实业务实现。</p>
+            </main>
+          </div>
+          <script src="../assets/app.js"></script>
+        </body>
+        </html>

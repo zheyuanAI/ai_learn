@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>三维展示页 - AI Learn Prototype</title>
+          <link rel="stylesheet" href="../assets/styles.css" />
+        </head>
+        <body data-page="digital-twin">
+          <div class="shell">
+            <aside class="rail"></aside>
+            <main class="workspace">
+              <section class="hero">
+                <p class="eyebrow">AI Learn Prototype / GIS / 3D</p>
+                <h1>三维展示页</h1>
+                <p class="hero-copy">三维页不用追求复杂建模，重点是确定最小可演示场景、设备状态映射和与地图 / 看板的数据联动。</p>
+              </section>
+              <section class="meta-grid">
+                <article class="card">
+                  <h2>权限点</h2>
+                  <ul class="tag-list">
+        <li class="tag">twin:view</li>
+<li class="tag">device:view</li>
+<li class="tag">alarm:view</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>关键接口</h2>
+                  <ul class="muted-list">
+        <li>GET /api/site-map</li>
+<li>GET /api/devices</li>
+<li>GET /api/device-alarms</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>状态标签</h2>
+                  <ul class="tag-list">
+        <li class="tag">正常运行</li>
+<li class="tag">告警闪烁</li>
+<li class="tag">离线灰化</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>主要动作</h2>
+                  <ul class="tag-list">
+        <li class="tag">切换视角</li>
+<li class="tag">联动设备详情</li>
+<li class="tag">查看告警清单</li>
+                  </ul>
+                </article>
+              </section>
+              <section class="section-grid">
+  <article class="panel">
+    <h2>简化三维场景占位</h2>
+    <div class="scene-placeholder">
+      <div class="map-point" style="left: 16%; top: 62%;">仓库体块</div>
+      <div class="map-point warn" style="left: 44%; top: 34%;">堆垛机动画位</div>
+      <div class="map-point bad" style="left: 70%; top: 24%;">告警设备高亮</div>
+    </div>
+  </article>
+  <article class="panel">
+    <h2>三维展示边界</h2>
+    <ul class="timeline">
+      <li>首版只展示厂区轮廓、关键设备、仓库和状态光效</li>
+      <li>点击设备后联动设备详情与告警抽屉</li>
+      <li>告警态需要有颜色和闪烁差异，离线态需要统一灰化规则</li>
+      <li>与地图页共享时间范围和数据源，避免状态不一致</li>
+    </ul>
+  </article>
+</section>
+              <p class="footer-note">当前原型只使用假数据，目的是冻结页面结构、字段、状态、接口与权限，不代表最终视觉稿或真实业务实现。</p>
+            </main>
+          </div>
+          <script src="../assets/app.js"></script>
+        </body>
+        </html>

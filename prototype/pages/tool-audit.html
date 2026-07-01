@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>工具调用审计页 - AI Learn Prototype</title>
+          <link rel="stylesheet" href="../assets/styles.css" />
+        </head>
+        <body data-page="tool-audit">
+          <div class="shell">
+            <aside class="rail"></aside>
+            <main class="workspace">
+              <section class="hero">
+                <p class="eyebrow">AI Learn Prototype / AI</p>
+                <h1>工具调用审计页</h1>
+                <p class="hero-copy">审计页用于固化 AI 工具调用的输入摘要、输出摘要、耗时、来源与失败原因，满足只读工具的可追溯要求。</p>
+              </section>
+              <section class="meta-grid">
+                <article class="card">
+                  <h2>权限点</h2>
+                  <ul class="tag-list">
+        <li class="tag">ai:audit:view</li>
+<li class="tag">ai:audit:export</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>关键接口</h2>
+                  <ul class="muted-list">
+        <li>GET /api/ai/tool-audit-logs</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>状态标签</h2>
+                  <ul class="tag-list">
+        <li class="tag">成功</li>
+<li class="tag">失败</li>
+<li class="tag">超时</li>
+<li class="tag">拒绝访问</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>主要动作</h2>
+                  <ul class="tag-list">
+        <li class="tag">查看详情</li>
+<li class="tag">导出审计</li>
+<li class="tag">按用户过滤</li>
+<li class="tag">按工具过滤</li>
+                  </ul>
+                </article>
+              </section>
+              <section class="panel">
+  <h2>审计表格列</h2>
+  <div class="table-shell">
+    <table>
+      <thead>
+        <tr><th>时间</th><th>租户</th><th>用户</th><th>工具</th><th>输入摘要</th><th>输出摘要</th><th>耗时</th><th>状态</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>2026-06-30 14:52:11</td><td>tenant_demo_a</td><td>planner.zhang</td><td>queryDeviceAlarm</td><td>C12 超温 2h</td><td>14 条告警 + 关联工单</td><td>842ms</td><td>成功</td></tr>
+        <tr><td>2026-06-30 15:01:20</td><td>tenant_demo_a</td><td>shift.lead</td><td>generateDailyOperationReport</td><td>白班日报</td><td>库存/生产/设备摘要</td><td>2.4s</td><td>成功</td></tr>
+        <tr><td>2026-06-30 15:08:44</td><td>tenant_demo_b</td><td>guest.user</td><td>queryInventoryByProductAndWarehouse</td><td>跨租户 SKU</td><td>权限拒绝</td><td>126ms</td><td>拒绝访问</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">冻结要求：审计日志至少包含租户、用户、工具、输入摘要、输出摘要、耗时、状态、失败原因和来源范围。失败调用不能缺失。</p>
+</section>
+              <p class="footer-note">当前原型只使用假数据，目的是冻结页面结构、字段、状态、接口与权限，不代表最终视觉稿或真实业务实现。</p>
+            </main>
+          </div>
+          <script src="../assets/app.js"></script>
+        </body>
+        </html>

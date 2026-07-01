@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>AI 助手聊天页 - AI Learn Prototype</title>
+          <link rel="stylesheet" href="../assets/styles.css" />
+        </head>
+        <body data-page="ai-assistant">
+          <div class="shell">
+            <aside class="rail"></aside>
+            <main class="workspace">
+              <section class="hero">
+                <p class="eyebrow">AI Learn Prototype / AI</p>
+                <h1>AI 助手聊天页</h1>
+                <p class="hero-copy">AI 聊天页只做只读问答与只读工具调用，不直接修改业务数据。页面必须显式展示来源、数据时间范围和调用摘要。</p>
+              </section>
+              <section class="meta-grid">
+                <article class="card">
+                  <h2>权限点</h2>
+                  <ul class="tag-list">
+        <li class="tag">ai:chat</li>
+<li class="tag">ai:tool:inventory</li>
+<li class="tag">ai:tool:orders</li>
+<li class="tag">ai:tool:workorder</li>
+<li class="tag">ai:tool:alarm</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>关键接口</h2>
+                  <ul class="muted-list">
+        <li>POST /api/ai/chat</li>
+<li>POST /api/ai/tools/queryLowStock</li>
+<li>POST /api/ai/tools/queryInventoryByProductAndWarehouse</li>
+<li>POST /api/ai/tools/querySalesOrderStatus</li>
+<li>POST /api/ai/tools/queryPurchaseOrderStatus</li>
+<li>POST /api/ai/tools/queryWorkOrderProgress</li>
+<li>POST /api/ai/tools/queryQualityStatistics</li>
+<li>POST /api/ai/tools/queryDeviceAlarm</li>
+<li>POST /api/ai/tools/generateDailyOperationReport</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>状态标签</h2>
+                  <ul class="tag-list">
+        <li class="tag">对话中</li>
+<li class="tag">工具调用中</li>
+<li class="tag">回答完成</li>
+<li class="tag">调用失败</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>主要动作</h2>
+                  <ul class="tag-list">
+        <li class="tag">发送问题</li>
+<li class="tag">解释告警</li>
+<li class="tag">生成日报</li>
+<li class="tag">查看工具链路</li>
+                  </ul>
+                </article>
+              </section>
+              <section class="section-grid">
+  <article class="panel">
+    <h2>对话区域</h2>
+    <div class="chat-placeholder">
+      <div class="conversation">
+        <div class="bubble user">请解释今天包装线 C12 的超温告警，并给出可能影响的工单。</div>
+        <div class="bubble">已查询设备告警、关联工单与最近 2 小时遥测。结论：C12 在 14:20 至 14:46 温度高于阈值 14 次，影响 WO-240630-021 包装工序。来源时间范围：2026-06-30 12:00 至 15:00。</div>
+      </div>
+    </div>
+  </article>
+  <article class="panel">
+    <h2>只读约束与来源展示</h2>
+    <ul class="timeline">
+      <li>所有业务工具只读，不得修改订单、库存、工单、告警状态</li>
+      <li>回答必须附带来源时间范围、来源类型和调用工具摘要</li>
+      <li>失败调用也要写审计日志，便于追责与优化</li>
+      <li>不同租户的数据与知识库绝对隔离</li>
+    </ul>
+    <div class="toolbar">
+      <span class="btn primary">生成经营日报</span>
+      <span class="btn">查看工具摘要</span>
+    </div>
+  </article>
+</section>
+              <p class="footer-note">当前原型只使用假数据，目的是冻结页面结构、字段、状态、接口与权限，不代表最终视觉稿或真实业务实现。</p>
+            </main>
+          </div>
+          <script src="../assets/app.js"></script>
+        </body>
+        </html>

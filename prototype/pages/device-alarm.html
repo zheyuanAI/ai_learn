@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>设备列表 / 设备详情 / 告警页 - AI Learn Prototype</title>
+          <link rel="stylesheet" href="../assets/styles.css" />
+        </head>
+        <body data-page="device-alarm">
+          <div class="shell">
+            <aside class="rail"></aside>
+            <main class="workspace">
+              <section class="hero">
+                <p class="eyebrow">AI Learn Prototype / IoT</p>
+                <h1>设备列表 / 设备详情 / 告警页</h1>
+                <p class="hero-copy">第四条演示主线页面，展示模拟协议接入、遥测趋势、告警触发/确认/恢复，以及设备与工单的关联关系。</p>
+              </section>
+              <section class="meta-grid">
+                <article class="card">
+                  <h2>权限点</h2>
+                  <ul class="tag-list">
+        <li class="tag">device:view</li>
+<li class="tag">alarm:view</li>
+<li class="tag">alarm:ack</li>
+<li class="tag">protocol:simulate</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>关键接口</h2>
+                  <ul class="muted-list">
+        <li>POST /api/devices</li>
+<li>GET /api/devices</li>
+<li>GET /api/devices/{id}/telemetry</li>
+<li>GET /api/devices/{id}/status</li>
+<li>GET /api/device-alarms</li>
+<li>POST /api/device-alarms/{id}/ack</li>
+<li>POST /api/protocol-adapters/modbus/simulate</li>
+<li>POST /api/protocol-adapters/opcua/simulate</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>状态标签</h2>
+                  <ul class="tag-list">
+        <li class="tag">Online</li>
+<li class="tag">Offline</li>
+<li class="tag">Running</li>
+<li class="tag">Stopped</li>
+<li class="tag">AlarmTriggered</li>
+<li class="tag">AlarmAcked</li>
+<li class="tag">AlarmRecovered</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>主要动作</h2>
+                  <ul class="tag-list">
+        <li class="tag">模拟 MQTT 上报</li>
+<li class="tag">模拟 Modbus</li>
+<li class="tag">模拟 OPC UA</li>
+<li class="tag">确认告警</li>
+<li class="tag">查看关联工单</li>
+                  </ul>
+                </article>
+              </section>
+              <section class="triple-grid">
+  <article class="panel">
+    <h2>设备概况</h2>
+    <div class="status-row">
+      <span class="status-chip good">冲压机 A01 在线</span>
+      <span class="status-chip warn">堆垛机 B03 心跳延迟</span>
+      <span class="status-chip bad">包装线 C12 超温告警</span>
+    </div>
+    <div class="toolbar">
+      <span class="btn primary">模拟设备上报</span>
+      <span class="btn">查看遥测</span>
+    </div>
+  </article>
+  <article class="panel">
+    <h2>遥测占位</h2>
+    <div class="chart-placeholder">
+      <div class="chart-bars">
+        <span style="height: 20%;"></span>
+        <span style="height: 56%;"></span>
+        <span style="height: 42%;"></span>
+        <span style="height: 74%;"></span>
+        <span style="height: 60%;"></span>
+      </div>
+    </div>
+  </article>
+  <article class="panel">
+    <h2>告警详情冻结字段</h2>
+    <ul class="timeline">
+      <li>告警编号、设备编号、告警类型、等级、触发时间、确认人、恢复时间</li>
+      <li>告警支持 Triggered -> Acked -> Recovered 三阶段</li>
+      <li>同一设备短时间重复告警需要去重策略</li>
+      <li>设备可关联工单、产线、厂区点位</li>
+    </ul>
+  </article>
+</section>
+              <p class="footer-note">当前原型只使用假数据，目的是冻结页面结构、字段、状态、接口与权限，不代表最终视觉稿或真实业务实现。</p>
+            </main>
+          </div>
+          <script src="../assets/app.js"></script>
+        </body>
+        </html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>知识库管理页 - AI Learn Prototype</title>
+          <link rel="stylesheet" href="../assets/styles.css" />
+        </head>
+        <body data-page="knowledge-base">
+          <div class="shell">
+            <aside class="rail"></aside>
+            <main class="workspace">
+              <section class="hero">
+                <p class="eyebrow">AI Learn Prototype / AI</p>
+                <h1>知识库管理页</h1>
+                <p class="hero-copy">知识库管理页固定文档上传、切分、索引和租户隔离信息，是 RAG 可演示闭环的基础。</p>
+              </section>
+              <section class="meta-grid">
+                <article class="card">
+                  <h2>权限点</h2>
+                  <ul class="tag-list">
+        <li class="tag">knowledge:view</li>
+<li class="tag">knowledge:upload</li>
+<li class="tag">knowledge:delete</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>关键接口</h2>
+                  <ul class="muted-list">
+        <li>POST /api/ai/knowledge/upload</li>
+<li>GET /api/ai/knowledge/documents</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>状态标签</h2>
+                  <ul class="tag-list">
+        <li class="tag">已上传</li>
+<li class="tag">解析中</li>
+<li class="tag">切分完成</li>
+<li class="tag">索引完成</li>
+<li class="tag">失败</li>
+                  </ul>
+                </article>
+                <article class="card">
+                  <h2>主要动作</h2>
+                  <ul class="tag-list">
+        <li class="tag">上传 SOP</li>
+<li class="tag">重建索引</li>
+<li class="tag">查看切分结果</li>
+<li class="tag">删除文档</li>
+                  </ul>
+                </article>
+              </section>
+              <section class="section-grid">
+  <article class="panel">
+    <h2>文档列表字段</h2>
+    <div class="table-shell">
+      <table>
+        <thead>
+          <tr><th>文档名称</th><th>类型</th><th>所属租户</th><th>切片数</th><th>状态</th><th>上传时间</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>包装线 SOP v3.pdf</td><td>PDF</td><td>tenant_demo_a</td><td>84</td><td>索引完成</td><td>2026-06-30 10:25</td></tr>
+          <tr><td>堆垛机维护手册.docx</td><td>DOCX</td><td>tenant_demo_a</td><td>136</td><td>解析中</td><td>2026-06-30 11:12</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
+  <article class="panel">
+    <h2>上传表单冻结字段</h2>
+    <div class="field-grid">
+      <div class="field"><span class="field-label">文档名称</span><span class="field-value">支持自定义</span></div>
+      <div class="field"><span class="field-label">文档类型</span><span class="field-value">PDF / DOCX / TXT / Markdown</span></div>
+      <div class="field"><span class="field-label">知识分类</span><span class="field-value">SOP / 设备手册 / 质量规则</span></div>
+      <div class="field"><span class="field-label">租户</span><span class="field-value">自动注入 tenant_id</span></div>
+    </div>
+  </article>
+</section>
+              <p class="footer-note">当前原型只使用假数据，目的是冻结页面结构、字段、状态、接口与权限，不代表最终视觉稿或真实业务实现。</p>
+            </main>
+          </div>
+          <script src="../assets/app.js"></script>
+        </body>
+        </html>

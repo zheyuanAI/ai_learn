@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Learn Prototype</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body data-page="prototype-index">
+  <div class="shell">
+    <aside class="rail"></aside>
+    <main class="workspace">
+      <section class="hero">
+        <p class="eyebrow">Spec Driven / Prototype First</p>
+        <h1>制造协同与数字孪生平台原型总览</h1>
+        <p class="hero-copy">这套原型直接对应 `D:\AI\ai_learn\specs` 下的项目基线，用于先固定页面结构、核心字段、主要状态流转、权限点和接口占位，再进入后端与前端真实开发。</p>
+      </section>
+      <section class="triple-grid">
+        <article class="panel">
+          <h2>当前覆盖</h2>
+          <ul class="timeline">
+            <li>登录、首页、ERP/WMS、MES、IoT、GIS、AI 六大能力域均有原型入口</li>
+            <li>每页标出权限点、关键接口、状态标签和主要动作</li>
+            <li>采购、销售、工单、设备告警、地图、AI 六条演示主线可串联</li>
+          </ul>
+        </article>
+        <article class="panel">
+          <h2>冻结重点</h2>
+          <ul class="timeline">
+            <li>字段命名：表格列、筛选区、详情区字段即冻结候选</li>
+            <li>状态机：页面状态标签直接回写到各模块状态机</li>
+            <li>接口：关键接口卡片直接对应后续 API 合同</li>
+          </ul>
+        </article>
+        <article class="panel">
+          <h2>建议审查顺序</h2>
+          <ul class="timeline">
+            <li>先审采购入库、销售出库、工单执行三条主业务链</li>
+            <li>再审设备告警、地图、三维联动</li>
+            <li>最后审 AI 工具只读约束、知识库与审计</li>
+          </ul>
+        </article>
+      </section>
+      <section class="section-grid">
+        <article class="panel">
+          <h2>六条演示主线</h2>
+          <div class="flow-grid">
+            <div class="flow-step"><span class="flow-index">01</span><div><strong>采购入库闭环</strong><div>采购单 -> 入库确认 -> 上架确认 -> 库存流水 -> 应付单</div></div></div>
+            <div class="flow-step"><span class="flow-index">02</span><div><strong>销售出库闭环</strong><div>销售单 -> 冻结库存 -> 拣货确认 -> 出库确认 -> 应收单</div></div></div>
+            <div class="flow-step"><span class="flow-index">03</span><div><strong>MES 工单闭环</strong><div>BOM -> 工艺路线 -> 工单 -> 派工 -> 报工 -> 质检 -> 成品入库</div></div></div>
+            <div class="flow-step"><span class="flow-index">04</span><div><strong>IoT 告警闭环</strong><div>设备上报 -> 状态变化 -> 告警触发 -> 地图/看板联动</div></div></div>
+            <div class="flow-step"><span class="flow-index">05</span><div><strong>空间展示闭环</strong><div>地图页 -> 三维页 -> 设备与仓库状态联动</div></div></div>
+            <div class="flow-step"><span class="flow-index">06</span><div><strong>AI 助手闭环</strong><div>知识库问答 -> 只读工具调用 -> 日报/解释 -> 审计日志</div></div></div>
+          </div>
+        </article>
+        <article class="panel">
+          <h2>页面入口</h2>
+          <ul class="timeline">
+            <li><a href="pages/login.html">登录页</a></li>
+            <li><a href="pages/dashboard.html">首页综合看板</a></li>
+            <li><a href="pages/master-data.html">商品 / 仓库 / 库位管理</a></li>
+            <li><a href="pages/purchase-inbound.html">采购单 / 入库单 / 上架任务</a></li>
+            <li><a href="pages/sales-outbound.html">销售单 / 拣货任务 / 出库单</a></li>
+            <li><a href="pages/work-order.html">工单列表 / 工单详情 / 派工报工</a></li>
+            <li><a href="pages/device-alarm.html">设备列表 / 设备详情 / 告警页</a></li>
+            <li><a href="pages/site-map.html">厂区地图页</a></li>
+            <li><a href="pages/digital-twin.html">三维展示页</a></li>
+            <li><a href="pages/ai-assistant.html">AI 助手聊天页</a></li>
+            <li><a href="pages/knowledge-base.html">知识库管理页</a></li>
+            <li><a href="pages/tool-audit.html">工具调用审计页</a></li>
+          </ul>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="assets/app.js"></script>
+</body>
+</html>

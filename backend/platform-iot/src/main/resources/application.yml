@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: platform-iot
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

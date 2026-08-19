@@ -7,6 +7,14 @@
 - `platform-iot`：设备、遥测、协议模拟与告警
 - `platform-shared`：公共类型、异常、基础配置
 
+## 本地服务端口
+| 模块 | 端口 |
+| --- | ---: |
+| `platform-gateway` | 10001 |
+| `platform-auth` | 10002 |
+| `platform-core` | 10003 |
+| `platform-iot` | 10004 |
+
 ## 当前状态
 - 已创建多模块父工程和服务启动类
 - 已预留 `/internal/ping` 探活接口

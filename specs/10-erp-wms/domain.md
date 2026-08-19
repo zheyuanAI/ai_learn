@@ -23,14 +23,13 @@
 - 所有主数据和业务单据都必须带：`id`、`tenant_id`、`status`、`created_by`、`created_at`、`updated_by`、`updated_at`
 - 所有明细行都必须带：`line_no`、`product_id`、`uom`、`qty`
 - 所有库存相关实体都必须明确：`warehouse_id`、`location_id`、`product_id`
-- 启用批次管理时必须带 `lot_no`
-- 启用序列号管理时必须带 `serial_no`
-- 启用保质期管理时必须带 `production_date`、`expiry_date`
+- 一期仅支持可选的简单批次管理，启用时必须带 `lot_no`
+- `serial_no`、`production_date`、`expiry_date` 及其组合校验属于二期范围
 
 ## 页面字段冻结
 
 ### Product
-- 列表字段：`sku`、`name`、`spec`、`uom`、`batch_managed`、`serial_managed`、`shelf_life_managed`、`status`
+- 列表字段：`sku`、`name`、`spec`、`uom`、`batch_managed`、`status`
 - 详情字段：`category`、`barcode`、`default_supplier_id`、`default_warehouse_id`
 
 ### Warehouse
@@ -42,7 +41,7 @@
 - 详情字段：`zone`、`aisle`、`rack`、`level`
 
 ### Inventory
-- 主字段：`on_hand_qty`、`frozen_qty`、`available_qty`、`lot_no`、`serial_no`、`last_transaction_at`
+- 主字段：`on_hand_qty`、`frozen_qty`、`available_qty`、`lot_no`、`last_transaction_at`
 - 不变量：`available_qty = on_hand_qty - frozen_qty`
 
 ### PurchaseOrder
@@ -77,8 +76,9 @@
 - `available_qty = on_hand_qty - frozen_qty`
 - 冻结、释放、扣减、回补都必须记录库存流水
 - 销售单冻结只允许一次成功扣减可用库存
-- 入库确认后才能生成应付单
-- 出库确认后才能生成应收单
+- 入库确认后才能生成应付草稿
+- 出库确认后才能生成应收草稿
+- 一期应收/应付仅用于业务追溯，不提供收付款、核销和账龄处理
 - 所有库存变动都必须落 `InventoryTransaction`
 - 业务单据跨租户不可见，也不可跨租户关联主数据
 
@@ -105,7 +105,7 @@
 - `Frozen` 后可生成拣货任务
 - 全部拣货完成进入 `Picking`
 - 全部出库确认进入 `Shipped`
-- 应收生成完成进入 `Completed`
+- 应收草稿生成完成进入 `Completed`
 
 ### 盘点单
 - `Draft -> Counting -> Confirmed`

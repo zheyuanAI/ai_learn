@@ -30,7 +30,7 @@
 - 必填：`receipt_time`、`lines`
 - `lines[*]` 必填：`product_id`、`received_qty`、`qualified_qty`、`temp_location_id`
 - 启用批次管理时必填：`lot_no`
-- 返回：`inventory_delta_summary`、`accounts_payable_preview`
+- 返回：`inventory_delta_summary`、`accounts_payable_draft`
 
 ### `POST /api/putaway-tasks/{id}/confirm`
 - 必填：`to_location_id`、`putaway_qty`
@@ -57,7 +57,12 @@
 ### `POST /api/sales-shipments/{id}/confirm`
 - 必填：`ship_time`、`shipment_lines`
 - `shipment_lines[*]` 必填：`product_id`、`ship_qty`
-- 返回：`inventory_delta_summary`、`accounts_receivable_preview`
+- 返回：`inventory_delta_summary`、`accounts_receivable_draft`
+
+## 二期接口边界
+
+- 一期不提供收款、付款、核销、账龄和财务报表接口
+- 一期不提供序列号、保质期及复杂批次组合接口
 
 ## 调拨与盘点接口
 - `POST /api/transfers/{id}/confirm`

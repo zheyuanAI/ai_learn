@@ -13,7 +13,7 @@
               <section class="hero">
                 <p class="eyebrow">AI Learn Prototype / IoT</p>
                 <h1>设备列表 / 设备详情 / 告警页</h1>
-                <p class="hero-copy">第四条演示主线页面，展示模拟协议接入、遥测趋势、告警触发/确认/恢复，以及设备与工单的关联关系。</p>
+                <p class="hero-copy">第四条演示主线页面，一期只展示 MQTT 模拟接入、遥测趋势、告警触发/确认/恢复，以及设备与工单的关联关系。</p>
               </section>
               <section class="meta-grid">
                 <article class="card">
@@ -34,8 +34,7 @@
 <li>GET /api/devices/{id}/status</li>
 <li>GET /api/device-alarms</li>
 <li>POST /api/device-alarms/{id}/ack</li>
-<li>POST /api/protocol-adapters/modbus/simulate</li>
-<li>POST /api/protocol-adapters/opcua/simulate</li>
+<li>POST /api/protocol-adapters/mqtt/simulate</li>
                   </ul>
                 </article>
                 <article class="card">
@@ -54,8 +53,6 @@
                   <h2>主要动作</h2>
                   <ul class="tag-list">
         <li class="tag">模拟 MQTT 上报</li>
-<li class="tag">模拟 Modbus</li>
-<li class="tag">模拟 OPC UA</li>
 <li class="tag">确认告警</li>
 <li class="tag">查看关联工单</li>
                   </ul>

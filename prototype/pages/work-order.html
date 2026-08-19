@@ -47,7 +47,6 @@
         <li class="tag">Draft</li>
 <li class="tag">Released</li>
 <li class="tag">InProgress</li>
-<li class="tag">Paused</li>
 <li class="tag">Completed</li>
 <li class="tag">QualityBlocked</li>
                   </ul>
@@ -82,13 +81,12 @@
     <ul class="timeline">
       <li>未下达工单不可创建派工单，也不可报工</li>
       <li>报工数量 = 合格品 + 不良品，且受工单总量上限策略约束</li>
-      <li>质检失败后可生成返工记录，不可直接成品入库</li>
+      <li>质检失败后记录不良数量并阻止成品入库；返工单属于二期</li>
       <li>完工确认后才允许调用成品入库接口</li>
     </ul>
     <div class="toolbar">
       <span class="btn primary">下达工单</span>
       <span class="btn">提交报工</span>
-      <span class="btn warm">发起返工</span>
     </div>
   </article>
 </section>

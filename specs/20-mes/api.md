@@ -23,8 +23,6 @@
 - `POST /api/work-orders`
 - `GET /api/work-orders`
 - `POST /api/work-orders/{id}/release`
-- `POST /api/work-orders/{id}/pause`
-- `POST /api/work-orders/{id}/resume`
 - `POST /api/work-orders/{id}/complete`
 - `POST /api/dispatch-orders`
 - `POST /api/work-reports`
@@ -43,7 +41,7 @@
 
 ### `POST /api/quality-inspections`
 - 必填：`work_order_id`、`inspection_type`、`sample_qty`、`qualified_qty`、`defect_qty`
-- 返回：`inspection_result`、`rework_required`
+- 返回：`inspection_result`、`finished_goods_receipt_allowed`
 
 ### `POST /api/finished-goods-receipts`
 - 必填：`work_order_id`、`receipt_qty`、`warehouse_id`、`location_id`
@@ -60,3 +58,8 @@
 - `MES_WO_003`：报工累计数量超出工单上限
 - `MES_QC_001`：质检失败，禁止直接成品入库
 - `MES_FG_001`：成品入库数量超出可入库上限
+
+## 二期接口边界
+
+- 一期不提供自动排程、产能日历和 APS 接口
+- 一期不提供返工单和重复质检流程接口

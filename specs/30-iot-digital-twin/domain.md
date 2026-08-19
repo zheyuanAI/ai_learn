@@ -1,4 +1,4 @@
-# IoT 与数字孪生领域模型
+# IoT 设备接入领域模型
 
 ## 核心实体
 - `Device`
@@ -32,7 +32,8 @@
 
 ### ProtocolAdapter
 - 字段：`adapter_type`、`simulator_enabled`、`topic_or_endpoint`、`status`
-- 首批范围：`MQTT`、`Modbus TCP`、`OPC UA`
+- 一期范围：`MQTT`
+- 二期范围：`Modbus TCP`、`OPC UA`、Ditto 数字孪生映射
 
 ## 关键规则
 - 每条遥测数据都必须绑定设备和时间戳

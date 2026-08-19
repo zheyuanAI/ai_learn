@@ -3,7 +3,8 @@
 ## 建议架构
 - 后端：Gateway、Auth、Core、IoT 四服务
 - 前端：Vue 管理端，承载业务页面、地图、看板、AI 助手界面
-- 中间件：PostgreSQL、Redis、RabbitMQ、MQTT、MinIO、pgvector
+- 一期中间件：PostgreSQL、Redis、Mosquitto（MQTT）
+- 二期候选中间件：RabbitMQ、MinIO、pgvector
 
 ## 服务边界
 - Auth：认证、用户、角色、菜单、租户上下文
@@ -14,7 +15,8 @@
 ## 横切约束
 - 单库多租户：核心业务表必须带 `tenant_id`
 - 所有关键写操作需要幂等策略
-- 领域事件通过 Outbox + MQ 传播
+- 一期优先使用清晰的同步接口完成主业务闭环，只在 MQTT 设备接入边界使用消息协议
+- 通用 Outbox + RabbitMQ 可靠事件传播放入二期
 - AI 工具默认只读，按租户和权限过滤数据
 
 ## 本地开发环境基线

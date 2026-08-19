@@ -2,7 +2,7 @@ const groups = [
   {
     title: "项目导航",
     items: [
-      { href: "../index.html", label: "原型总览", pageId: "prototype-index", detail: "导航图与六条演示主线" }
+      { href: "../index.html", label: "原型总览", pageId: "prototype-index", detail: "一期跨域主线与二期资产" }
     ]
   },
   {
@@ -21,9 +21,9 @@ const groups = [
       { href: "work-order.html", label: "工单执行", pageId: "work-order", detail: "工单、派工、报工、质检" },
       { href: "device-alarm.html", label: "设备与告警", pageId: "device-alarm", detail: "设备详情、遥测、告警" },
       { href: "site-map.html", label: "厂区地图", pageId: "site-map", detail: "点位、区域、联动告警" },
-      { href: "digital-twin.html", label: "三维展示", pageId: "digital-twin", detail: "简化 3D 和状态联动" },
+      { href: "digital-twin.html", label: "三维展示（二期）", pageId: "digital-twin", detail: "二期 Ditto/Cesium 设计资产" },
       { href: "ai-assistant.html", label: "AI 聊天", pageId: "ai-assistant", detail: "问答、工具调用、来源" },
-      { href: "knowledge-base.html", label: "知识库管理", pageId: "knowledge-base", detail: "文档上传、切分、索引" },
+      { href: "knowledge-base.html", label: "知识库管理（二期）", pageId: "knowledge-base", detail: "二期 RAG 设计资产" },
       { href: "tool-audit.html", label: "调用审计", pageId: "tool-audit", detail: "输入摘要、耗时、状态" }
     ]
   }

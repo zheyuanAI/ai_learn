@@ -8,8 +8,6 @@
 - `DispatchOrder`
 - `WorkReport`
 - `QualityInspection`
-- `ReworkRecord`
-- `CapacityCalendar`
 - `FinishedGoodsReceipt`
 
 ## 通用字段约束
@@ -41,9 +39,6 @@
 ### QualityInspection
 - 字段：`inspection_no`、`work_order_id`、`inspection_type`、`sample_qty`、`qualified_qty`、`defect_qty`、`result`
 
-### ReworkRecord
-- 字段：`rework_no`、`work_order_id`、`source_inspection_id`、`rework_qty`、`rework_reason`、`status`
-
 ### FinishedGoodsReceipt
 - 字段：`receipt_no`、`work_order_id`、`receipt_qty`、`warehouse_id`、`location_id`、`status`
 
@@ -52,18 +47,17 @@
 - 工单必须引用有效的 `Bom` 与 `Routing`
 - 报工数量 = 合格品 + 不良品
 - 工单未下达前不能派工、不能报工
-- 质检不通过可生成返工记录
+- 质检不通过时记录不良数量并阻止成品入库；返工单属于二期范围
 - 成品入库只允许基于已完工且已确认数量生成
 - 成品入库数量不得超过工单累计合格数量减已入库数量
 
 ## 状态机冻结
 
 ### 工单
-- `Draft -> Released -> InProgress -> Paused -> Completed`
-- 质检阻塞时保留 `InProgress`，但增加 `quality_blocked = true`
+- `Draft -> Released -> InProgress -> Completed`
+- 质检阻塞时保留 `InProgress`，并增加 `quality_blocked = true`
 - `Released` 后才允许派工
 - 首次有效报工后进入 `InProgress`
-- `Paused` 可恢复到 `InProgress`
 - 累计合格数量满足完工条件后才允许 `Completed`
 
 ### 派工单
@@ -73,9 +67,11 @@
 - `Draft -> Submitted -> Passed`
 - `Draft -> Submitted -> Failed`
 
-### 返工单
-- `Draft -> Released -> Completed`
-
 ## 一致性约束
-- 报工、质检、返工、成品入库都必须按工单与工序维度落审计记录
+- 报工、质检、成品入库都必须按工单与工序维度落审计记录
 - 工单、派工、报工、质检都必须按租户隔离
+
+## 二期模型边界
+
+- `CapacityCalendar`、自动排程规则和 APS 模型放入二期
+- `ReworkRecord`、返工状态机和重复质检链路放入二期

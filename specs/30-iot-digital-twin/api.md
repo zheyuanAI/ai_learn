@@ -1,4 +1,4 @@
-# IoT 与数字孪生 API 契约
+# IoT 设备接入 API 契约
 
 ## 通用约束
 - 写接口要求 `Authorization` 与 `Idempotency-Key`
@@ -26,8 +26,6 @@
 
 ## 协议模拟接口
 - `POST /api/protocol-adapters/mqtt/simulate`
-- `POST /api/protocol-adapters/modbus/simulate`
-- `POST /api/protocol-adapters/opcua/simulate`
 
 ### 模拟接口请求体
 - 必填：`device_code`、`ts`、`metrics`
@@ -39,3 +37,8 @@
 - `IOT_TLM_001`：遥测格式校验失败
 - `IOT_ALM_001`：告警状态不允许确认
 - `IOT_ALM_002`：重复触发命中去重窗口
+
+## 二期接口边界
+
+- Modbus TCP、OPC UA 协议模拟和真实设备适配接口放入二期
+- Ditto Thing/Feature 映射和数字孪生同步接口放入二期

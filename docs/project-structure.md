@@ -143,6 +143,8 @@
 ## deploy
 
 - `deploy/docker-compose.yml`：本地基础依赖编排文件，当前包含 PostgreSQL、Redis、RabbitMQ、Mosquitto、MinIO。
+- `deploy/local/redis.conf`：本地 Redis 的回环监听与开发配置。
+- `deploy/local/mosquitto.conf`：本地 Mosquitto 的回环监听与开发配置。
 
 ## 本地开发环境基线
 

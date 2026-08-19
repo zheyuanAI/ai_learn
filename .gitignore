@@ -6,3 +6,5 @@ target/
 .DS_Store
 *.log
 .env
+runtime/*
+!runtime/README.md

@@ -6,6 +6,11 @@
 - 当前技术栈：`Vue 3 + Vite + TypeScript`、`Spring Boot` 多模块、`PostgreSQL`、`Redis`、`RabbitMQ`、`Mosquitto`、`MinIO`
 - 项目目标：在 10 周计划内完成可演示的 ERP/WMS、MES、IoT、GIS、AI 助手五大能力域闭环
 
+## 本地开发环境基线
+
+- 自研项目使用 Node 20 与 PostgreSQL 16（端口 5433）。
+- 参考工程可继续保留各自的 Node 22 与 PostgreSQL 16（端口 5323）配置。
+
 ## 任务路由与 OpenSpec
 
 - 默认按普通任务处理；仅当用户明确以 `OpenSpec` 或 `openspec` 作为任务开头时，才进入 OpenSpec 流程。

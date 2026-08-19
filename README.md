@@ -5,6 +5,10 @@
 - `AGENTS.md`: 本项目协作规则
 - `openspec/README.md`: 仅在显式 OpenSpec 任务下使用的协作说明
 
+## 本地开发环境基线
+- 自研项目统一使用 Node 20 与 PostgreSQL 16（端口 5433）。
+- 参考工程可继续保留各自的 Node 22 与 PostgreSQL 16（端口 5323）配置。
+
 ## 目录说明
 - `openspec`: OpenSpec 协作规则、schema、模板与长期协作 spec
 - `specs/00-project`: 项目总目标、架构边界、原型范围、里程碑

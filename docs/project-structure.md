@@ -5,6 +5,7 @@
 - `backend/`：后端 Spring Boot 多模块工程，承载认证、核心业务、IoT 和网关服务。
 - `frontend/`：前端 Vue 3 + Vite + TypeScript 工程，当前主要用于承接原型导航和后续业务页面。
 - `deploy/`：本地依赖与部署编排目录，当前主要维护 Docker Compose。
+- `runtime/`：仅保存本机开发使用的中间件包；除 `runtime/README.md` 外均不纳入 Git。
 - `docs/`：计划、规则和项目说明文档入口。
 - `openspec/`：显式 OpenSpec 任务使用的协作规则、schema、模板与长期协作 spec。
 - `prototype/`：低保真原型与演示页面基线。
@@ -142,6 +143,11 @@
 ## deploy
 
 - `deploy/docker-compose.yml`：本地基础依赖编排文件，当前包含 PostgreSQL、Redis、RabbitMQ、Mosquitto、MinIO。
+
+## 本地开发环境基线
+
+- 自研项目使用 Node 20 与 PostgreSQL 16（端口 5433）。
+- 参考工程可继续保留各自的 Node 22 与 PostgreSQL 16（端口 5323）配置。
 
 ## 维护建议
 

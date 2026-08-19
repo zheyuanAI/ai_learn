@@ -23,3 +23,20 @@ Set-Location 'D:\AI\ai_learn_wms_ai\ai_learn_developProject\runtime\redis-3.0.50
 ```
 
 本任务仅完成下载、解压和只读检查，未启动 Redis 服务。
+
+## Mosquitto 2.1.2
+
+- 组件：Mosquitto 2.1.2（Eclipse Mosquitto 官方 Windows x64 安装包）
+- 发布页：https://mosquitto.org/download/
+- 直接下载地址：https://mosquitto.org/files/binary/win64/mosquitto-2.1.2-install-windows-x64.exe
+- 安装包文件大小：27068694 字节
+- SHA256：58008AD7A22ADA0B4073AFA415801746E027C5F583E4FA52D0F4E9193B98D6AA
+- 可执行文件：`D:\AI\ai_learn_wms_ai\ai_learn_developProject\runtime\mosquitto-2.1.2\app\mosquitto.exe`
+
+手动启动命令：
+
+```powershell
+& 'D:\AI\ai_learn_wms_ai\ai_learn_developProject\runtime\mosquitto-2.1.2\app\mosquitto.exe' -c 'D:\AI\ai_learn_wms_ai\ai_learn_developProject\deploy\local\mosquitto.conf' -v
+```
+
+本任务仅完成下载、静默安装和只读检查，未启动 Mosquitto Broker。

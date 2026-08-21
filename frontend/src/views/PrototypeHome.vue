@@ -1,9 +1,9 @@
 <template>
   <section class="hero">
-    <p class="eyebrow">Prototype Frozen</p>
-    <h2>当前进入真实工程骨架阶段</h2>
+    <p class="eyebrow">Phase 1 Target Design</p>
+    <h2>围绕一条黄金业务闭环推进</h2>
     <p class="lead">
-      已完成原型页面和第一轮 spec 冻结。这里的前端壳用于后续逐域接真实接口，不再返工导航结构。
+      销售需求通过人工来源关系连接生产与采购，再贯通收货、上架、领退料、工序执行、成品入库、库存预留、拣货和发货。这里仅展示一期目标与导航，不代表业务功能已经实现。
     </p>
   </section>
 
@@ -17,8 +17,8 @@
 
 <script setup lang="ts">
 const milestones = [
-  { title: "已完成", body: "prototype 入口页与 12 个原型页面已生成。" },
-  { title: "已冻结", body: "ERP/WMS、MES、IoT、GIS、AI 五域的字段、接口和验收已补强。" },
-  { title: "下一步", body: "先实现登录、菜单、租户上下文，再按采购入库和销售出库两条链路落 API。" },
+  { title: "业务主线", body: "销售行 -> 生产工单 -> 采购来源 -> 制造执行 -> 销售交付。" },
+  { title: "事实边界", body: "预留不扣实物，上架与拣货只移位，发货才扣减总库存；遥测、状态与告警分离。" },
+  { title: "展示边界", body: "二维地图、看板、追溯与 AI 均只读，不建立第二套事实来源。" },
 ];
 </script>

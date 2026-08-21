@@ -1,4 +1,6 @@
-# AI 学习项目实施计划
+# AI 学习项目实施计划（历史）
+
+> **状态：历史学习计划。** 本文只记录前期十周学习路线和 2026-06-30 时的旧方案，仅用于变更追溯，不再代表当前项目开发周期；当前正式交付计划见 `docs/specs/00-project/正式项目计划.md`。
 
 > **供代理式执行使用：** 必须配合 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans` 子技能按任务逐项执行。步骤使用复选框（`- [ ]`）进行跟踪。
 

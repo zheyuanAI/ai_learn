@@ -13,44 +13,44 @@
       <section class="hero">
         <p class="eyebrow">Spec Driven / Prototype First</p>
         <h1>制造与仓储协同平台原型总览</h1>
-        <p class="hero-copy">这套原型对应 `ai_learn_developProject/specs` 下的项目基线，用于固定一期页面结构、核心字段、主要状态流转、权限点和接口占位；三维与知识库页面只保留为二期设计资产。</p>
+        <p class="hero-copy">这套原型用于评审一期目标设计：以一条黄金业务闭环连接销售需求、采购、库存、制造与设备事实，再由地图、看板、追溯和 AI 只读呈现。页面不代表业务功能已经实现；三维与知识库仅保留为二期设计资产。</p>
       </section>
       <section class="triple-grid">
         <article class="panel">
-          <h2>当前覆盖</h2>
+          <h2>一期业务主线</h2>
           <ul class="timeline">
-            <li>登录、首页、ERP/WMS、MES、IoT、GIS、AI 六大能力域均有原型入口</li>
-            <li>每页标出权限点、关键接口、状态标签和主要动作</li>
-            <li>采购、销售、工单、MQTT 告警、二维地图、AI 六个演示节点可串联</li>
+            <li>从销售订单 100 件需求出发，人工关联生产工单与采购来源</li>
+            <li>收货、上架、领退料、工序执行、成品入库、预留、拣货与发货形成一条链</li>
+            <li>库存流水、OperationExecution、遥测和告警作为可追溯业务事实</li>
           </ul>
         </article>
         <article class="panel">
-          <h2>冻结重点</h2>
+          <h2>事实边界</h2>
           <ul class="timeline">
-            <li>字段命名：表格列、筛选区、详情区字段即冻结候选</li>
-            <li>状态机：页面状态标签直接回写到各模块状态机</li>
-            <li>接口：关键接口卡片直接对应后续 API 合同</li>
+            <li>预留只增加 `reserved_qty`，不扣减 `on_hand_qty`</li>
+            <li>收货进入收货暂存位；上架与拣货只移动位置；发货才扣减企业总库存</li>
+            <li>设备遥测、设备状态与设备告警分别保存，再补充工序执行上下文</li>
           </ul>
         </article>
         <article class="panel">
-          <h2>建议审查顺序</h2>
+          <h2>展示边界</h2>
           <ul class="timeline">
-            <li>先审采购入库、销售出库、工单执行三条主业务链</li>
-            <li>再审 MQTT 设备告警、二维地图与看板联动</li>
-            <li>最后审 AI 工具只读约束与调用审计；三维和知识库留作二期评估</li>
+            <li>二维地图与看板只读展示同一套业务事实</li>
+            <li>AI 只通过受控只读工具查询，并展示来源、时间范围与调用摘要</li>
+            <li>三维数字孪生和知识库明确留作二期，不进入一期验收</li>
           </ul>
         </article>
       </section>
       <section class="section-grid">
         <article class="panel">
-          <h2>一期跨域演示路径</h2>
+          <h2>一期黄金业务闭环</h2>
           <div class="flow-grid">
-            <div class="flow-step"><span class="flow-index">01</span><div><strong>采购入库闭环</strong><div>采购单 -> 入库确认 -> 上架确认 -> 库存流水 -> 应付草稿</div></div></div>
-            <div class="flow-step"><span class="flow-index">02</span><div><strong>销售出库闭环</strong><div>销售单 -> 冻结库存 -> 拣货确认 -> 出库确认 -> 应收草稿</div></div></div>
-            <div class="flow-step"><span class="flow-index">03</span><div><strong>MES 工单闭环</strong><div>BOM -> 工艺路线 -> 工单 -> 派工 -> 报工 -> 质检 -> 成品入库</div></div></div>
-            <div class="flow-step"><span class="flow-index">04</span><div><strong>IoT 告警闭环</strong><div>MQTT 上报 -> 状态变化 -> 告警触发 -> 地图/看板联动</div></div></div>
-            <div class="flow-step"><span class="flow-index">05</span><div><strong>空间展示闭环</strong><div>二维地图 -> 设备与仓库状态 -> 告警定位</div></div></div>
-            <div class="flow-step"><span class="flow-index">06</span><div><strong>AI 助手闭环</strong><div>只读工具调用 -> 日报/解释 -> 审计日志</div></div></div>
+            <div class="flow-step"><span class="flow-index">01</span><div><strong>需求与人工来源</strong><div>销售订单行 -> 生产工单 -> 采购明细关联来源工单</div></div></div>
+            <div class="flow-step"><span class="flow-index">02</span><div><strong>采购与仓储</strong><div>采购收货 -> 收货暂存位 -> 上架移动 -> 库存流水</div></div></div>
+            <div class="flow-step"><span class="flow-index">03</span><div><strong>制造执行</strong><div>生产领料 -> 派工 -> OperationExecution -> 报工 -> 质检 -> 成品入库</div></div></div>
+            <div class="flow-step"><span class="flow-index">04</span><div><strong>设备事实</strong><div>MQTT 消息去重 -> 遥测 -> 状态 -> 告警 -> 工序执行上下文</div></div></div>
+            <div class="flow-step"><span class="flow-index">05</span><div><strong>销售交付</strong><div>库存预留 -> 拣货移动到发货暂存位 -> 发货扣减并释放预留</div></div></div>
+            <div class="flow-step"><span class="flow-index">06</span><div><strong>只读追溯</strong><div>二维地图 / 看板 / 追溯 / AI -> 同一事实来源与审计</div></div></div>
           </div>
         </article>
         <article class="panel">
@@ -59,14 +59,14 @@
             <li><a href="pages/login.html">登录页</a></li>
             <li><a href="pages/dashboard.html">首页综合看板</a></li>
             <li><a href="pages/master-data.html">商品 / 仓库 / 库位管理</a></li>
-            <li><a href="pages/purchase-inbound.html">采购单 / 入库单 / 上架任务</a></li>
-            <li><a href="pages/sales-outbound.html">销售单 / 拣货任务 / 出库单</a></li>
+            <li><a href="pages/purchase-inbound.html">采购单 / 收货单 / 上架任务</a></li>
+            <li><a href="pages/sales-outbound.html">销售单 / 库存预留 / 拣货 / 发货</a></li>
             <li><a href="pages/work-order.html">工单列表 / 工单详情 / 派工报工</a></li>
             <li><a href="pages/device-alarm.html">设备列表 / 设备详情 / 告警页</a></li>
             <li><a href="pages/site-map.html">厂区地图页</a></li>
-            <li><a href="pages/digital-twin.html">三维展示页（二期）</a></li>
+            <li><a href="pages/digital-twin.html">三维展示页（二期设计资产，不进入一期）</a></li>
             <li><a href="pages/ai-assistant.html">AI 助手聊天页</a></li>
-            <li><a href="pages/knowledge-base.html">知识库管理页（二期）</a></li>
+            <li><a href="pages/knowledge-base.html">知识库管理页（二期设计资产，不进入一期）</a></li>
             <li><a href="pages/tool-audit.html">工具调用审计页</a></li>
           </ul>
         </article>

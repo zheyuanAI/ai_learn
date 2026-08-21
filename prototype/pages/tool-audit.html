@@ -13,7 +13,7 @@
               <section class="hero">
                 <p class="eyebrow">AI Learn Prototype / AI</p>
                 <h1>工具调用审计页</h1>
-                <p class="hero-copy">审计页用于固化 AI 工具调用的输入摘要、输出摘要、耗时、来源与失败原因，满足只读工具的可追溯要求。</p>
+                <p class="hero-copy">审计页展示一期目标审计字段：请求标识、租户、用户、工具、输入/输出摘要、来源、数据时间范围、工具调用摘要、耗时与失败原因；成功、失败、超时和拒绝均须留痕。</p>
               </section>
               <section class="meta-grid">
                 <article class="card">
@@ -53,18 +53,18 @@
   <div class="table-shell">
     <table>
       <thead>
-        <tr><th>时间</th><th>租户</th><th>用户</th><th>工具</th><th>输入摘要</th><th>输出摘要</th><th>耗时</th><th>状态</th></tr>
+        <tr><th>时间</th><th>request_id</th><th>租户 / 用户</th><th>工具</th><th>输入 / 输出摘要</th><th>来源 / 时间范围</th><th>工具摘要</th><th>耗时</th><th>状态 / 错误</th></tr>
       </thead>
       <tbody>
-        <tr><td>2026-06-30 14:52:11</td><td>tenant_demo_a</td><td>planner.zhang</td><td>queryDeviceAlarm</td><td>C12 超温 2h</td><td>14 条告警 + 关联工单</td><td>842ms</td><td>成功</td></tr>
-        <tr><td>2026-06-30 15:01:20</td><td>tenant_demo_a</td><td>shift.lead</td><td>generateDailyOperationReport</td><td>白班日报</td><td>库存/生产/设备摘要</td><td>2.4s</td><td>成功</td></tr>
-        <tr><td>2026-06-30 15:08:44</td><td>tenant_demo_b</td><td>guest.user</td><td>queryInventoryByProductAndWarehouse</td><td>跨租户 SKU</td><td>权限拒绝</td><td>126ms</td><td>拒绝访问</td></tr>
+        <tr><td>2026-06-30 14:52:11</td><td>req-ai-0182</td><td>tenant_demo_a / planner.zhang</td><td>queryTrace</td><td>SO-240630-011 / 返回授权上下游</td><td>销售、库存、制造、IoT / 12:00-15:00</td><td>queryTrace + queryDeviceAlarm</td><td>842ms</td><td>Success</td></tr>
+        <tr><td>2026-06-30 15:01:20</td><td>req-ai-0183</td><td>tenant_demo_a / shift.lead</td><td>generateDailyOperationReport</td><td>白班日报 / 库存生产设备摘要</td><td>受控应用服务 / 白班</td><td>5 个只读工具</td><td>2.4s</td><td>Success</td></tr>
+        <tr><td>2026-06-30 15:08:44</td><td>req-ai-0184</td><td>tenant_demo_b / guest.user</td><td>queryInventoryByProductAndWarehouse</td><td>跨租户 SKU / 无输出</td><td>无授权来源</td><td>调用前拒绝</td><td>126ms</td><td>Denied / AI_TENANT_001</td></tr>
       </tbody>
     </table>
   </div>
-  <p class="note">冻结要求：审计日志至少包含租户、用户、工具、输入摘要、输出摘要、耗时、状态、失败原因和来源范围。失败调用不能缺失。</p>
+  <p class="note">目标约束：回答与审计通过同一 `request_id` 关联；审计摘要不得保存认证凭证或无关敏感数据，失败调用不能缺失。</p>
 </section>
-              <p class="footer-note">当前原型只使用假数据，目的是冻结页面结构、字段、状态、接口与权限，不代表最终视觉稿或真实业务实现。</p>
+              <p class="footer-note">当前页面仅使用假数据表达一期工具审计目标，不代表对应接口或审计能力已经实现。</p>
             </main>
           </div>
           <script src="../assets/app.js"></script>

@@ -13,7 +13,7 @@
               <section class="hero">
                 <p class="eyebrow">AI Learn Prototype / Cross Domain</p>
                 <h1>首页综合看板</h1>
-                <p class="hero-copy">把库存、生产、质量、设备、告警与 AI 摘要统一放在首页，作为一期跨域主线的总入口。</p>
+                <p class="hero-copy">看板是黄金业务闭环的只读摘要：从同一事实来源展示订单、库存、制造、质量、设备与告警，不在展示层创建或修改业务事实。</p>
               </section>
               <section class="meta-grid">
                 <article class="card">
@@ -28,17 +28,19 @@
                 <article class="card">
                   <h2>关键接口</h2>
                   <ul class="muted-list">
-        <li>GET /api/dashboard/inventory</li>
-<li>GET /api/dashboard/production</li>
+<li>GET /api/dashboard/inventory</li>
+<li>GET /api/dashboard/fulfillment</li>
+<li>GET /api/dashboard/manufacturing</li>
 <li>GET /api/dashboard/quality</li>
 <li>GET /api/dashboard/device</li>
 <li>GET /api/dashboard/alarms</li>
+<li>GET /api/dashboard/traceability</li>
                   </ul>
                 </article>
                 <article class="card">
                   <h2>状态标签</h2>
                   <ul class="tag-list">
-        <li class="tag">实时刷新</li>
+<li class="tag">只读聚合</li>
 <li class="tag">按时间范围过滤</li>
 <li class="tag">异常高亮</li>
 <li class="tag">按租户隔离</li>
@@ -48,16 +50,17 @@
                   <h2>主要动作</h2>
                   <ul class="tag-list">
         <li class="tag">切换时间范围</li>
-<li class="tag">跳转采购/销售/工单/设备</li>
-<li class="tag">查看告警详情</li>
+<li class="tag">沿黄金闭环追溯</li>
+<li class="tag">查看来源事实</li>
 <li class="tag">生成 AI 日报</li>
                   </ul>
                 </article>
               </section>
               <section class="panel">
-  <h2>核心指标卡</h2>
+  <h2>黄金闭环事实摘要</h2>
+  <p class="note">所有卡片返回实际 `time_range`、`generated_at` 与 `source_summary`；源领域不可用时明确标记，不以伪造值替代。</p>
   <div class="kpi-grid">
-    <div class="kpi"><span class="kpi-label">可用库存</span><span class="kpi-value">18,240</span></div>
+    <div class="kpi"><span class="kpi-label">实物 / 预留 / 可用</span><span class="kpi-value">600 / 120 / 480</span></div>
     <div class="kpi"><span class="kpi-label">在制工单</span><span class="kpi-value">27</span></div>
     <div class="kpi"><span class="kpi-label">设备在线率</span><span class="kpi-value">96.8%</span></div>
     <div class="kpi"><span class="kpi-label">未恢复告警</span><span class="kpi-value">12</span></div>
@@ -65,7 +68,7 @@
 </section>
 <section class="triple-grid">
   <article class="panel">
-    <h2>库存趋势</h2>
+    <h2>库存事实趋势</h2>
     <div class="chart-placeholder">
       <div class="chart-bars">
         <span style="height: 34%;"></span>
@@ -80,7 +83,8 @@
   <article class="panel">
     <h2>生产进度</h2>
     <ul class="timeline">
-      <li>WO-240630-018 装配 72%，等待工序三报工</li>
+      <li>SO-240630-011 -> WO-240630-018，当前 OperationExecution 运行中</li>
+      <li>WO-240630-018 已领料，采购来源与库存流水可只读追溯</li>
       <li>WO-240630-021 质检阻塞，2 件不良待处理</li>
       <li>WO-240630-026 已完工待成品入库</li>
     </ul>
@@ -93,12 +97,12 @@
       <span class="status-chip good">包装线已恢复</span>
     </div>
     <div class="toolbar">
-      <span class="btn">跳到地图定位</span>
-      <span class="btn primary">AI 解释原因</span>
+      <span class="btn">只读定位与追溯</span>
+      <span class="btn primary">AI 只读解释</span>
     </div>
   </article>
 </section>
-              <p class="footer-note">当前原型只使用假数据，目的是冻结页面结构、字段、状态、接口与权限，不代表最终视觉稿或真实业务实现。</p>
+              <p class="footer-note">当前页面仅使用假数据表达一期只读看板目标，不代表对应接口或业务功能已经实现。</p>
             </main>
           </div>
           <script src="../assets/app.js"></script>

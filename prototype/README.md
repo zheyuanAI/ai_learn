@@ -1,56 +1,65 @@
 # Prototype 原型说明
 
-## 目标
-- 基于 `specs/00-project/prototype.md` 产出第一批可浏览原型
-- 先固定页面结构、字段区、状态标签、操作按钮、接口占位、权限点
-- 为后续冻结 `domain.md`、`api.md`、状态机和验收场景提供直接基线
+## 定位
 
-## 文件结构
-- `prototype/index.html`：原型总览、导航图、一期跨域主线
-- `prototype/assets/styles.css`：共享视觉样式
-- `prototype/assets/app.js`：共享导航脚本
-- `prototype/pages/*.html`：各业务页面原型
+- 本目录展示一期目标设计，不代表对应业务接口或功能已经实现
+- 所有页面围绕一条黄金业务闭环表达业务意图、执行过程与事实记录
+- 页面中的字段、状态、动作和接口占位应以正式 `docs/specs/00-project/原型与交互说明.md`、对应领域的 `概述.md`、`领域模型.md`、`接口契约.md`、`验收标准.md` 与实际代码为准
+
+## 一期黄金业务闭环
+
+```text
+销售订单 100 件需求
+-> 人工关联来源销售行与生产工单
+-> 人工创建采购订单并关联来源工单
+-> 收货确认进入收货暂存位
+-> 上架只移动到目标库位
+-> 生产领料
+-> 派工与 OperationExecution
+-> MQTT 遥测 / 设备状态 / 设备告警
+-> 报工、质检与成品入库
+-> 销售库存预留
+-> 拣货移动到发货暂存位
+-> 发货扣减企业总实物库存并释放预留
+-> 地图、看板、追溯与 AI 只读查询
+```
+
+一期只提供人工供需关联，不包含自动 MRP、自动缺口计算、自动工单生成或自动采购建议。
+
+## 关键库存语义
+
+- `available_qty = on_hand_qty - reserved_qty`，且 `available_qty >= 0`
+- 收货确认增加企业总实物库存，并进入 `ReceivingStaging` 收货暂存位
+- 上架确认只移动位置，不重复增加企业总库存
+- 销售预留增加 `reserved_qty`，不改变 `on_hand_qty`
+- 拣货确认只移动到 `ShippingStaging` 发货暂存位，不扣减企业总库存
+- 发货确认才扣减企业总实物库存，并释放对应预留
+- 生产领料减少仓库库存，生产退料增加退回库位库存
 
 ## 页面清单
-- 登录页：`pages/login.html`
-- 首页综合看板：`pages/dashboard.html`
-- 商品/仓库/库位管理：`pages/master-data.html`
-- 采购单、入库单、上架任务：`pages/purchase-inbound.html`
-- 销售单、拣货任务、出库单：`pages/sales-outbound.html`
-- 工单列表、详情、派工报工：`pages/work-order.html`
-- 设备列表、设备详情、告警：`pages/device-alarm.html`
-- 厂区地图：`pages/site-map.html`
-- 三维展示（二期设计资产）：`pages/digital-twin.html`
-- AI 助手聊天：`pages/ai-assistant.html`
-- 知识库管理（二期设计资产）：`pages/knowledge-base.html`
-- 工具调用审计：`pages/tool-audit.html`
 
-## 页面导航图
-1. 登录页 -> 首页综合看板
-2. 首页综合看板 -> ERP/WMS、MES、IoT、GIS、AI 各域页面
-3. 采购入库页 -> 销售出库页 -> 首页库存指标
-4. 工单执行页 -> 设备与告警页 -> 厂区二维地图 -> 首页设备指标
-5. AI 聊天页 -> 只读业务工具 -> 调用审计页
+- 总览与身份：`index.html`、`pages/login.html`、`pages/dashboard.html`
+- 供需与仓储：`pages/master-data.html`、`pages/purchase-inbound.html`、`pages/sales-outbound.html`
+- 制造执行：`pages/work-order.html`
+- 设备事实：`pages/device-alarm.html`
+- 一期只读展示：`pages/site-map.html`、`pages/ai-assistant.html`、`pages/tool-audit.html`
+- 二期设计资产：`pages/digital-twin.html`、`pages/knowledge-base.html`
 
-## 一期跨域主线
-1. 采购单 -> 入库确认 -> 上架确认 -> 库存增加 -> 应付草稿
-2. 销售单 -> 库存冻结 -> 拣货确认 -> 出库确认 -> 应收草稿
-3. BOM/工艺路线 -> 工单 -> 派工 -> 报工 -> 质检 -> 成品入库
-4. MQTT 设备上报 -> 状态变化 -> 告警触发 -> 二维地图与看板联动
-5. 厂区二维地图查看设备与仓库状态
-6. AI 助手 -> 只读工具调用 -> 简单日报 / 告警解释 -> 审计留痕
+## 页面审查顺序
+
+1. 从销售订单行确认现货、生产与采购的人工来源关系
+2. 核对采购收货、收货暂存位、上架移动和库存流水
+3. 核对生产领退料、派工、`OperationExecution`、报工、质检和成品入库
+4. 核对设备消息去重、遥测、状态、告警与工序执行上下文
+5. 核对销售预留、拣货移动、发货扣减及预留释放
+6. 最后核对地图、看板、追溯与 AI 是否只读并沿用同一事实来源
 
 ## 二期原型资产
-- 三维展示页保留用于 Ditto/Cesium 方案讨论，不进入一期开发与验收
-- 知识库管理页保留用于 RAG 方案讨论，不进入一期开发与验收
 
-## 原型阶段冻结内容
-- 字段：页面中表格列、筛选条件、详情区字段即第一版冻结候选
-- 状态：页面中的状态标签和流转顺序即第一版状态机候选
-- 接口：每页“关键接口”卡片即第一版 API 冻结候选
-- 权限：每页“权限点”卡片即第一版菜单/按钮权限候选
+- `digital-twin.html`：仅用于 Ditto/Cesium 与三维数字孪生方案讨论，不进入一期开发、导航摘要或验收
+- `knowledge-base.html`：仅用于 RAG、文档解析和向量检索方案讨论，不进入一期开发、导航摘要或验收
+- 静态原型导航保留这两个入口，并明确标记“二期设计资产”
 
-## 下一步
-1. 逐页审查字段是否缺失，优先补边界字段
-2. 回写各模块 `domain.md` 和 `api.md`，冻结命名与状态机
-3. 在冻结后的页面基础上搭前后端项目骨架
+## 使用说明
+
+直接打开 `prototype/index.html` 即可浏览。页面数据均为目标设计示例；真实实现状态必须核对前后端代码、配置与自动化验证结果。

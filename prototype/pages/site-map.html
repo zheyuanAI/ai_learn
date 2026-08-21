@@ -13,7 +13,7 @@
               <section class="hero">
                 <p class="eyebrow">AI Learn Prototype / GIS</p>
                 <h1>厂区地图页</h1>
-                <p class="hero-copy">地图页作为设备、仓库、生产区域与告警的统一空间入口，需要冻结点位模型、状态颜色与联动跳转。</p>
+                <p class="hero-copy">地图页是设备、仓库、生产区域和告警的只读空间视图，沿用业务系统中的点位与状态事实，用于定位并跳转追溯，不建立第二套事实来源。</p>
               </section>
               <section class="meta-grid">
                 <article class="card">
@@ -30,6 +30,7 @@
                   <h2>关键接口</h2>
                   <ul class="muted-list">
         <li>GET /api/site-map</li>
+<li>GET /api/site-map/points/{point_id}</li>
 <li>POST /api/site-map/points</li>
 <li>GET /api/dashboard/alarms</li>
                   </ul>
@@ -46,10 +47,10 @@
                 <article class="card">
                   <h2>主要动作</h2>
                   <ul class="tag-list">
-        <li class="tag">查看点位详情</li>
-<li class="tag">跳转设备页</li>
-<li class="tag">跳转仓库页</li>
-<li class="tag">查看告警轨迹</li>
+<li class="tag">查看来源事实</li>
+<li class="tag">追溯设备与工序执行</li>
+<li class="tag">追溯仓库与库存流水</li>
+<li class="tag">查看告警上下文</li>
                   </ul>
                 </article>
               </section>
@@ -65,18 +66,19 @@
     </div>
   </article>
   <article class="panel">
-    <h2>点位字段冻结</h2>
+    <h2>点位配置与只读追溯字段</h2>
     <div class="field-grid">
       <div class="field"><span class="field-label">点位 ID</span><span class="field-value">MAP-PT-0017</span></div>
       <div class="field"><span class="field-label">业务实体类型</span><span class="field-value">Device / Warehouse / Area</span></div>
       <div class="field"><span class="field-label">业务实体 ID</span><span class="field-value">DEV-B03</span></div>
       <div class="field"><span class="field-label">坐标</span><span class="field-value">x, y, rotation</span></div>
       <div class="field"><span class="field-label">状态颜色</span><span class="field-value">正常 / 告警 / 离线</span></div>
-      <div class="field"><span class="field-label">联动页面</span><span class="field-value">设备详情 / 仓库详情 / 告警详情</span></div>
+      <div class="field"><span class="field-label">联动追溯</span><span class="field-value">设备 / OperationExecution / 工单 / 仓库 / 库存流水 / 告警</span></div>
     </div>
+    <p class="note">一期地图只读展示业务事实；具备配置权限的用户可维护二维点位展示配置，但不得修改被引用实体的业务状态。</p>
   </article>
 </section>
-              <p class="footer-note">当前原型只使用假数据，目的是冻结页面结构、字段、状态、接口与权限，不代表最终视觉稿或真实业务实现。</p>
+              <p class="footer-note">当前页面仅使用假数据表达一期只读地图目标，不代表对应接口或业务功能已经实现。</p>
             </main>
           </div>
           <script src="../assets/app.js"></script>

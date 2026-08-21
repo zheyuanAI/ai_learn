@@ -3,7 +3,7 @@
         <head>
           <meta charset="UTF-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>销售单 / 拣货任务 / 出库单 - AI Learn Prototype</title>
+          <title>销售单 / 库存预留 / 拣货 / 发货 - AI Learn Prototype</title>
           <link rel="stylesheet" href="../assets/styles.css" />
         </head>
         <body data-page="sales-outbound">
@@ -12,8 +12,8 @@
             <main class="workspace">
               <section class="hero">
                 <p class="eyebrow">AI Learn Prototype / ERP / WMS</p>
-                <h1>销售单 / 拣货任务 / 出库单</h1>
-                <p class="hero-copy">第二条演示主线页面，冻结可用库存、冻结库存、拣货状态与应收草稿生成时点。</p>
+                <h1>销售单 / 库存预留 / 拣货 / 发货</h1>
+                <p class="hero-copy">黄金业务闭环中的销售交付段目标设计：预留只占用可用库存，拣货只移动到发货暂存位，发货确认才扣减企业总实物库存并释放预留。</p>
               </section>
               <section class="meta-grid">
                 <article class="card">
@@ -21,7 +21,7 @@
                   <ul class="tag-list">
         <li class="tag">sales:view</li>
 <li class="tag">sales:create</li>
-<li class="tag">sales:freeze</li>
+<li class="tag">sales:reserve</li>
 <li class="tag">pick:confirm</li>
 <li class="tag">shipment:confirm</li>
                   </ul>
@@ -30,7 +30,8 @@
                   <h2>关键接口</h2>
                   <ul class="muted-list">
         <li>POST /api/sales-orders</li>
-<li>POST /api/sales-orders/{id}/freeze</li>
+<li>POST /api/sales-orders/{id}/reserve</li>
+<li>POST /api/sales-orders/{id}/reservations/release</li>
 <li>POST /api/pick-tasks/{id}/confirm</li>
 <li>POST /api/sales-shipments/{id}/confirm</li>
                   </ul>
@@ -41,7 +42,7 @@
         <li class="tag">Draft</li>
 <li class="tag">Submitted</li>
 <li class="tag">Approved</li>
-<li class="tag">Frozen</li>
+<li class="tag">Reserved</li>
 <li class="tag">Picking</li>
 <li class="tag">Shipped</li>
 <li class="tag">Completed</li>
@@ -51,44 +52,49 @@
                   <h2>主要动作</h2>
                   <ul class="tag-list">
         <li class="tag">创建销售单</li>
-<li class="tag">冻结库存</li>
+<li class="tag">预留库存</li>
 <li class="tag">确认拣货</li>
-<li class="tag">确认出库</li>
-<li class="tag">查看应收草稿</li>
+<li class="tag">确认发货</li>
+<li class="tag">查看库存流水</li>
                   </ul>
                 </article>
               </section>
               <section class="section-grid">
   <article class="panel">
-    <h2>库存冻结结果</h2>
+    <h2>库存预留结果</h2>
     <div class="status-row">
-      <span class="status-chip">实物库存 600</span>
-      <span class="status-chip warn">冻结库存 120</span>
-      <span class="status-chip good">可用库存 480</span>
+      <span class="status-chip">on_hand_qty 600</span>
+      <span class="status-chip warn">reserved_qty 120</span>
+      <span class="status-chip good">available_qty 480</span>
     </div>
     <div class="toolbar">
-      <span class="btn primary">执行冻结</span>
-      <span class="btn">释放冻结</span>
+      <span class="btn primary">执行预留</span>
+      <span class="btn">释放预留</span>
       <span class="btn warm">模拟库存不足</span>
     </div>
-    <p class="note">冻结要求：页面必须显示冻结前后结果摘要，便于后续 API 直接返回库存变化对象。</p>
+    <p class="note">预留请求使用 `reserve_qty`，成功后增加 `reserved_qty`、减少 `available_qty`，但不改变 `on_hand_qty`。</p>
   </article>
   <article class="panel">
-    <h2>拣货与出库表格列</h2>
+    <h2>拣货与发货目标字段</h2>
     <div class="table-shell">
       <table>
         <thead>
-          <tr><th>销售单号</th><th>客户</th><th>商品</th><th>冻结数量</th><th>已拣货</th><th>已出库</th><th>状态</th></tr>
+          <tr><th>销售单号</th><th>客户</th><th>商品</th><th>reserved_qty</th><th>来源库位</th><th>发货暂存位</th><th>已拣货</th><th>已发货</th><th>状态</th></tr>
         </thead>
         <tbody>
-          <tr><td>SO-240630-011</td><td>华北集成商</td><td>伺服电机总成</td><td>60</td><td>60</td><td>40</td><td>Picking</td></tr>
-          <tr><td>SO-240630-012</td><td>自动化事业部</td><td>轴承组件</td><td>120</td><td>0</td><td>0</td><td>Frozen</td></tr>
+          <tr><td>SO-240630-011</td><td>华北集成商</td><td>伺服电机总成</td><td>60</td><td>FG-A-01</td><td>SHP-01</td><td>60</td><td>40</td><td>Picking</td></tr>
+          <tr><td>SO-240630-012</td><td>自动化事业部</td><td>轴承组件</td><td>120</td><td>RM-B-03</td><td>SHP-01</td><td>0</td><td>0</td><td>Reserved</td></tr>
         </tbody>
       </table>
     </div>
+    <ul class="timeline">
+      <li>拣货确认：来源库位减少、`ShippingStaging` 发货暂存位增加，总 `on_hand_qty` 不变</li>
+      <li>发货确认：发货暂存位实物减少，并释放对应 `reserved_qty`</li>
+      <li>目标约束：重复预留、重复拣货和重复发货不得重复产生库存事实</li>
+    </ul>
   </article>
 </section>
-              <p class="footer-note">当前原型只使用假数据，目的是冻结页面结构、字段、状态、接口与权限，不代表最终视觉稿或真实业务实现。</p>
+              <p class="footer-note">当前页面仅使用假数据表达一期目标设计，不代表对应接口或业务功能已经实现。</p>
             </main>
           </div>
           <script src="../assets/app.js"></script>

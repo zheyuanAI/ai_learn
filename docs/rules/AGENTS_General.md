@@ -1,5 +1,7 @@
 # 新项目 `AGENTS.md` + `openspec/README.md` 生成模板
 
+> 本文件是跨项目通用模板，文中的 `openspec/`、`specs/` 为占位目录；当前 `ai_learn_developProject` 的实际入口分别是 `docs/openspec/`、`docs/specs/`，以项目级 `AGENTS.md` 与 `docs/openspec/README.md` 为准。
+
 > 用途：本文件不是项目最终使用的规则文档，而是指导 `Codex` 为其他仓库生成“轻量主规则 + OpenSpec 自动化流程”的迁移模板。  
 > 目标：减少常驻 token，把项目事实与 OpenSpec 细则分层，并让用户只提需求就能跑通 `Codex 决策/审核 + Antigravity 执行` 的自动化协作。
 

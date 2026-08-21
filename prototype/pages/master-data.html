@@ -13,7 +13,7 @@
               <section class="hero">
                 <p class="eyebrow">AI Learn Prototype / ERP / WMS</p>
                 <h1>商品 / 仓库 / 库位管理</h1>
-                <p class="hero-copy">主数据页面用于冻结商品基础字段、仓库层级和库位编码规则，所有 ERP/WMS 与 MES 业务都依赖这里的命名与结构。</p>
+                <p class="hero-copy">主数据页面用于评审商品基础字段、仓库层级和库位编码规则，采购、库存与制造业务都依赖这里的统一命名与结构。</p>
               </section>
               <section class="meta-grid">
                 <article class="card">
@@ -41,7 +41,8 @@
         <li class="tag">启用</li>
 <li class="tag">停用</li>
 <li class="tag">可拣货</li>
-<li class="tag">冻结库位</li>
+<li class="tag">收货暂存</li>
+<li class="tag">发货暂存</li>
                   </ul>
                 </article>
                 <article class="card">
@@ -76,14 +77,14 @@
       <div class="field"><span class="field-label">仓库编码</span><span class="field-value">WH-FG-01</span></div>
       <div class="field"><span class="field-label">仓库名称</span><span class="field-value">成品仓一号库</span></div>
       <div class="field"><span class="field-label">库位编码</span><span class="field-value">A-01-03</span></div>
-      <div class="field"><span class="field-label">库位类型</span><span class="field-value">拣货位 / 存储位 / 冻结位</span></div>
+      <div class="field"><span class="field-label">库位类型</span><span class="field-value">ReceivingStaging / Storage / Picking / ShippingStaging / Adjustment</span></div>
       <div class="field"><span class="field-label">容量上限</span><span class="field-value">600 件</span></div>
       <div class="field"><span class="field-label">所属租户</span><span class="field-value">tenant_demo_a</span></div>
     </div>
     <p class="note">一期只支持可选的简单批次管理；序列号、保质期及复杂维度组合留到二期。</p>
   </article>
 </section>
-              <p class="footer-note">当前原型只使用假数据，目的是冻结页面结构、字段、状态、接口与权限，不代表最终视觉稿或真实业务实现。</p>
+              <p class="footer-note">当前页面仅使用假数据表达一期目标设计，不代表对应接口或业务功能已经实现。</p>
             </main>
           </div>
           <script src="../assets/app.js"></script>

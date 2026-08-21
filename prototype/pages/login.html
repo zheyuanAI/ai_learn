@@ -55,7 +55,7 @@
               </section>
               <section class="section-grid">
   <article class="panel">
-    <h2>表单字段冻结</h2>
+    <h2>表单目标字段</h2>
     <div class="field-grid">
       <div class="field"><span class="field-label">租户编码</span><span class="field-value">tenant_demo_a</span></div>
       <div class="field"><span class="field-label">用户名</span><span class="field-value">planner.zhang</span></div>
@@ -77,10 +77,10 @@
       <div class="flow-step"><span class="flow-index">S2</span><div><strong>鉴权通过</strong><div>返回 token、用户资料、角色集、菜单和默认首页。</div></div></div>
       <div class="flow-step"><span class="flow-index">S3</span><div><strong>鉴权失败</strong><div>展示错误码，区分密码错误、租户禁用、账户锁定。</div></div></div>
     </div>
-    <p class="note">冻结要求：登录成功必须明确返回 `tenant_id`、角色、菜单权限点和数据范围，以便后续所有查询页直接按租户过滤。</p>
+    <p class="note">目标要求：登录成功必须由后端建立租户、用户、角色、菜单权限点和数据范围上下文；前端不得自由指定可信 `tenant_id`。</p>
   </article>
 </section>
-              <p class="footer-note">当前原型只使用假数据，目的是冻结页面结构、字段、状态、接口与权限，不代表最终视觉稿或真实业务实现。</p>
+              <p class="footer-note">当前页面仅使用假数据表达一期登录与权限目标，不代表鉴权、租户或菜单能力已经实现。</p>
             </main>
           </div>
           <script src="../assets/app.js"></script>

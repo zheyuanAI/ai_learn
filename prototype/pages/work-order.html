@@ -13,7 +13,7 @@
               <section class="hero">
                 <p class="eyebrow">AI Learn Prototype / MES</p>
                 <h1>工单列表 / 工单详情 / 派工报工</h1>
-                <p class="hero-copy">第三条演示主线页面，固定 BOM、工艺路线、工单状态、派工批次、报工数量和质检结果。</p>
+                <p class="hero-copy">黄金业务闭环中的制造执行段目标设计：生产工单人工关联来源销售订单行，以领退料、派工、OperationExecution、报工、质检和成品入库记录实际执行。</p>
               </section>
               <section class="meta-grid">
                 <article class="card">
@@ -36,6 +36,13 @@
 <li>POST /api/work-orders</li>
 <li>POST /api/work-orders/{id}/release</li>
 <li>POST /api/dispatch-orders</li>
+<li>POST /api/operation-executions</li>
+<li>POST /api/operation-executions/{id}/start</li>
+<li>POST /api/operation-executions/{id}/pause</li>
+<li>POST /api/operation-executions/{id}/resume</li>
+<li>POST /api/operation-executions/{id}/complete</li>
+<li>POST /api/material-issues/{id}/confirm</li>
+<li>POST /api/material-returns/{id}/confirm</li>
 <li>POST /api/work-reports</li>
 <li>POST /api/quality-inspections</li>
 <li>POST /api/finished-goods-receipts</li>
@@ -54,8 +61,11 @@
                 <article class="card">
                   <h2>主要动作</h2>
                   <ul class="tag-list">
-        <li class="tag">下达工单</li>
+<li class="tag">下达工单</li>
+<li class="tag">生产领料</li>
+<li class="tag">生产退料</li>
 <li class="tag">创建派工单</li>
+<li class="tag">开始 / 暂停 / 恢复 / 完成工序</li>
 <li class="tag">提交报工</li>
 <li class="tag">发起质检</li>
 <li class="tag">成品入库</li>
@@ -64,10 +74,13 @@
               </section>
               <section class="section-grid">
   <article class="panel">
-    <h2>工单详情冻结字段</h2>
+    <h2>工单与来源关系目标字段</h2>
     <div class="field-grid">
       <div class="field"><span class="field-label">工单号</span><span class="field-value">WO-240630-018</span></div>
       <div class="field"><span class="field-label">产品</span><span class="field-value">伺服电机总成</span></div>
+      <div class="field"><span class="field-label">来源销售订单行</span><span class="field-value">SO-240630-011 / Line 10（人工选择）</span></div>
+      <div class="field"><span class="field-label">来源字段</span><span class="field-value">source_sales_order_line_id</span></div>
+      <div class="field"><span class="field-label">来源关系用途</span><span class="field-value">进度汇总与只读追溯</span></div>
       <div class="field"><span class="field-label">计划数量</span><span class="field-value">80</span></div>
       <div class="field"><span class="field-label">计划完工时间</span><span class="field-value">2026-07-01 18:00</span></div>
       <div class="field"><span class="field-label">当前工序</span><span class="field-value">工序 30 - 性能测试</span></div>
@@ -77,20 +90,30 @@
     </div>
   </article>
   <article class="panel">
-    <h2>派工 / 报工 / 质检流程</h2>
+    <h2>领退料与工序执行事实</h2>
+    <div class="field-grid">
+      <div class="field"><span class="field-label">MaterialIssue</span><span class="field-value">MI-240630-004 / 已确认领料 80</span></div>
+      <div class="field"><span class="field-label">MaterialReturn</span><span class="field-value">MR-240630-001 / 已确认退料 3</span></div>
+      <div class="field"><span class="field-label">OperationExecution</span><span class="field-value">OE-240630-033 / Running</span></div>
+      <div class="field"><span class="field-label">执行上下文</span><span class="field-value">工序 30 / 操作员 / 设备 C12 / 开始时间</span></div>
+    </div>
     <ul class="timeline">
+      <li>生产领料确认减少仓库库存，生产退料确认增加退回库位库存，两者均生成来源明确的库存流水</li>
       <li>未下达工单不可创建派工单，也不可报工</li>
+      <li>`OperationExecution` 区分工单意图与实际工序运行，记录开始、暂停、恢复、完成、人员、设备和时间</li>
       <li>报工数量 = 合格品 + 不良品，且受工单总量上限策略约束</li>
       <li>质检失败后记录不良数量并阻止成品入库；返工单属于二期</li>
       <li>完工确认后才允许调用成品入库接口</li>
     </ul>
     <div class="toolbar">
       <span class="btn primary">下达工单</span>
+      <span class="btn">确认领料</span>
+      <span class="btn">开始工序</span>
       <span class="btn">提交报工</span>
     </div>
   </article>
 </section>
-              <p class="footer-note">当前原型只使用假数据，目的是冻结页面结构、字段、状态、接口与权限，不代表最终视觉稿或真实业务实现。</p>
+              <p class="footer-note">当前页面仅使用假数据表达一期目标设计，不代表对应接口或业务功能已经实现。</p>
             </main>
           </div>
           <script src="../assets/app.js"></script>

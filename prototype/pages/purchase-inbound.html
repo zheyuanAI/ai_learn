@@ -3,7 +3,7 @@
         <head>
           <meta charset="UTF-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>采购单 / 入库单 / 上架任务 - AI Learn Prototype</title>
+          <title>采购单 / 收货单 / 上架任务 - AI Learn Prototype</title>
           <link rel="stylesheet" href="../assets/styles.css" />
         </head>
         <body data-page="purchase-inbound">
@@ -12,8 +12,8 @@
             <main class="workspace">
               <section class="hero">
                 <p class="eyebrow">AI Learn Prototype / ERP / WMS</p>
-                <h1>采购单 / 入库单 / 上架任务</h1>
-                <p class="hero-copy">第一条演示主线页面，承接采购单状态、到货确认、入库确认、上架任务和库存增加结果。</p>
+                <h1>采购单 / 收货单 / 上架任务</h1>
+                <p class="hero-copy">黄金业务闭环中的采购段目标设计：采购明细可人工关联来源生产工单；收货确认增加收货暂存位库存，上架只把库存移动到目标库位。</p>
               </section>
               <section class="meta-grid">
                 <article class="card">
@@ -50,7 +50,8 @@
                   <ul class="tag-list">
         <li class="tag">创建采购单</li>
 <li class="tag">审批采购单</li>
-<li class="tag">确认入库</li>
+<li class="tag">关联来源工单</li>
+<li class="tag">确认收货</li>
 <li class="tag">确认上架</li>
 <li class="tag">查看库存流水</li>
                   </ul>
@@ -62,11 +63,11 @@
     <div class="table-shell">
       <table>
         <thead>
-          <tr><th>采购单号</th><th>供应商</th><th>商品</th><th>计划数量</th><th>已入库</th><th>状态</th><th>期望到货</th></tr>
+          <tr><th>采购单号</th><th>来源工单</th><th>供应商</th><th>商品</th><th>计划数量</th><th>已收货</th><th>状态</th><th>期望到货</th></tr>
         </thead>
         <tbody>
-          <tr><td>PO-240630-001</td><td>华东电机供应商</td><td>伺服电机总成</td><td>120</td><td>80</td><td>PartiallyReceived</td><td>2026-07-02</td></tr>
-          <tr><td>PO-240630-002</td><td>标准件中心</td><td>轴承组件</td><td>400</td><td>0</td><td>Approved</td><td>2026-07-03</td></tr>
+          <tr><td>PO-240630-001</td><td>WO-240630-018</td><td>华东电机供应商</td><td>伺服电机总成</td><td>120</td><td>80</td><td>PartiallyReceived</td><td>2026-07-02</td></tr>
+          <tr><td>PO-240630-002</td><td>WO-240630-018</td><td>标准件中心</td><td>轴承组件</td><td>400</td><td>0</td><td>Approved</td><td>2026-07-03</td></tr>
         </tbody>
       </table>
     </div>
@@ -77,23 +78,27 @@
     </div>
   </article>
   <article class="panel">
-    <h2>入库与上架冻结字段</h2>
+    <h2>收货与上架目标字段</h2>
     <div class="field-grid">
-      <div class="field"><span class="field-label">入库单号</span><span class="field-value">PR-240630-014</span></div>
+      <div class="field"><span class="field-label">收货单号</span><span class="field-value">PR-240630-014</span></div>
       <div class="field"><span class="field-label">关联采购单</span><span class="field-value">PO-240630-001</span></div>
+      <div class="field"><span class="field-label">来源生产工单</span><span class="field-value">WO-240630-018（人工选择）</span></div>
+      <div class="field"><span class="field-label">来源字段</span><span class="field-value">source_work_order_id</span></div>
       <div class="field"><span class="field-label">到货数量</span><span class="field-value">80</span></div>
       <div class="field"><span class="field-label">批次号</span><span class="field-value">LOT-20260630-A</span></div>
+      <div class="field"><span class="field-label">收货暂存位</span><span class="field-value">RCV-01 / ReceivingStaging</span></div>
       <div class="field"><span class="field-label">上架任务号</span><span class="field-value">PA-240630-007</span></div>
       <div class="field"><span class="field-label">目标库位</span><span class="field-value">A-01-03</span></div>
     </div>
     <ul class="timeline">
-      <li>确认入库后生成库存流水与应付草稿</li>
-      <li>确认上架后库存从暂存位转入正式库位</li>
-      <li>幂等键重复提交不得重复增加库存</li>
+      <li>收货确认：企业总 `on_hand_qty` 增加，库存进入收货暂存位并记录来源流水</li>
+      <li>上架确认：收货暂存位减少、目标库位增加，企业总 `on_hand_qty` 不变</li>
+      <li>人工来源关联只用于说明、汇总和追溯，不触发自动需求计算或采购建议</li>
+      <li>目标约束：幂等键重复提交不得重复增加库存</li>
     </ul>
   </article>
 </section>
-              <p class="footer-note">当前原型只使用假数据，目的是冻结页面结构、字段、状态、接口与权限，不代表最终视觉稿或真实业务实现。</p>
+              <p class="footer-note">当前页面仅使用假数据表达一期目标设计，不代表对应接口或业务功能已经实现。</p>
             </main>
           </div>
           <script src="../assets/app.js"></script>

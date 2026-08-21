@@ -2,28 +2,28 @@ const groups = [
   {
     title: "项目导航",
     items: [
-      { href: "../index.html", label: "原型总览", pageId: "prototype-index", detail: "一期跨域主线与二期资产" }
+      { href: "../index.html", label: "原型总览", pageId: "prototype-index", detail: "一期黄金业务闭环" }
     ]
   },
   {
     title: "基础页面",
     items: [
       { href: "login.html", label: "登录页", pageId: "login", detail: "租户、用户、角色上下文" },
-      { href: "dashboard.html", label: "首页看板", pageId: "dashboard", detail: "库存、生产、设备、告警总览" }
+      { href: "dashboard.html", label: "首页看板", pageId: "dashboard", detail: "黄金闭环事实只读总览" }
     ]
   },
   {
     title: "业务域页面",
     items: [
       { href: "master-data.html", label: "主数据", pageId: "master-data", detail: "商品、仓库、库位" },
-      { href: "purchase-inbound.html", label: "采购入库", pageId: "purchase-inbound", detail: "采购、入库、上架" },
-      { href: "sales-outbound.html", label: "销售出库", pageId: "sales-outbound", detail: "销售、冻结、拣货、出库" },
-      { href: "work-order.html", label: "工单执行", pageId: "work-order", detail: "工单、派工、报工、质检" },
-      { href: "device-alarm.html", label: "设备与告警", pageId: "device-alarm", detail: "设备详情、遥测、告警" },
-      { href: "site-map.html", label: "厂区地图", pageId: "site-map", detail: "点位、区域、联动告警" },
-      { href: "digital-twin.html", label: "三维展示（二期）", pageId: "digital-twin", detail: "二期 Ditto/Cesium 设计资产" },
-      { href: "ai-assistant.html", label: "AI 聊天", pageId: "ai-assistant", detail: "问答、工具调用、来源" },
-      { href: "knowledge-base.html", label: "知识库管理（二期）", pageId: "knowledge-base", detail: "二期 RAG 设计资产" },
+      { href: "purchase-inbound.html", label: "采购收货", pageId: "purchase-inbound", detail: "人工来源、收货暂存、上架移位" },
+      { href: "sales-outbound.html", label: "销售交付", pageId: "sales-outbound", detail: "库存预留、拣货移位、发货扣减" },
+      { href: "work-order.html", label: "制造执行", pageId: "work-order", detail: "领退料、工序执行、报工质检" },
+      { href: "device-alarm.html", label: "设备事实", pageId: "device-alarm", detail: "消息去重、遥测、状态、告警" },
+      { href: "site-map.html", label: "厂区地图", pageId: "site-map", detail: "业务事实只读空间视图" },
+      { href: "digital-twin.html", label: "三维展示（二期设计资产）", pageId: "digital-twin", detail: "不进入一期开发与验收" },
+      { href: "ai-assistant.html", label: "AI 只读助手", pageId: "ai-assistant", detail: "受控查询、来源与审计" },
+      { href: "knowledge-base.html", label: "知识库（二期设计资产）", pageId: "knowledge-base", detail: "不进入一期开发与验收" },
       { href: "tool-audit.html", label: "调用审计", pageId: "tool-audit", detail: "输入摘要、耗时、状态" }
     ]
   }
@@ -37,7 +37,7 @@ function renderRail(currentPageId) {
     <div class="brand">
       <p class="brand-kicker">AI Learn</p>
       <h1>工业协同原型台</h1>
-      <p>原型优先，先冻结字段、状态、接口和权限，再推进真实功能与自动化测试。</p>
+      <p>一期目标设计围绕一条黄金业务闭环；原型不代表功能已经实现。</p>
     </div>
   `;
 

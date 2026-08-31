@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#071019" />
+  <link rel="icon" href="data:," />
+  <title>厂区二维空间地图 - AI Learn Prototype</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body data-page="site-map" class="console-page">
+  <div class="shell">
+    <aside class="rail"></aside>
+
+    <main class="workspace console-workspace">
+      <header class="console-topbar">
+        <div class="console-title-block">
+          <div class="console-title-meta">
+            <span class="console-module-code">GIS / 2D MAP &amp; SPATIAL VIEW</span>
+            <span class="console-live-mark"><i aria-hidden="true"></i> 只读视图</span>
+          </div>
+          <h1>厂区二维空间地图</h1>
+          <p>设备、仓库、车间区域与告警状态的只读二维空间展示，状态展示优先级遵循“告警 > 离线 > 预警 > 正常”，支持穿透追溯。</p>
+        </div>
+
+        <label class="console-role-control" for="mapRole">
+          <span>模拟查看角色</span>
+          <select id="mapRole">
+            <option value="viewer" selected>全域调度员 (dispatcher)</option>
+            <option value="admin">GIS 配置管理员 (gis.admin)</option>
+          </select>
+        </label>
+      </header>
+
+      <section class="console-review-bar" aria-label="地图层级与筛选">
+        <div>
+          <span class="console-section-index">点位图层筛选</span>
+          <strong>点击点位查看业务事实摘要并直达关联业务控制台</strong>
+        </div>
+        <div class="console-scenario-tabs" role="group" aria-label="图层过滤">
+          <button type="button" class="is-active" data-filter="all" aria-pressed="true">全部点位</button>
+          <button type="button" data-filter="alarm" aria-pressed="false">🚨 仅看告警</button>
+          <button type="button" data-filter="device" aria-pressed="false">🏭 生产设备</button>
+          <button type="button" data-filter="warehouse" aria-pressed="false">📦 仓库库区</button>
+        </div>
+        <p><strong>只读空间投影</strong> · 坐标相对百分比防偏移</p>
+      </section>
+
+      <section class="console-layout" aria-label="地图画布与点位详情">
+        <div class="console-panel-box" style="padding:16px;min-height:560px;position:relative;display:flex;flex-direction:column;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div style="font-size:13px;font-weight:700;">智能制造与立体仓储总平面图 (Plant Floor Plan)</div>
+            <div style="display:flex;gap:8px;font-size:11px;">
+              <span style="color:var(--c-red);">● 告警 (最高级)</span>
+              <span style="color:var(--c-dim);">● 离线</span>
+              <span style="color:var(--c-amber);">● 预警</span>
+              <span style="color:var(--c-green);">● 正常</span>
+            </div>
+          </div>
+
+          <div id="mapCanvas" class="map-canvas-container" style="flex:1;position:relative;min-height:480px;border:1px solid var(--c-line-strong);border-radius:10px;background:radial-gradient(circle at 50% 50%, #0d1b24, #060e15);overflow:hidden;">
+            <!-- SVG Grid & Zones -->
+            <svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(148,185,198,0.06)" stroke-width="1"/>
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#grid)" />
+              <!-- 仓库区 -->
+              <rect x="8%" y="12%" width="28%" height="36%" rx="8" fill="rgba(91,168,255,0.05)" stroke="rgba(91,168,255,0.2)" stroke-dasharray="4 4" />
+              <text x="10%" y="18%" fill="var(--c-blue)" font-size="12" font-weight="bold">成品立库区 (WH-FG-01)</text>
+
+              <rect x="8%" y="54%" width="28%" height="38%" rx="8" fill="rgba(91,168,255,0.05)" stroke="rgba(91,168,255,0.2)" stroke-dasharray="4 4" />
+              <text x="10%" y="60%" fill="var(--c-blue)" font-size="12" font-weight="bold">原料立体仓 (WH-RM-01)</text>
+
+              <!-- 生产装配区 -->
+              <rect x="42%" y="12%" width="52%" height="80%" rx="8" fill="rgba(113,225,220,0.04)" stroke="rgba(113,225,220,0.18)" stroke-dasharray="4 4" />
+              <text x="44%" y="18%" fill="var(--c-cyan)" font-size="12" font-weight="bold">智能制造核心车间 (AREA-PROD)</text>
+            </svg>
+
+            <!-- Map Point Pins will be rendered by JS -->
+            <div id="mapPointContainer"></div>
+          </div>
+        </div>
+
+        <aside id="mapPointDrawer" class="console-detail" style="min-height:560px;" aria-live="polite"></aside>
+      </section>
+
+      <footer class="console-disclaimer">
+        <span>PROTOTYPE / NOT IMPLEMENTED</span>
+        <p>页面字段、状态、权限和接口为一期目标设计；真实能力以实际代码、配置和自动化验证为准。</p>
+      </footer>
+    </main>
+  </div>
+
+  <div id="mapToast" class="console-toast" role="status" aria-live="polite"></div>
+
+  <script src="../assets/app.js"></script>
+  <script src="../assets/site-map.js"></script>
+</body>
+</html>

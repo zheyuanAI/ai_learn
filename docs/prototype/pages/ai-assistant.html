@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#071019" />
+  <link rel="icon" href="data:," />
+  <title>AI 智能助手 - AI Learn Prototype</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body data-page="ai-assistant" class="console-page">
+  <div class="shell">
+    <aside class="rail"></aside>
+
+    <main class="workspace console-workspace">
+      <header class="console-topbar">
+        <div class="console-title-block">
+          <div class="console-title-meta">
+            <span class="console-module-code">AI / INTELLIGENT ASSISTANT / READ-ONLY</span>
+            <span class="console-live-mark"><i aria-hidden="true"></i> Grok-4.6 受控查询</span>
+          </div>
+          <h1>AI 智能助手</h1>
+          <p>基于 Grok-4.6 / PokeAPI 的受控只读业务查询与解释，严格禁止直连数据库、禁止生成/执行 SQL、禁止写操作，回答必须附带来源与时间范围。</p>
+        </div>
+
+        <div style="display:flex;gap:8px;">
+          <a href="tool-audit.html" class="console-action-btn primary" style="text-decoration:none;padding:8px 14px;min-height:0;">
+            <span>📋 查看工具调用审计 ↗</span>
+          </a>
+        </div>
+      </header>
+
+      <section class="console-review-bar" aria-label="快捷查询与防写测试">
+        <div>
+          <span class="console-section-index">快速提问预设</span>
+          <strong>点击下方典型问题，体验黄金闭环追溯、日报生成与写操作拦截</strong>
+        </div>
+        <div class="console-scenario-tabs" role="group" aria-label="AI 预设提示词">
+          <button type="button" class="is-active" data-prompt="trace" aria-pressed="true">🔗 闭环全链追溯</button>
+          <button type="button" data-prompt="alarm" aria-pressed="false">🚨 解释 DEV-C12 告警</button>
+          <button type="button" data-prompt="report" aria-pressed="false">📊 生成今日经营日报</button>
+          <button type="button" data-prompt="write_block" aria-pressed="false">🛡️ 尝试修改库存(写拦截)</button>
+        </div>
+        <p><strong>协议规范</strong> · PokeAPI Responses API · 只读工具受控注册</p>
+      </section>
+
+      <section class="console-layout" style="grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);" aria-label="AI 对话工作台">
+        <!-- 聊天主窗口 -->
+        <div class="console-panel-box" style="display:flex;flex-direction:column;height:680px;">
+          <div style="padding:14px 18px;border-bottom:1px solid var(--c-line);display:flex;justify-content:space-between;align-items:center;">
+            <strong style="font-size:13px;">Grok-4.6 工业智能问答会话 (Session: sess_ai_20260826_01)</strong>
+            <span class="console-badge purple">模型: grok-4.6 / PokeAPI</span>
+          </div>
+
+          <div id="aiChatThread" style="flex:1;overflow-y:auto;padding:18px;display:grid;gap:14px;scrollbar-color:rgba(187,134,252,0.25) transparent;">
+            <!-- Chat messages injected by JS -->
+          </div>
+
+          <form onsubmit="handleAiChatSubmit(event)" style="padding:14px 18px;border-top:1px solid var(--c-line);display:flex;gap:10px;background:rgba(255,255,255,0.015);">
+            <input id="aiChatInput" type="text" placeholder="输入关于库存、销售订单、采购单、工单或告警的问题..." style="flex:1;min-height:42px;" />
+            <button type="submit" class="console-action-btn primary" style="min-height:42px;padding:0 20px;justify-content:center;">发送查询</button>
+          </form>
+        </div>
+
+        <!-- 右侧受控工具与上下文面板 -->
+        <aside class="console-panel-box" style="padding:18px;height:680px;overflow-y:auto;display:grid;gap:16px;">
+          <div>
+            <div class="console-section-index" style="margin-bottom:6px;">受控只读工具列表</div>
+            <h3 style="margin:0 0 8px;font-size:14px;">注册工具白名单 (Whitelist)</h3>
+            <p style="margin:0;font-size:11px;color:var(--c-muted);line-height:1.5;">AI 只能调用下列服务端严格校验权限的只读应用服务：</p>
+          </div>
+
+          <div style="display:grid;gap:6px;font-size:11px;">
+            <div style="padding:8px 10px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid var(--c-line);">
+              <code style="color:var(--c-cyan);">queryTrace</code><br/>
+              <span style="color:var(--c-muted);">跨域全链路黄金闭环追溯</span>
+            </div>
+            <div style="padding:8px 10px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid var(--c-line);">
+              <code style="color:var(--c-cyan);">queryInventoryByProductAndWarehouse</code><br/>
+              <span style="color:var(--c-muted);">指定 SKU 与仓库的实物/预留/可用量</span>
+            </div>
+            <div style="padding:8px 10px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid var(--c-line);">
+              <code style="color:var(--c-cyan);">queryDeviceAlarm</code><br/>
+              <span style="color:var(--c-muted);">设备活动告警与工序执行上下文</span>
+            </div>
+            <div style="padding:8px 10px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid var(--c-line);">
+              <code style="color:var(--c-cyan);">generateDailyOperationReport</code><br/>
+              <span style="color:var(--c-muted);">基于授权事实即时生成文字经营日报</span>
+            </div>
+          </div>
+
+          <div style="padding:12px;border-left:3px solid var(--c-red);background:rgba(255,124,115,0.06);border-radius:4px;font-size:11px;line-height:1.5;">
+            <strong style="color:var(--c-red);">写操作硬性防御边界：</strong><br/>
+            一期 AI 绝对禁止创建、修改、审核或删除任何单据与库存事实。若用户指令包含写操作，AI 将直接拒绝并提示人工入口。
+          </div>
+        </aside>
+      </section>
+
+      <footer class="console-disclaimer">
+        <span>PROTOTYPE / NOT IMPLEMENTED</span>
+        <p>页面字段、状态、权限和接口为一期目标设计；真实能力以实际代码、配置和自动化验证为准。</p>
+      </footer>
+    </main>
+  </div>
+
+  <div id="aiToast" class="console-toast" role="status" aria-live="polite"></div>
+
+  <script src="../assets/app.js"></script>
+  <script src="../assets/ai-assistant.js"></script>
+</body>
+</html>

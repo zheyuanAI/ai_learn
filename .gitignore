@@ -8,3 +8,6 @@ target/
 .env
 runtime/*
 !runtime/README.md
+/tmp/
+/output/
+/.playwright-cli/

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#071019" />
+  <link rel="icon" href="data:," />
+  <title>系统登录与认证上下文 - AI Learn Prototype</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body data-page="login" class="console-page">
+  <div class="shell">
+    <aside class="rail"></aside>
+
+    <main class="workspace console-workspace">
+      <header class="console-topbar">
+        <div class="console-title-block">
+          <div class="console-title-meta">
+            <span class="console-module-code">AUTH / PLATFORM LOGIN &amp; SESSION</span>
+            <span class="console-live-mark"><i aria-hidden="true"></i> 租户与单会话</span>
+          </div>
+          <h1>系统登录与认证上下文</h1>
+          <p>承接租户识别、用户鉴权、角色权限与菜单加载。执行“后登录替换前登录”的单会话规则，旧 JWT 再次调用返回 401。</p>
+        </div>
+      </header>
+
+      <section class="console-layout" style="grid-template-columns: minmax(360px, 440px) minmax(0, 1fr);margin-top:24px;" aria-label="登录与会话工作台">
+        <!-- 登录表单卡片 -->
+        <div class="console-panel-box" style="padding:24px;display:grid;gap:18px;">
+          <div>
+            <span class="console-section-index">用户登录</span>
+            <h2 style="margin:5px 0 0;font-size:20px;">统一身份认证</h2>
+          </div>
+
+          <form onsubmit="handleLoginSubmit(event)" style="display:grid;gap:14px;">
+            <div class="console-form-field">
+              <span>企业租户编码 (Tenant Code) <b>*</b></span>
+              <select id="loginTenant">
+                <option value="tenant_demo_a" selected>tenant_demo_a (华北智能工厂示范租户)</option>
+                <option value="tenant_demo_b">tenant_demo_b (华东高精装备制造租户)</option>
+              </select>
+            </div>
+
+            <div class="console-form-field">
+              <span>账号用户名 (Username) <b>*</b></span>
+              <input id="loginUsername" type="text" value="wh.operator" />
+            </div>
+
+            <div class="console-form-field">
+              <span>登录密码 (Password) <b>*</b></span>
+              <input id="loginPassword" type="password" value="••••••••" />
+            </div>
+
+            <button type="submit" class="console-action-btn primary" style="justify-content:center;min-height:44px;margin-top:6px;">
+              <span class="console-action-title">登录进入系统</span>
+              <span class="console-action-perm">POST /api/auth/login</span>
+            </button>
+          </form>
+
+          <div style="border-top:1px solid var(--c-line);padding-top:16px;">
+            <span style="font-size:11px;color:var(--c-muted);display:block;margin-bottom:10px;">快速切换演示角色登录：</span>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <button type="button" class="console-action-btn" onclick="quickFillRole('wh.operator', 'warehouse')" style="padding:8px 10px;">
+                <span class="console-action-title" style="font-size:12px;">仓库人员</span>
+                <span class="console-action-desc">wh.operator</span>
+              </button>
+              <button type="button" class="console-action-btn" onclick="quickFillRole('mes.inspector', 'inspector')" style="padding:8px 10px;">
+                <span class="console-action-title" style="font-size:12px;">生产质检人员</span>
+                <span class="console-action-desc">mes.inspector</span>
+              </button>
+              <button type="button" class="console-action-btn" onclick="quickFillRole('buyer.chen', 'buyer')" style="padding:8px 10px;">
+                <span class="console-action-title" style="font-size:12px;">采购人员</span>
+                <span class="console-action-desc">buyer.chen</span>
+              </button>
+              <button type="button" class="console-action-btn" onclick="quickFillRole('admin.zhang', 'admin')" style="padding:8px 10px;">
+                <span class="console-action-title" style="font-size:12px;">系统调度员</span>
+                <span class="console-action-desc">admin.zhang</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 会话机制与权限说明 -->
+        <aside class="console-detail" style="padding:24px;display:grid;gap:18px;">
+          <div>
+            <div class="console-title-meta">
+              <span class="console-module-code">SECURITY &amp; JWT SESSION</span>
+              <span id="sessionStatusBadge" class="console-badge green">会话正常</span>
+            </div>
+            <h2 style="margin:5px 0 0;font-size:22px;">当前认证上下文与会话事实</h2>
+            <p style="margin:6px 0 0;font-size:12px;color:var(--c-muted);">服务端在 Redis 维护最新 jti，当同一账号在另一设备登录时，新 jti 替换旧 jti。</p>
+          </div>
+
+          <div class="console-fact-grid" style="padding:0;">
+            <div class="console-fact-item">
+              <span class="console-fact-label">当前生效租户</span>
+              <span id="ctxTenant" class="console-fact-val highlight">tenant_demo_a</span>
+            </div>
+            <div class="console-fact-item">
+              <span class="console-fact-label">当前登录用户</span>
+              <span id="ctxUser" class="console-fact-val">wh.operator</span>
+            </div>
+            <div class="console-fact-item">
+              <span class="console-fact-label">生效角色</span>
+              <span id="ctxRole" class="console-fact-val">仓库人员 (Warehouse Operator)</span>
+            </div>
+            <div class="console-fact-item">
+              <span class="console-fact-label">当前 JWT 会话标识 (jti)</span>
+              <span id="ctxJti" class="console-fact-val" style="font-family:monospace;color:var(--c-cyan);">jti_7c91d8a4f210</span>
+            </div>
+          </div>
+
+          <div style="padding:16px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid var(--c-line);display:grid;gap:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <strong style="font-size:13px;">单会话顶替机制模拟演示</strong>
+              <button type="button" class="console-action-btn warning" onclick="simulateSessionKicked()" style="padding:6px 12px;min-height:0;">
+                <span>⚠️ 模拟新设备登录（踢出当前会话）</span>
+              </button>
+            </div>
+            <p style="margin:0;font-size:11px;color:var(--c-muted);line-height:1.6;">
+              模拟另一个客户端使用相同账号成功登录并获取新 jti。当前页面下一次请求将被服务端 401 拦截并弹出失效警告。
+            </p>
+          </div>
+
+          <section class="console-section" style="margin:0;">
+            <div class="console-section-head">
+              <h3>已加载菜单与功能权限树 (Menu Permissions)</h3>
+              <small>根据 Auth 服务加载当前用户权限点</small>
+            </div>
+            <div id="authMenuTree" style="padding:14px 18px;font-size:12px;display:grid;gap:8px;">
+              <!-- Permissions injected by JS -->
+            </div>
+          </section>
+        </aside>
+      </section>
+
+      <footer class="console-disclaimer">
+        <span>PROTOTYPE / NOT IMPLEMENTED</span>
+        <p>页面字段、状态、权限和接口为一期目标设计；真实能力以实际代码、配置和自动化验证为准。</p>
+      </footer>
+    </main>
+  </div>
+
+  <div id="loginToast" class="console-toast" role="status" aria-live="polite"></div>
+
+  <script src="../assets/app.js"></script>
+  <script src="../assets/login.js"></script>
+</body>
+</html>

@@ -34,7 +34,7 @@
 - Modify: `backend/platform-core/src/main/resources/application.yml` — 声明端口 10003。
 - Modify: `backend/platform-iot/src/main/resources/application.yml` — 声明端口 10004。
 - Modify: `docs/specs/00-project/架构设计.md` — 固化一期本地中间件与服务端口事实。
-- Modify: `README.md`、`frontend/README.md`、`backend/README.md`、`docs/项目目录结构.md`、`AGENTS.md` — 同步开发入口和目录说明。
+- Modify: `README.md`、`frontend/README.md`、`backend/README.md`、`AGENTS.md` — 同步开发入口和目录说明。
 - Modify: `../AGENTS.md` — 将外层工作区对自研项目的 Node/PostgreSQL 基线改为已确认值，同时保留参考工程差异。
 - Generated and ignored: `runtime/redis-3.0.504/**`、`runtime/mosquitto-2.1.2/**` — 下载包、可执行文件、数据和日志。
 
@@ -49,7 +49,6 @@
 - Modify: `README.md`
 - Modify: `frontend/README.md`
 - Modify: `docs/specs/00-project/架构设计.md`
-- Modify: `docs/项目目录结构.md`
 - Modify: `AGENTS.md`
 - Modify: `../AGENTS.md`
 - Inspect only: `docs/openspec/README.md`
@@ -101,8 +100,8 @@ Run:
 
 ```powershell
 node -e "const p=require('./frontend/package.json'); if(p.engines.node!=='20.x') process.exit(1)"
-rg -n "Node 20|5433|5323|Node 22" README.md frontend/README.md docs/specs/00-project/架构设计.md docs/项目目录结构.md AGENTS.md ..\AGENTS.md
-git diff -- .gitignore frontend/package.json README.md frontend/README.md docs/specs/00-project/架构设计.md docs/项目目录结构.md AGENTS.md
+rg -n "Node 20|5433|5323|Node 22" README.md frontend/README.md docs/specs/00-project/架构设计.md AGENTS.md ..\AGENTS.md
+git diff -- .gitignore frontend/package.json README.md frontend/README.md docs/specs/00-project/架构设计.md AGENTS.md
 ```
 
 Expected: Node 检查退出码为 0；自研项目只标注 5433/Node 20，5323/Node 22 仅出现在参考工程说明中；diff 不包含业务功能改动。
@@ -367,7 +366,7 @@ Run:
 
 ```powershell
 rg -n "下载后[记]录|T[B]D|T[O]DO" runtime/README.md deploy/local docs/superpowers/specs/2026-08-19-local-development-baseline-design.md
-rg -n "5323|Node 22|10001|10002|10003|10004|5433|Node 20" README.md frontend/README.md backend/README.md docs/specs/00-project/架构设计.md docs/项目目录结构.md AGENTS.md ..\AGENTS.md
+rg -n "5323|Node 22|10001|10002|10003|10004|5433|Node 20" README.md frontend/README.md backend/README.md docs/specs/00-project/架构设计.md AGENTS.md ..\AGENTS.md
 ```
 
 Expected: 第一个命令无结果；5323/Node 22 只用于明确标识参考工程差异，其他值与设计一致。
@@ -409,7 +408,7 @@ Run:
 ```powershell
 git diff --check
 git diff --stat
-git diff -- .gitignore frontend/package.json backend README.md frontend/README.md backend/README.md docs/specs/00-project/架构设计.md docs/项目目录结构.md AGENTS.md deploy/local runtime/README.md
+git diff -- .gitignore frontend/package.json backend README.md frontend/README.md backend/README.md docs/specs/00-project/架构设计.md AGENTS.md deploy/local runtime/README.md
 ```
 
 Expected: `git diff --check` 退出码为 0；没有业务实现、依赖安装、Gateway 路由、数据库 Schema、Redis Key 或 MQTT Topic 设计。

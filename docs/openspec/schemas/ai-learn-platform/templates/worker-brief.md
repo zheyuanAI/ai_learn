@@ -14,10 +14,10 @@
 
 ## Existing Facts To Check
 
-- `docs/specs/00-project/{项目概述,架构设计,正式项目计划,原型与交互说明}.md`
+- `docs/specs/00-project/{项目概述,架构设计,正式项目计划,原型与交互说明,阶段决策与续聊入口}.md`
 - `docs/specs/<domain>/{概述,领域模型,接口契约,验收标准}.md`
-- `prototype/README.md`
-- `prototype/pages/*.html`
+- `docs/prototype/README.md`
+- `docs/prototype/pages/*.html`
 
 ## Rules
 

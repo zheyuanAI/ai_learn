@@ -22,9 +22,9 @@
 
 ## 与当前仓库约束的衔接
 
-- 项目事实以 `docs/specs/00-project/{项目概述,架构设计,正式项目计划,原型与交互说明}.md` 和各领域 `docs/specs/*/{概述,领域模型,接口契约,验收标准}.md` 为准。
+- 项目事实以 `docs/specs/00-project/{项目概述,架构设计,正式项目计划,原型与交互说明,阶段决策与续聊入口}.md` 和各领域 `docs/specs/*/{概述,领域模型,接口契约,验收标准}.md` 为准。
 - 领域行为变更若影响状态机、错误码、接口字段、权限点或验收条件，必须同步回写现有 `docs/specs/` 文档，不能只停留在 OpenSpec 工件中。
-- 页面或交互变更若影响字段、状态或按钮，必须同步检查 `prototype/README.md`、`prototype/pages/*.html` 和对应前端页面。
+- 页面或交互变更若影响字段、状态或按钮，必须同步检查 `docs/prototype/README.md`、`docs/prototype/pages/*.html` 和对应前端页面。
 - 登录、JWT、租户上下文、权限菜单、库存冻结/释放/扣减/回补、采购入库、销售出库、工单执行、幂等、租户隔离、库存一致性、AI 工具审计属于高风险范围；若要由 AI 直接实现，必须有用户明确授权。
 - AI 相关能力默认只读，必须保留审计痕迹。
 
@@ -48,12 +48,12 @@ docs/openspec/
 
 ## OpenSpec 工作目录
 
-本仓库将 OpenSpec 工件放在 `docs/openspec/`，因此 OpenSpec CLI 的受支持工作目录是
-`ai_learn_developProject/docs/`，不是项目仓库根目录。项目构建、前端和后端命令仍按各自
+本仓库将 OpenSpec 工件放在 `docs/openspec/`，因此从当前项目根目录执行时，OpenSpec CLI
+的受支持工作目录是 `docs/`，不是项目仓库根目录。项目构建、前端和后端命令仍按各自
 README 的说明从项目仓库根目录或对应子目录执行。
 
 ```powershell
-cd ai_learn_developProject/docs
+cd docs
 openspec list --specs --json
 openspec schemas --json
 openspec templates --json
@@ -69,7 +69,7 @@ openspec validate --specs --no-interactive --json
 当前环境已确认存在 `openspec` 命令入口，可使用：
 
 ```powershell
-cd ai_learn_developProject/docs
+cd docs
 openspec update
 ```
 
@@ -134,7 +134,7 @@ openspec update
 - 允许修改范围
 - 禁止修改范围
 - 必读工件
-- 必须同步更新的现有 `docs/specs/`、`prototype/` 或 `docs/` 文件
+- 必须同步更新的现有 `docs/specs/`、`docs/prototype/` 或 `docs/` 文件
 - 验证要求
 - 失败时的停止条件
 - 完成后必须回写的文件
@@ -156,7 +156,7 @@ openspec update
 - 自检至少覆盖：
   - 是否严格限制在允许修改范围内
   - 是否满足 `proposal / spec / design / tasks` 的目标要求
-  - 是否同步更新了必须回写的现有 spec、原型或说明文档
+  - 是否同步更新了必须回写的现有 spec、`docs/prototype/` 原型或说明文档
   - 已执行或已确认的验证动作
   - 剩余风险、假设和建议重点审核项
 - 若自检未通过，允许先自行修复，但默认自修重试最多 `2` 次。

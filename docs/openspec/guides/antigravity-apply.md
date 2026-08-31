@@ -16,10 +16,10 @@
 - docs/openspec/changes/<change-name>/self-review.md
 
 如果本次变更影响既有事实文档，还要同步阅读：
-- docs/specs/00-project/{项目概述,架构设计,正式项目计划,原型与交互说明}.md
+- docs/specs/00-project/{项目概述,架构设计,正式项目计划,原型与交互说明,阶段决策与续聊入口}.md
 - docs/specs/<domain>/{概述,领域模型,接口契约,验收标准}.md
-- prototype/README.md
-- prototype/pages/*.html
+- docs/prototype/README.md
+- docs/prototype/pages/*.html
 
 执行要求：
 1. 仅处理 tasks.md 中未勾选的任务
@@ -35,7 +35,7 @@
 结束时请输出：
 1. 修改了哪些文件
 2. 每个任务对应的完成情况
-3. 是否同步回写了现有 docs/specs、prototype 或 docs
+3. 是否同步回写了现有 docs/specs、docs/prototype 或 docs
 4. 执行了哪些测试命令，结果如何
 5. 剩余风险、假设与未完成项
 6. 自检结论（是否建议提交 Codex 最终审核）

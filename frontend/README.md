@@ -7,13 +7,12 @@
 
 ## 规格入口
 - 当前开发计划与一期范围：`../docs/specs/00-project/正式项目计划.md`
-- 页面范围与交互基线：`../docs/specs/00-project/原型与交互说明.md`、`../prototype/README.md`
+- 页面范围与交互基线：`../docs/specs/00-project/原型与交互说明.md`、`../docs/prototype/README.md`
 - 领域规则、接口与验收：对应领域目录的 `概述.md`、`领域模型.md`、`接口契约.md`、`验收标准.md`
 
 ## 本地开发环境基线
-- 本前端工程使用 Node 20。
-- 后端在 IDEA 中使用 Java 21 与 Maven 3.9.1。
-- 自研项目的 PostgreSQL 16 统一使用端口 5433；参考工程可保留 Node 22 与 PostgreSQL 16（端口 5323）配置。
+- 本前端工程的 Node 版本由 `package.json` 的 `engines` 约束为 20.x。
+- Java、Maven、PostgreSQL、服务端口及参考工程隔离规则以 `../docs/specs/00-project/架构设计.md` 和根目录 `../README.md` 为准。
 
 ## 下一步
 1. 接入登录页与租户上下文

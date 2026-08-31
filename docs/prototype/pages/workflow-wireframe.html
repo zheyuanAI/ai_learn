@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="data:," />
+  <title>黄金闭环线框工作台 - AI Learn Prototype</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body data-page="workflow-wireframe">
+  <div class="shell">
+    <aside class="rail"></aside>
+    <main class="workspace workflow-workspace">
+      <section class="hero wire-hero">
+        <p class="eyebrow">LOW-FIDELITY / REVIEW BOARD</p>
+        <h1>黄金业务闭环线框工作台</h1>
+        <p class="hero-copy">点击流程节点并切换角色，评审页面入口、功能权限、状态前置和目标接口。这里优先确认结构与业务语义，不讨论最终视觉风格。</p>
+      </section>
+
+      <section class="review-strip" aria-label="当前评审上下文">
+        <div class="review-item">
+          <span>演示账号</span>
+          <strong>demo.operator</strong>
+        </div>
+        <label class="review-item" for="roleSelect">
+          <span>当前角色</span>
+          <select id="roleSelect" class="role-select">
+            <option value="tenant-admin">租户管理员</option>
+            <option value="sales" selected>销售人员</option>
+            <option value="purchase">采购人员</option>
+            <option value="warehouse">仓库人员</option>
+            <option value="production-quality">生产质检人员</option>
+            <option value="iot">IoT人员</option>
+          </select>
+        </label>
+        <div class="review-item">
+          <span>数据范围</span>
+          <strong>当前租户</strong>
+        </div>
+        <div class="review-item">
+          <span>会话策略</span>
+          <strong>一账号一会话</strong>
+        </div>
+      </section>
+
+      <section class="workflow-layout">
+        <article class="wire-panel">
+          <div class="wire-panel-title">
+            <span>01</span>
+            <div>
+              <h2>业务流程导航</h2>
+              <p>点击节点查看状态、动作和页面入口</p>
+            </div>
+          </div>
+          <div id="flowBoard" class="flow-board"></div>
+        </article>
+
+        <article class="wire-panel wire-detail" aria-live="polite">
+          <div id="stepDetail"></div>
+        </article>
+      </section>
+
+      <section class="wire-summary-grid">
+        <article class="wire-panel">
+          <div class="wire-panel-title">
+            <span>02</span>
+            <div>
+              <h2>统一授权规则</h2>
+              <p>所有业务页面共同遵守</p>
+            </div>
+          </div>
+          <ol class="wire-checklist">
+            <li>Gateway 校验 JWT 签名、有效期和当前 <code>jti</code>。</li>
+            <li>Auth 根据账号角色判断功能权限，Redis 仅作为权限高速缓存。</li>
+            <li>业务服务再次校验当前租户、对象状态和具体业务规则。</li>
+            <li>同一账号后登录替换前登录；旧会话再次请求返回 401。</li>
+            <li>系统记录账号与会话，不承诺识别共享账号背后的自然人。</li>
+          </ol>
+        </article>
+
+        <article class="wire-panel">
+          <div class="wire-panel-title">
+            <span>03</span>
+            <div>
+              <h2>原型评审口径</h2>
+              <p>本轮只确认必要内容</p>
+            </div>
+          </div>
+          <div class="wire-tags">
+            <span>页面入口</span>
+            <span>列表字段</span>
+            <span>详情结构</span>
+            <span>角色权限</span>
+            <span>状态按钮</span>
+            <span>接口缺口</span>
+          </div>
+          <p class="wire-note">采购单和销售单允许人工完成，但不得伪造收货、发货或库存流水；人工完成必须记录原因、账号、会话和时间。</p>
+        </article>
+      </section>
+
+      <p class="footer-note">这是用于业务沟通的可点击低保真线框，不代表接口或安全能力已经实现。</p>
+    </main>
+  </div>
+  <script src="../assets/app.js"></script>
+  <script src="../assets/workflow.js"></script>
+</body>
+</html>

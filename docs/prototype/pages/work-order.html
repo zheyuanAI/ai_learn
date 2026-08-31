@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#071019" />
+  <link rel="icon" href="data:," />
+  <title>制造执行与质检控制台 - AI Learn Prototype</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body data-page="work-order" class="console-page">
+  <div class="shell">
+    <aside class="rail"></aside>
+
+    <main class="workspace console-workspace">
+      <header class="console-topbar">
+        <div class="console-title-block">
+          <div class="console-title-meta">
+            <span class="console-module-code">CORE / MANUFACTURING &amp; MES / QUALITY</span>
+            <span class="console-live-mark"><i aria-hidden="true"></i> 目标设计</span>
+          </div>
+          <h1>制造执行与质检控制台</h1>
+          <p>工单人工关联销售需求，下达后锁定 BOM 与工艺路线；通过领退料、派工与 OperationExecution、报工、成品质检和成品入库驱动闭环。</p>
+        </div>
+
+        <label class="console-role-control" for="workOrderRole">
+          <span>模拟操作角色</span>
+          <select id="workOrderRole">
+            <option value="inspector" selected>生产质检人员 (mes.inspector)</option>
+            <option value="warehouse">仓库人员 (wh.operator)</option>
+          </select>
+        </label>
+      </header>
+
+      <section class="console-review-bar" aria-label="原型评审场景">
+        <div>
+          <span class="console-section-index">评审场景</span>
+          <strong>切换工单状态，核对来源关联、BOM锁定、工序执行状态机与入库事实</strong>
+        </div>
+        <div class="console-scenario-tabs" role="group" aria-label="工单示例场景">
+          <button type="button" data-scenario="running" aria-pressed="true">工序执行中</button>
+          <button type="button" data-scenario="inspected" aria-pressed="false">质检待入库</button>
+          <button type="button" data-scenario="completed" aria-pressed="false">正常完工入库</button>
+        </div>
+        <p><strong>目标设计 · 接口未实现</strong> · 浏览器内假数据模拟</p>
+      </section>
+
+      <section class="console-layout" aria-label="生产制造与质检工作台">
+        <aside class="console-queue" aria-label="工单队列">
+          <div class="console-queue-head">
+            <div>
+              <span class="console-section-index">工单队列</span>
+              <h2>生产工单</h2>
+            </div>
+            <span id="workOrderCount" class="console-count">0</span>
+          </div>
+
+          <label class="console-search" for="workOrderSearch">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m2.35-5.15A7.5 7.5 0 1 1 4 11.5a7.5 7.5 0 0 1 15 0Z" /></svg>
+            <input id="workOrderSearch" type="search" placeholder="工单号 / 产品 / 销售订单" autocomplete="off" />
+          </label>
+
+          <div class="console-filter-group">
+            <span>工单状态</span>
+            <div class="console-filter-row" aria-label="工单状态筛选">
+              <button type="button" class="is-active" data-status-filter="all" aria-pressed="true">全部</button>
+              <button type="button" data-status-filter="Released" aria-pressed="false">已下达</button>
+              <button type="button" data-status-filter="InProgress" aria-pressed="false">生产中</button>
+              <button type="button" data-status-filter="Completed" aria-pressed="false">已完工</button>
+            </div>
+          </div>
+
+          <div id="workOrderList" class="console-card-list"></div>
+        </aside>
+
+        <section id="workOrderDetail" class="console-detail" aria-live="polite"></section>
+      </section>
+
+      <footer class="console-disclaimer">
+        <span>PROTOTYPE / NOT IMPLEMENTED</span>
+        <p>页面字段、状态、权限和接口为一期目标设计；真实能力以实际代码、配置和自动化验证为准。</p>
+      </footer>
+    </main>
+  </div>
+
+  <div id="workOrderActionDialog" class="console-dialog" hidden></div>
+  <div id="workOrderToast" class="console-toast" role="status" aria-live="polite"></div>
+
+  <script src="../assets/app.js"></script>
+  <script src="../assets/work-order.js"></script>
+</body>
+</html>

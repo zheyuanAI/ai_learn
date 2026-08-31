@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#071019" />
+  <link rel="icon" href="data:," />
+  <title>库存与基础资料控制台 - AI Learn Prototype</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body data-page="master-data" class="console-page">
+  <div class="shell">
+    <aside class="rail"></aside>
+
+    <main class="workspace console-workspace">
+      <header class="console-topbar">
+        <div class="console-title-block">
+          <div class="console-title-meta">
+            <span class="console-module-code">CORE / INVENTORY &amp; MASTER DATA</span>
+            <span class="console-live-mark"><i aria-hidden="true"></i> 目标设计</span>
+          </div>
+          <h1>库存与基础资料控制台</h1>
+          <p>维护商品与物料、仓库与6类标准库位、实物与预留可用库存余额，支持库位调拨、差异盘点调整与全量不可篡改流水追溯。</p>
+        </div>
+
+        <label class="console-role-control" for="inventoryRole">
+          <span>模拟操作角色</span>
+          <select id="inventoryRole">
+            <option value="manager" selected>仓库主管 (wh.manager)</option>
+            <option value="operator">仓库操作员 (wh.operator)</option>
+            <option value="planner">计划员 (planner.zhang)</option>
+          </select>
+        </label>
+      </header>
+
+      <section class="console-review-bar" aria-label="主数据与库存视图切换">
+        <div>
+          <span class="console-section-index">视图切换</span>
+          <strong>核对 6 类标准库位、实物/预留/可用口径、调拨与盘点流水</strong>
+        </div>
+        <div class="console-scenario-tabs" role="group" aria-label="库存功能模块切换">
+          <button type="button" data-tab="balance" aria-pressed="true">实时库存余额</button>
+          <button type="button" data-tab="transfer_stocktake" aria-pressed="false">调拨与盘点</button>
+          <button type="button" data-tab="products" aria-pressed="false">商品物料主数据</button>
+          <button type="button" data-tab="locations" aria-pressed="false">仓库与库位</button>
+          <button type="button" data-tab="transactions" aria-pressed="false">库存审计流水</button>
+        </div>
+        <p><strong>目标设计 · 接口未实现</strong> · 假数据模拟</p>
+      </section>
+
+      <section id="masterDataMainView" class="console-layout-full" aria-live="polite"></section>
+
+      <footer class="console-disclaimer">
+        <span>PROTOTYPE / NOT IMPLEMENTED</span>
+        <p>页面字段、状态、权限和接口为一期目标设计；真实能力以实际代码、配置和自动化验证为准。</p>
+      </footer>
+    </main>
+  </div>
+
+  <div id="inventoryActionDialog" class="console-dialog" hidden></div>
+  <div id="inventoryToast" class="console-toast" role="status" aria-live="polite"></div>
+
+  <script src="../assets/app.js"></script>
+  <script src="../assets/master-data.js"></script>
+</body>
+</html>

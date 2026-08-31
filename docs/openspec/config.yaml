@@ -10,7 +10,7 @@ context: |
   前端构建输出目录：未在仓库中确认（frontend/vite.config.ts 未显式配置 build.outDir）
   当前前端入口：frontend/src/main.ts
   当前前端主路由：/、/erp-wms、/mes、/iot、/gis、/ai
-  当前事实源：docs/specs/00-project/{项目概述,架构设计,正式项目计划,原型与交互说明}.md、docs/specs/*/{概述,领域模型,接口契约,验收标准}.md、prototype/README.md、prototype/pages/*.html
+  当前事实源：docs/specs/00-project/{项目概述,架构设计,正式项目计划,原型与交互说明,阶段决策与续聊入口}.md、docs/specs/*/{概述,领域模型,接口契约,验收标准}.md、docs/prototype/README.md、docs/prototype/pages/*.html
   常用命令：
   - cd frontend && npm i
   - cd frontend && npm run dev
@@ -32,7 +32,7 @@ rules:
   proposal: |
     - 写清本次变更的业务目标、非目标、影响范围和高风险边界。
     - 若涉及核心业务实现，明确用户是否已授权由 AI 直接实现。
-    - 若需要同步修改现有 docs/specs、prototype 或 docs，要在 proposal 中写明。
+    - 若需要同步修改现有 docs/specs、docs/prototype 或 docs，要在 proposal 中写明。
   spec: |
     - 使用 requirement + scenario 描述本次变更的行为要求。
     - 只写本次变更影响的行为，不重写整个系统说明。
@@ -45,7 +45,7 @@ rules:
     - 任务必须可由 Antigravity 顺序执行。
     - 每个任务尽量落到具体文件或具体模块。
     - 任务中必须包含验证动作。
-    - 任务中必须显式包含现有 spec/prototype/docs 回写步骤与执行器自检步骤。
+    - 任务中必须显式包含现有 spec/docs/prototype 回写步骤与执行器自检步骤。
   worker-brief: |
     - 明确 worker 只负责实现，不负责重构整体架构或扩写需求。
     - 要求 worker 完成后更新 tasks.md 勾选状态，并汇报测试与风险。

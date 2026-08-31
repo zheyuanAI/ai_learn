@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#071019" />
+  <link rel="icon" href="data:," />
+  <title>AI 工具调用审计控制台 - AI Learn Prototype</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body data-page="tool-audit" class="console-page">
+  <div class="shell">
+    <aside class="rail"></aside>
+
+    <main class="workspace console-workspace">
+      <header class="console-topbar">
+        <div class="console-title-block">
+          <div class="console-title-meta">
+            <span class="console-module-code">AI / AUDIT LOGS &amp; GOVERNANCE</span>
+            <span class="console-live-mark"><i aria-hidden="true"></i> 全量留痕</span>
+          </div>
+          <h1>AI 工具调用审计控制台</h1>
+          <p>记录所有 AI 受控工具调用的 request_id、租户、用户、工具名、入参/出参摘要、耗时与执行状态，成功、失败、拒绝均完整留痕。</p>
+        </div>
+
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="console-action-btn primary" onclick="exportAuditLogsJson()" style="padding:8px 14px;min-height:0;">
+            <span>📥 导出审计日志 (JSON)</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="console-review-bar" aria-label="审计状态过滤">
+        <div>
+          <span class="console-section-index">调用状态过滤</span>
+          <strong>全量追踪模型与只读工具交互细节</strong>
+        </div>
+        <div class="console-scenario-tabs" role="group" aria-label="状态筛选">
+          <button type="button" class="is-active" data-status-filter="all" aria-pressed="true">全部记录</button>
+          <button type="button" data-status-filter="Success" aria-pressed="false">✅ 成功 (Success)</button>
+          <button type="button" data-status-filter="Denied" aria-pressed="false">🛡️ 拒绝 (Denied)</button>
+          <button type="button" data-status-filter="Timeout" aria-pressed="false">⏱️ 超时 (Timeout)</button>
+        </div>
+        <p><strong>安全合规</strong> · 严禁记录密码与敏感凭证</p>
+      </section>
+
+      <section class="console-layout" style="grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);" aria-label="审计列表与详情抽屉">
+        <!-- 审计日志表格 -->
+        <div class="console-panel-box" style="padding:18px;display:grid;gap:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+            <label class="console-search" style="flex:1;max-width:380px;">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m2.35-5.15A7.5 7.5 0 1 1 4 11.5a7.5 7.5 0 0 1 15 0Z" /></svg>
+              <input id="auditSearchInput" type="search" placeholder="检索 Request ID / 用户 / 工具名" autocomplete="off" />
+            </label>
+            <span id="auditCountBadge" class="console-badge cyan">0 条记录</span>
+          </div>
+
+          <div class="console-table-shell" style="max-height:560px;overflow-y:auto;">
+            <table class="console-table">
+              <thead>
+                <tr>
+                  <th>调用时间</th>
+                  <th>Request ID</th>
+                  <th>租户 / 用户</th>
+                  <th>调用工具</th>
+                  <th>执行耗时</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody id="auditTableBody">
+                <!-- Rows injected by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 选中记录详情抽屉 -->
+        <aside id="auditDetailDrawer" class="console-detail" style="min-height:560px;" aria-live="polite"></aside>
+      </section>
+
+      <footer class="console-disclaimer">
+        <span>PROTOTYPE / NOT IMPLEMENTED</span>
+        <p>页面字段、状态、权限和接口为一期目标设计；真实能力以实际代码、配置和自动化验证为准。</p>
+      </footer>
+    </main>
+  </div>
+
+  <div id="auditToast" class="console-toast" role="status" aria-live="polite"></div>
+
+  <script src="../assets/app.js"></script>
+  <script src="../assets/tool-audit.js"></script>
+</body>
+</html>

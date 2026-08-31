@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#071019" />
+  <link rel="icon" href="data:," />
+  <title>采购收货与到货质检控制台 - AI Learn Prototype</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body data-page="purchase-inbound" class="console-page">
+  <div class="shell">
+    <aside class="rail"></aside>
+
+    <main class="workspace console-workspace">
+      <header class="console-topbar">
+        <div class="console-title-block">
+          <div class="console-title-meta">
+            <span class="console-module-code">CORE / PURCHASE / INBOUND &amp; QA</span>
+            <span class="console-live-mark"><i aria-hidden="true"></i> 目标设计</span>
+          </div>
+          <h1>采购收货与到货质检控制台</h1>
+          <p>仓库外观验收破损拒收（不入库/待收），实际接收全部进 QualityHold（质量隔离位），质检放行后进 ReceivingStaging（收货暂存位）再上架。</p>
+        </div>
+
+        <label class="console-role-control" for="purchaseRole">
+          <span>模拟操作角色</span>
+          <select id="purchaseRole">
+            <option value="warehouse" selected>仓库人员 (wh.operator)</option>
+            <option value="inspector">生产质检人员 (qa.inspector)</option>
+            <option value="buyer">采购人员 (buyer.chen)</option>
+          </select>
+        </label>
+      </header>
+
+      <section class="console-review-bar" aria-label="原型评审场景">
+        <div>
+          <span class="console-section-index">评审场景</span>
+          <strong>切换状态组合，核对外观拒收、质量隔离、处置执行与上架事实</strong>
+        </div>
+        <div class="console-scenario-tabs" role="group" aria-label="采购订单示例场景">
+          <button type="button" data-scenario="partial" aria-pressed="true">到货与质检中</button>
+          <button type="button" data-scenario="manual" aria-pressed="false">人工完成</button>
+          <button type="button" data-scenario="normal" aria-pressed="false">正常全量完成</button>
+        </div>
+        <p><strong>目标设计 · 接口未实现</strong> · 浏览器内假数据模拟</p>
+      </section>
+
+      <section class="console-layout" aria-label="采购与入库履约工作台">
+        <aside class="console-queue" aria-label="采购订单队列">
+          <div class="console-queue-head">
+            <div>
+              <span class="console-section-index">采购队列</span>
+              <h2>采购单列表</h2>
+            </div>
+            <span id="purchaseOrderCount" class="console-count">0</span>
+          </div>
+
+          <label class="console-search" for="purchaseSearch">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m2.35-5.15A7.5 7.5 0 1 1 4 11.5a7.5 7.5 0 0 1 15 0Z" /></svg>
+            <input id="purchaseSearch" type="search" placeholder="采购单号 / 供应商 / 物料" autocomplete="off" />
+          </label>
+
+          <div class="console-filter-group">
+            <span>生命周期状态</span>
+            <div class="console-filter-row" aria-label="生命周期筛选">
+              <button type="button" class="is-active" data-status-filter="all" aria-pressed="true">全部</button>
+              <button type="button" data-status-filter="Draft" aria-pressed="false">未提交</button>
+              <button type="button" data-status-filter="Approved" aria-pressed="false">已审核</button>
+              <button type="button" data-status-filter="PartiallyReceived" aria-pressed="false">部分收货</button>
+              <button type="button" data-status-filter="Completed" aria-pressed="false">已完成</button>
+            </div>
+          </div>
+
+          <div id="purchaseOrderList" class="console-card-list"></div>
+        </aside>
+
+        <section id="purchaseOrderDetail" class="console-detail" aria-live="polite"></section>
+      </section>
+
+      <footer class="console-disclaimer">
+        <span>PROTOTYPE / NOT IMPLEMENTED</span>
+        <p>页面字段、状态、权限和接口为一期目标设计；真实能力以实际代码、配置和自动化验证为准。</p>
+      </footer>
+    </main>
+  </div>
+
+  <div id="purchaseActionDialog" class="console-dialog" hidden></div>
+  <div id="purchaseToast" class="console-toast" role="status" aria-live="polite"></div>
+
+  <script src="../assets/app.js"></script>
+  <script src="../assets/purchase-inbound.js"></script>
+</body>
+</html>

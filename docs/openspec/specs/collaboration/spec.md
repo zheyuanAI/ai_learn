@@ -39,7 +39,7 @@ OpenSpec 工件 MUST NOT 替代当前仓库的长期事实源；若变更影响�
 
 - Given 某次 change 修改了页面字段、状态标签、操作按钮或流程跳转
 - When `Codex` 生成 design 或 tasks
-- Then `Codex` 必须明确列出需要同步检查的 `prototype/README.md`、`prototype/pages/*.html` 和相关前端页面
+- Then `Codex` 必须明确列出需要同步检查的 `docs/prototype/README.md`、`docs/prototype/pages/*.html` 和相关前端页面
 
 ### Requirement: Core Business Ownership Boundary
 

@@ -11,7 +11,7 @@
 5. 阅读 `docs/openspec/changes/<change-name>/self-review.md`
 6. 检查 `git diff`
 7. 核对 Antigravity 汇报的测试命令与结果
-8. 若本次变更影响现有事实文档，核对对应 `docs/specs/`、`prototype/`、`docs/` 是否已同步回写
+8. 若本次变更影响现有事实文档，核对对应 `docs/specs/`、`docs/prototype/`、`docs/` 是否已同步回写
 9. 判断实现是否满足 `proposal`、`spec`、`design` 和 `tasks`
 10. 如果 Antigravity 已达到 2 次自修上限，给出明确返工意见并决定是否补充 `retrospective.md`
 
@@ -28,7 +28,7 @@
 - docs/openspec/changes/<change-name>/self-review.md
 - 当前 git diff
 - worker 汇报的测试结果
-- 如有涉及，还要检查对应 docs/specs/、prototype/、docs/ 的同步更新
+- 如有涉及，还要检查对应 docs/specs/、docs/prototype/、docs/ 的同步更新
 
 输出要求：
 1. 先给出 findings，按严重程度排序

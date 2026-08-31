@@ -1,0 +1,69 @@
+<style>
+  .v2{max-width:1180px;margin:0 auto;color:#172033}.v2 .subtitle{max-width:900px}.badge-row{display:flex;gap:9px;flex-wrap:wrap;margin:14px 0 20px}.badge{padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800;background:#eaf3ff;color:#245d99}.badge.warn{background:#fff1dc;color:#855808}
+  .system{border:1px solid #d7e0ed;border-radius:18px;background:#f8fbff;padding:17px}.processes{display:grid;grid-template-columns:1.05fr 1.35fr 1fr;gap:14px}.process{background:white;border:2px solid #6e9bd0;border-radius:16px;padding:15px;box-shadow:0 6px 20px rgba(45,72,110,.08)}.process h3{margin:0 0 4px}.process p{font-size:13px;color:#5a667b;line-height:1.45;margin:4px 0}.edge{border-color:#4f80bf}.core{border-color:#4c976d}.iot{border-color:#8d6ebd}.inside{margin-top:12px;display:grid;gap:8px}.module{padding:10px;border-radius:10px;background:#eff5fc;border:1px solid #c8d9ed}.module strong{display:block;font-size:13px}.module span{font-size:11px;color:#5c6b80}.core .inside{grid-template-columns:repeat(2,1fr)}.core .module{background:#eef8f1;border-color:#c1dfca}.iot .module{background:#f5f0fb;border-color:#dacbec}
+  .connection{text-align:center;margin:11px 0;color:#68778f;font-size:12px;font-weight:800}.connection span{background:white;border:1px solid #d8e0ec;border-radius:999px;padding:6px 12px}.infra{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:12px}.infra-box{padding:12px;border-radius:12px;background:white;border:1px solid #d9e1ed;font-size:13px}.infra-box strong{display:block;margin-bottom:4px}.infra-box span{color:#5b687c;font-size:12px}
+  .flows{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:18px}.flow{padding:14px;border-radius:14px;border:1px solid #d8e1ed;background:#fff}.flow h3{font-size:15px;margin:0 0 10px}.step{font-size:12px;line-height:1.4;color:#4f5d72;padding:7px 9px;border-radius:8px;background:#f3f6fa;margin:5px 0}.arrow{text-align:center;color:#8a97aa;font-weight:900}
+  .rules{margin-top:17px;display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.rule{padding:11px;border-radius:11px;background:#213b60;color:white}.rule strong{display:block;color:#ffe099;margin-bottom:3px;font-size:13px}.rule span{font-size:11px;line-height:1.4;color:#d9e6f5}.decision{margin-top:16px;padding:14px 16px;border-left:5px solid #39855b;background:#edf8f1;border-radius:10px;line-height:1.5}
+  @media(max-width:900px){.processes,.flows,.infra{grid-template-columns:1fr}.rules{grid-template-columns:1fr 1fr}}
+</style>
+
+<div class="v2">
+  <h2>整体架构设计 v2：三进程 + Edge 内双模块</h2>
+  <p class="subtitle">本节只确认部署结构、模块职责和三类请求的进入方式。绿色表示核心业务事实，紫色表示设备事实，蓝色表示统一入口与身份能力。</p>
+  <div class="badge-row"><span class="badge">目标设计：3 个 JVM 进程</span><span class="badge">Core 仍是模块化单体</span><span class="badge">IoT 独立保存设备事实</span><span class="badge warn">当前代码仍是 4 个健康检查骨架</span></div>
+
+  <div class="system">
+    <div class="processes">
+      <section class="process edge">
+        <h3>Platform Edge · :10001</h3>
+        <p>一个部署进程，两个职责清晰的内部模块。</p>
+        <div class="inside">
+          <div class="module"><strong>Gateway 模块</strong><span>路由、入口过滤、Token 基础校验、粗粒度功能授权、异常包装</span></div>
+          <div class="module"><strong>Identity / Auth 模块</strong><span>登录、用户、租户成员、角色、权限、菜单、Token 签发与身份生命周期</span></div>
+        </div>
+      </section>
+
+      <section class="process core">
+        <h3>Platform Core · :10003</h3>
+        <p>黄金业务闭环的业务事实与最终业务授权。</p>
+        <div class="inside">
+          <div class="module"><strong>purchasing / sales</strong><span>采购与销售业务意图</span></div>
+          <div class="module"><strong>inventory</strong><span>余额、预留、移动、流水唯一事实源</span></div>
+          <div class="module"><strong>manufacturing / quality</strong><span>工单、执行、报工与质检</span></div>
+          <div class="module"><strong>trace / dashboard / ai</strong><span>只读投影与受控查询</span></div>
+        </div>
+      </section>
+
+      <section class="process iot">
+        <h3>Platform IoT · :10004</h3>
+        <p>独立接收并保存设备事实，Core 故障时继续工作。</p>
+        <div class="inside">
+          <div class="module"><strong>Device Access</strong><span>设备、设备凭证、MQTT QoS 1 去重</span></div>
+          <div class="module"><strong>Device Facts</strong><span>Telemetry、Status、Alarm 与待补充业务上下文</span></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="connection"><span>↓ 同一 PostgreSQL 实例，保持逻辑数据所有权 ↓</span></div>
+    <div class="infra">
+      <div class="infra-box"><strong>Identity 数据</strong><span>用户、租户成员、角色、权限、菜单；与 Edge 同进程，但不与 Core 业务表混写。</span></div>
+      <div class="infra-box"><strong>Core 数据</strong><span>采购、销售、库存、制造、质量与追溯事实。</span></div>
+      <div class="infra-box"><strong>IoT 数据</strong><span>设备、遥测、状态、告警；禁止直接修改 Core 表。</span></div>
+    </div>
+  </div>
+
+  <div class="flows">
+    <section class="flow"><h3>① 登录请求</h3><div class="step">Browser → Edge</div><div class="arrow">↓</div><div class="step">Gateway 允许匿名登录路径</div><div class="arrow">↓</div><div class="step">Identity 校验租户 / 账号 / 锁定状态并签发 Token</div></section>
+    <section class="flow"><h3>② 普通业务请求</h3><div class="step">Browser → Gateway Filter</div><div class="arrow">↓</div><div class="step">验证身份与功能权限</div><div class="arrow">↓</div><div class="step">Core 再校验租户、单据状态、自审限制和业务不变量</div></section>
+    <section class="flow"><h3>③ 设备上报</h3><div class="step">Device → Mosquitto</div><div class="arrow">↓</div><div class="step">IoT 校验 DeviceCredential</div><div class="arrow">↓</div><div class="step">先保存遥测 / 状态 / 告警，再延后补充 Core 上下文</div></section>
+  </div>
+
+  <div class="rules">
+    <div class="rule"><strong>入口不是最终授权</strong><span>Gateway 放行后，Core 仍保护具体业务对象。</span></div>
+    <div class="rule"><strong>合并部署，不合并职责</strong><span>Gateway 与 Identity 有内部接缝，可独立测试和未来拆出。</span></div>
+    <div class="rule"><strong>唯一事实源</strong><span>库存事实属于 Core；设备事实属于 IoT。</span></div>
+    <div class="rule"><strong>一人多角色但不可自审</strong><span>RBAC 给资格，Core 对具体单据执行职责分离规则。</span></div>
+  </div>
+
+  <div class="decision"><strong>本节待确认：</strong>一期以 Edge、Core、IoT 三个部署进程为目标；Edge 内部保留 Gateway 与 Identity/Auth 两个清晰模块。</div>
+</div>

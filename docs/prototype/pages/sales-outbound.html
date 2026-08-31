@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#071019" />
+  <link rel="icon" href="data:," />
+  <title>销售履约控制台 - AI Learn Prototype</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body data-page="sales-outbound" class="sales-page">
+  <div class="shell">
+    <aside class="rail"></aside>
+
+    <main class="workspace sales-workspace">
+      <header class="sales-topbar">
+        <div class="sales-title-block">
+          <div class="sales-title-meta">
+            <span class="sales-module-code">CORE / SALES / OUTBOUND</span>
+            <span class="sales-live-mark"><i aria-hidden="true"></i> 目标设计</span>
+          </div>
+          <h1>销售履约控制台</h1>
+          <p>正常路径只保留直接拣货与发货；直接拣货内部自动预留，数量事实继续支撑完整追溯。</p>
+        </div>
+
+        <label class="sales-role-control" for="salesRole">
+          <span>模拟操作角色</span>
+          <select id="salesRole">
+            <option value="warehouse" selected>仓库人员</option>
+            <option value="sales">销售人员</option>
+          </select>
+        </label>
+      </header>
+
+      <section class="sales-review-bar" aria-label="原型评审场景">
+        <div>
+          <span class="sales-section-index">评审场景</span>
+          <strong>切换状态组合，核对权限和数量事实</strong>
+        </div>
+        <div class="sales-scenario-tabs" role="group" aria-label="销售订单示例场景">
+          <button type="button" data-scenario="partial" aria-pressed="true">部分履约</button>
+          <button type="button" data-scenario="manual" aria-pressed="false">人工完成</button>
+          <button type="button" data-scenario="normal" aria-pressed="false">正常完成</button>
+        </div>
+        <p><strong>接口未实现</strong> · 所有操作仅修改本页浏览器内假数据</p>
+      </section>
+
+      <section class="sales-console" aria-label="销售订单履约工作台">
+        <aside class="sales-queue" aria-label="销售订单队列">
+          <div class="sales-queue-head">
+            <div>
+              <span class="sales-section-index">订单队列</span>
+              <h2>待处理订单</h2>
+            </div>
+            <span id="salesOrderCount" class="sales-count">0</span>
+          </div>
+
+          <label class="sales-search" for="salesSearch">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m2.35-5.15A7.5 7.5 0 1 1 4 11.5a7.5 7.5 0 0 1 15 0Z" /></svg>
+            <input id="salesSearch" type="search" placeholder="订单号 / 客户 / 产品" autocomplete="off" />
+          </label>
+
+          <div class="sales-filter-group">
+            <span>生命周期</span>
+            <div class="sales-filter-row" aria-label="生命周期筛选">
+              <button type="button" class="is-active" data-status-filter="all" aria-pressed="true">全部</button>
+              <button type="button" data-status-filter="Approved" aria-pressed="false">履约中</button>
+              <button type="button" data-status-filter="Completed" aria-pressed="false">已完成</button>
+            </div>
+          </div>
+
+          <div class="sales-filter-group">
+            <span>履约进度</span>
+            <div class="sales-filter-row" aria-label="履约进度筛选">
+              <button type="button" class="is-active" data-fulfillment-filter="all" aria-pressed="true">全部</button>
+              <button type="button" data-fulfillment-filter="NotStarted" aria-pressed="false">未开始</button>
+              <button type="button" data-fulfillment-filter="InProgress" aria-pressed="false">处理中</button>
+              <button type="button" data-fulfillment-filter="FullyShipped" aria-pressed="false">全发货</button>
+            </div>
+          </div>
+
+          <div id="salesOrderList" class="sales-order-list"></div>
+        </aside>
+
+        <section id="salesOrderDetail" class="sales-detail" aria-live="polite"></section>
+      </section>
+
+      <footer class="sales-disclaimer">
+        <span>PROTOTYPE / NOT IMPLEMENTED</span>
+        <p>页面字段、状态、权限和接口为一期目标设计；真实能力以实际代码、配置和自动化验证为准。</p>
+      </footer>
+    </main>
+  </div>
+
+  <div id="salesActionDialog" class="sales-dialog" hidden></div>
+  <div id="salesToast" class="sales-toast" role="status" aria-live="polite"></div>
+
+  <script src="../assets/app.js"></script>
+  <script src="../assets/sales-outbound.js"></script>
+</body>
+</html>

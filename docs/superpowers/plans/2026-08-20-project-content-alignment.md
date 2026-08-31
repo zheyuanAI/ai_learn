@@ -19,7 +19,7 @@
 
 ## Global Constraints
 
-- 正式事实源：`docs/specs/00-project/正式项目计划.md` 与项目根目录 `CONTEXT.md`。
+- 正式事实源：`docs/specs/00-project/正式项目计划.md` 与 `docs/词汇定义表.md`。
 - 一期中间件仅包含 PostgreSQL 16（5433）、Redis（6379）和 Mosquitto（1883）。
 - 后端保持 Gateway 10001、Auth 10002、Core 10003、IoT 10004 四服务。
 - 一期人工建立销售、生产、采购供需关联，不实现 MRP、APS 或自动排产。
@@ -39,17 +39,15 @@
 - Modify: `README.md`
 - Modify: `AGENTS.md`
 - Modify: `CLAUDE.md`
-- Modify: `docs/README.md`
-- Modify: `docs/项目目录结构.md`
 - Modify: `backend/README.md`
 - Modify: `frontend/README.md`
 
 **Interfaces:**
-- Consumes: `docs/specs/00-project/正式项目计划.md`、`CONTEXT.md`
+- Consumes: `docs/specs/00-project/正式项目计划.md`、`docs/词汇定义表.md`
 - Produces: 全仓统一的项目名称、事实源优先级、一期技术栈和阅读入口
 
 - [ ] **Step 1:** 将项目名称统一为“制造与仓储协同执行平台”，明确它是学习驱动的轻量化 MES/WMS 协同执行平台。
-- [ ] **Step 2:** 将项目计划和 `CONTEXT.md` 加入必读事实源，并把实际代码与配置调整为最高优先级。
+- [ ] **Step 2:** 将项目计划和 `docs/词汇定义表.md` 加入必读事实源，并把实际代码与配置调整为最高优先级。
 - [ ] **Step 3:** 将 RabbitMQ、MinIO、pgvector、三维数字孪生和 RAG 标记为二期，不再描述为当前技术栈。
 - [ ] **Step 4:** 更新 Core、IoT、前端与部署目录说明，使其与模块化 Core、IoT 独立事实和一期中间件一致。
 - [ ] **Step 5:** 运行 `rg -n "设备数字孪生与 AI 助手平台|PostgreSQL.*RabbitMQ.*MinIO" README.md AGENTS.md CLAUDE.md docs backend frontend`，预期无未标记的旧定位。
@@ -157,17 +155,17 @@
 ### Task 7（已完成）: 同步原型与前端壳文案
 
 **Files:**
-- Modify: `prototype/README.md`
-- Modify: `prototype/index.html`
-- Modify: `prototype/assets/app.js`
-- Modify: `prototype/pages/master-data.html`
-- Modify: `prototype/pages/purchase-inbound.html`
-- Modify: `prototype/pages/sales-outbound.html`
-- Modify: `prototype/pages/work-order.html`
-- Modify: `prototype/pages/device-alarm.html`
-- Modify: `prototype/pages/dashboard.html`
-- Modify: `prototype/pages/site-map.html`
-- Modify: `prototype/pages/ai-assistant.html`
+- Modify: `docs/prototype/README.md`
+- Modify: `docs/prototype/index.html`
+- Modify: `docs/prototype/assets/app.js`
+- Modify: `docs/prototype/pages/master-data.html`
+- Modify: `docs/prototype/pages/purchase-inbound.html`
+- Modify: `docs/prototype/pages/sales-outbound.html`
+- Modify: `docs/prototype/pages/work-order.html`
+- Modify: `docs/prototype/pages/device-alarm.html`
+- Modify: `docs/prototype/pages/dashboard.html`
+- Modify: `docs/prototype/pages/site-map.html`
+- Modify: `docs/prototype/pages/ai-assistant.html`
 - Modify: `frontend/src/router/index.ts`
 - Modify: `frontend/src/App.vue`
 - Modify: `frontend/src/views/PrototypeHome.vue`
@@ -189,7 +187,6 @@
 - Modify: `deploy/docker-compose.yml`
 - Cross-check: `docs/specs/00-project/架构设计.md`
 - Cross-check: `AGENTS.md`
-- Cross-check: `docs/项目目录结构.md`
 - Cross-check: `README.md`
 
 **Interfaces:**

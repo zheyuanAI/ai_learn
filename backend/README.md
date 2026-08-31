@@ -8,6 +8,9 @@
 - `platform-shared`：公共类型、异常、基础配置
 
 ## 本地服务端口
+
+端口基线以 `../docs/specs/00-project/架构设计.md` 为准，下表提供后端模块的便捷索引。
+
 | 模块 | 端口 |
 | --- | ---: |
 | `platform-gateway` | 10001 |
@@ -26,6 +29,6 @@
 - 领域规则、接口与验收：对应领域目录的 `概述.md`、`领域模型.md`、`接口契约.md`、`验收标准.md`
 
 ## 一期边界
+- 一期依赖与中间件范围以 `../docs/specs/00-project/架构设计.md` 为准；当前使用 PostgreSQL、Redis、Mosquitto，RabbitMQ、MinIO、pgvector 属于二期候选
 - `platform-core` 物理上保持单服务，内部按采购、销售、库存、制造、质量、追溯、看板和 AI 逻辑模块组织
 - `platform-auth`、`platform-core`、`platform-iot` 共用 PostgreSQL 实例时必须保持 schema 与数据访问边界
-- 一期依赖为 PostgreSQL、Redis、Mosquitto；RabbitMQ、MinIO、pgvector 属于二期候选

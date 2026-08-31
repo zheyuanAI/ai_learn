@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#071019" />
+  <link rel="icon" href="data:," />
+  <title>IoT 设备与告警控制台 - AI Learn Prototype</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body data-page="device-alarm" class="console-page">
+  <div class="shell">
+    <aside class="rail"></aside>
+
+    <main class="workspace console-workspace">
+      <header class="console-topbar">
+        <div class="console-title-block">
+          <div class="console-title-meta">
+            <span class="console-module-code">CORE / IOT &amp; TELEMETRY / ALARMS</span>
+            <span class="console-live-mark"><i aria-hidden="true"></i> 目标设计</span>
+          </div>
+          <h1>IoT 设备与告警控制台</h1>
+          <p>MQTT QoS 1 消息去重、原始遥测追加、设备状态快照与阈值告警生命周期，自动补充 OperationExecution 工序执行上下文。</p>
+        </div>
+
+        <label class="console-role-control" for="deviceRole">
+          <span>模拟操作角色</span>
+          <select id="deviceRole">
+            <option value="engineer" selected>IoT 运维工程师 (iot.engineer)</option>
+            <option value="operator">现场操作员 (wh.operator)</option>
+          </select>
+        </label>
+      </header>
+
+      <section class="console-review-bar" aria-label="原型评审场景">
+        <div>
+          <span class="console-section-index">评审场景</span>
+          <strong>核对 MQTT 消息去重、实时遥测曲线、单指标阈值告警与工序执行关联</strong>
+        </div>
+        <div class="console-scenario-tabs" role="group" aria-label="设备告警示例场景">
+          <button type="button" data-scenario="alarm_active" aria-pressed="true">活动超温告警</button>
+          <button type="button" data-scenario="alarm_acked" aria-pressed="false">告警已确认</button>
+          <button type="button" data-scenario="alarm_recovered" aria-pressed="false">告警已恢复</button>
+        </div>
+        <p><strong>目标设计 · 接口未实现</strong> · 浏览器内假数据模拟</p>
+      </section>
+
+      <section class="console-layout" aria-label="设备与告警工作台">
+        <aside class="console-queue" aria-label="设备队列">
+          <div class="console-queue-head">
+            <div>
+              <span class="console-section-index">设备列表</span>
+              <h2>生产与仓储设备</h2>
+            </div>
+            <span id="deviceCount" class="console-count">0</span>
+          </div>
+
+          <label class="console-search" for="deviceSearch">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m2.35-5.15A7.5 7.5 0 1 1 4 11.5a7.5 7.5 0 0 1 15 0Z" /></svg>
+            <input id="deviceSearch" type="search" placeholder="设备编号 / 设备名称 / 区域" autocomplete="off" />
+          </label>
+
+          <div class="console-filter-group">
+            <span>运行状态</span>
+            <div class="console-filter-row" aria-label="状态筛选">
+              <button type="button" class="is-active" data-status-filter="all" aria-pressed="true">全部</button>
+              <button type="button" data-status-filter="Running" aria-pressed="false">运行中</button>
+              <button type="button" data-status-filter="Alarm" aria-pressed="false">告警中</button>
+              <button type="button" data-status-filter="Offline" aria-pressed="false">离线</button>
+            </div>
+          </div>
+
+          <div id="deviceList" class="console-card-list"></div>
+        </aside>
+
+        <section id="deviceDetail" class="console-detail" aria-live="polite"></section>
+      </section>
+
+      <footer class="console-disclaimer">
+        <span>PROTOTYPE / NOT IMPLEMENTED</span>
+        <p>页面字段、状态、权限和接口为一期目标设计；真实能力以实际代码、配置和自动化验证为准。</p>
+      </footer>
+    </main>
+  </div>
+
+  <div id="deviceActionDialog" class="console-dialog" hidden></div>
+  <div id="deviceToast" class="console-toast" role="status" aria-live="polite"></div>
+
+  <script src="../assets/app.js"></script>
+  <script src="../assets/device-alarm.js"></script>
+</body>
+</html>

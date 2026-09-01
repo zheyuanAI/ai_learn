@@ -99,6 +99,117 @@ const presetConversations = {
 
 let currentAiMessages = [];
 
+/**
+ * HTML 转义函数，防止 XSS / HTML 注入（遵循 Issue #7 规范）
+ * 确保类似 <img src=x onerror="alert(1)"> 的输入仅作为纯文本展示，不创建 DOM 元素或触发事件
+ * @param {string} str - 待转义字符串
+ * @returns {string} - 转义后的安全 HTML 字符串
+ */
+function escapeHtml(str) {
+  if (typeof str !== "string") return str == null ? "" : String(str);
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * URL 安全白名单过滤，彻底防御 javascript: / data: / vbscript: 伪协议 XSS。
+ * @param {string} rawUrl - 原始链接
+ * @returns {string} - 安全链接，非安全链接返回 '#'
+ */
+function sanitizeUrl(rawUrl) {
+  if (!rawUrl) return "#";
+  const trimmed = rawUrl.trim();
+  // 允许纯锚点、相对 HTML 页面链接
+  if (trimmed.startsWith("#") || trimmed.startsWith("./") || trimmed.startsWith("../") || /^[a-zA-Z0-9_-]+\.html(?:#[a-zA-Z0-9_-]*)?$/.test(trimmed)) {
+    return trimmed;
+  }
+  // 仅允许 http: 与 https: 协议
+  try {
+    const parsed = new URL(trimmed, window.location.href);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.href;
+    }
+  } catch (e) {
+    // 非法 URL
+  }
+  return "#";
+}
+
+/**
+ * 安全格式化 AI 回复内容（支持简单 Markdown 并防止 XSS 与伪协议注入）
+ * @param {string} text - AI 回答原始文本
+ * @returns {string} - 安全格式化后的 HTML 片段
+ */
+function formatAiContent(text) {
+  if (!text) return "";
+  // 先执行全局 HTML 转义防御 XSS
+  const safeText = escapeHtml(text);
+  // 解析受控的 Markdown 语法（加粗、行内代码、受控链接）
+  return safeText
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, linkText, rawUrl) => {
+      const safeHref = sanitizeUrl(rawUrl);
+      if (safeHref === "#" && !rawUrl.startsWith("#")) {
+        // 恶意伪协议或非安全 URL：不转为 <a> 标签，保留纯文本安全展示
+        return `[${linkText}](${rawUrl})`;
+      }
+      return `<a href="${safeHref}" class="console-link" style="color:var(--c-cyan);text-decoration:underline;" rel="noopener noreferrer">${linkText}</a>`;
+    });
+}
+
+/**
+ * 意图识别函数：准确区分只读查询与写操作指令（遵循 Issue #6 规范）
+ * 允许只读查询（如查询发货数量、查看入库批次、统计拣货数量、分析告警、查看库存余额等）
+ * 严格拦截数据变更与写操作执行（如执行发货、确认入库、增加库存、修改状态、审核通过、删除数据等）
+ * @param {string} prompt - 用户输入的文本
+ * @returns {boolean} - true 表示判定为写操作应予拦截，false 表示为受控只读查询
+ */
+function checkWriteOperationIntent(prompt) {
+  if (!prompt || typeof prompt !== "string") return false;
+  const text = prompt.trim();
+  if (!text) return false;
+
+  // 1. 明确的纯写操作动作指令与谓词模式
+  const writePatterns = [
+    // 包含“执行/确认/立即/直接/帮我/请帮我/去” + 仓储生产业务写动作
+    /(?:执行|确认|立即|直接|帮我|请帮我|去)\s*(?:发货|入库|拣货|领料|上架|下架|调拨|报工|报废|放行|审核|审批|扣减|扣减库存|增加库存|核销)/i,
+    // 明确的“增加/减少/修改/更新/删除/作废/创建” + 业务对象（含量词/指示词）
+    /(?:增加|新增|添加|扣减|减少|调整|修改|变更|更新|删除|清除|清空|作废|重置|创建|新建|建立)\s*(?:这[条个份张批次]|该|此|所有|当前|指定)?\s*(?:库存|订单|单据|工单|批次|数据|记录|状态|数量|BOM|设备|物料|采购|销售|用户信息|权限)/i,
+    // 明确的审核/放行/报废等审批流操作指令
+    /(?:审核通过|审批通过|驳回|强制放行|决定放行|决定报废|退回供应方|直接报废|开始工序|暂停工序|完成工序|下发工单|关闭工单)/i,
+    // 句式：“把/将/帮我把 xxx 审核通过/修改/删除/增加”
+    /(?:把|将|帮我把|请把)\s*.+?\s*(?:审核通过|审批通过|放行|报废|修改|更新|删除|作废|增加|扣减|发货|入库|拣货|上架|调拨)/i,
+    // 动词开头的操作指令（如 '请修改'、'帮我删除'、'立即创建'）
+    /^(?:请|帮我|立即|直接)?\s*(?:修改|更新|删除|作废|清空|重置|创建|新建|建立|插入|写入)/i,
+    // 纯发货/入库等简短动宾指令（如 '发货 20 件', '入库'）
+    /^(?:请|帮我|立即|直接)?\s*(?:发货|入库|拣货|领料|报工|调拨|上架|下架|报废|放行)\s*(?:\d+|[A-Z0-9_-]+|[一两三四五六七八九十百千万]+)?\s*(?:件|批|台|个|箱|套)?$/i,
+    // 代码/数据库/API 写操作关键字
+    /\b(?:create|insert|update|delete|drop|alter|truncate|patch)\b/i,
+    /\b(?:execute|approve|reject)\s+(?:order|inventory|workorder|shipment|receipt|item)\b/i
+  ];
+
+  const hasWriteMatch = writePatterns.some(pattern => pattern.test(text));
+  if (!hasWriteMatch) {
+    return false;
+  }
+
+  // 2. 例外检查：若明确为只读查询句式，且不包含明确的危险写操作短语
+  const readInquiryPrefix = /^(?:请|帮我)?(?:查询|查看|检索|获取|统计|分析|解释|追溯|列出|展示|查找|汇总|总结|报告|监控|计算|概览|了解)/i;
+  const readNounSuffix = /(?:数量|批次|状态|趋势|余额|列表|明细|记录|进度|概况|简报|历史|原因|详情|是多少|有哪些|有什么|如何|吗|？|\?|怎么样|情况)$/i;
+
+  const dangerousOps = /(?:审核通过|审批通过|增加库存|扣减库存|强制放行|决定放行|决定报废|直接报废|修改订单|删除|作废|清空|创建|新建|执行发货|确认入库|执行入库|确认发货)/i;
+  if ((readInquiryPrefix.test(text) || readNounSuffix.test(text)) && !dangerousOps.test(text)) {
+    return false;
+  }
+
+  return true;
+}
+
 function showAiToast(message, type = "success") {
   const toast = document.getElementById("aiToast");
   if (!toast) return;
@@ -128,10 +239,10 @@ function renderAiChat() {
     if (msg.role === "user") {
       return `
         <div style="justify-self:end;max-width:82%;display:grid;gap:4px;">
-          <div style="padding:12px 16px;border-radius:14px 14px 2px 14px;background:rgba(187,134,252,0.18);border:1px solid rgba(187,134,252,0.35);color:var(--c-ink);font-size:13px;line-height:1.6;">
-            ${msg.content}
+          <div style="padding:12px 16px;border-radius:14px 14px 2px 14px;background:rgba(187,134,252,0.18);border:1px solid rgba(187,134,252,0.35);color:var(--c-ink);font-size:13px;line-height:1.6;word-break:break-word;">
+            ${escapeHtml(msg.content)}
           </div>
-          <small style="text-align:right;color:var(--c-dim);font-size:10px;">用户提问 · ${msg.time}</small>
+          <small style="text-align:right;color:var(--c-dim);font-size:10px;">用户提问 · ${escapeHtml(msg.time)}</small>
         </div>
       `;
     } else {
@@ -142,22 +253,22 @@ function renderAiChat() {
             <div style="padding:10px 14px;border-radius:8px;background:rgba(113,225,220,0.05);border:1px solid rgba(113,225,220,0.2);font-size:11px;display:grid;gap:4px;">
               <div style="color:var(--c-cyan);font-weight:700;">⚙️ 受控只读工具调用链路 (${msg.toolCalls.length} 个工具)</div>
               ${msg.toolCalls.map(tc => `
-                <div style="font-family:monospace;color:var(--c-muted);">
-                  ▶ <code>${tc.name}</code> (入参: ${JSON.stringify(tc.params)}) — 耗时: <span style="color:var(--c-cyan);">${tc.latency}</span>
+                <div style="font-family:monospace;color:var(--c-muted);word-break:break-all;">
+                  ▶ <code>${escapeHtml(tc.name)}</code> (入参: ${escapeHtml(JSON.stringify(tc.params))}) — 耗时: <span style="color:var(--c-cyan);">${escapeHtml(tc.latency)}</span>
                 </div>
               `).join("")}
             </div>
           ` : ''}
 
-          <div style="padding:16px 18px;border-radius:14px 14px 14px 2px;background:rgba(13,27,36,0.9);border:1px solid ${isBlocked ? 'rgba(255,124,115,0.4)' : 'var(--c-line)'};color:var(--c-ink);font-size:13px;line-height:1.7;white-space:pre-wrap;">
-            ${msg.content}
+          <div style="padding:16px 18px;border-radius:14px 14px 14px 2px;background:rgba(13,27,36,0.9);border:1px solid ${isBlocked ? 'rgba(255,124,115,0.4)' : 'var(--c-line)'};color:var(--c-ink);font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-word;">
+            ${formatAiContent(msg.content)}
           </div>
 
           <div style="padding:8px 12px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid var(--c-line);font-size:10px;color:var(--c-muted);display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
-            <span>🆔 Request: <code>${msg.requestId}</code></span>
-            <span>🧠 Model: <code>${msg.model}</code></span>
-            <span>⏱️ 统计范围: ${msg.timeRange}</span>
-            <span>📦 数据来源: ${(msg.sources || []).join(", ")}</span>
+            <span>🆔 Request: <code>${escapeHtml(msg.requestId)}</code></span>
+            <span>🧠 Model: <code>${escapeHtml(msg.model)}</code></span>
+            <span>⏱️ 统计范围: ${escapeHtml(msg.timeRange)}</span>
+            <span>📦 数据来源: ${(msg.sources || []).map(s => escapeHtml(s)).join(", ")}</span>
           </div>
         </div>
       `;
@@ -211,18 +322,18 @@ function handleAiChatSubmit(event) {
     time: timeStr
   });
 
-  // 简单的写操作关键词拦截规则
-  const hasWriteWord = /修改|更新|审核|删除|增加库存|扣减库存|入库|发货|拣货|create|update|delete/i.test(val);
+  // 使用准确的意图识别区分只读查询与写操作指令（遵循 Issue #6 规范）
+  const isWriteCommand = checkWriteOperationIntent(val);
 
-  if (hasWriteWord) {
+  if (isWriteCommand) {
     currentAiMessages.push({
       role: "assistant",
-      content: `🛡️ **【写操作拒绝提示】**\n\nAI 助手一期为受控只读模式，禁止执行数据变更指令。请在对应的业务操作控制台由授权人员完成处理。`,
+      content: `🛡️ **【写操作拒绝提示】**\n\nAI 助手一期为受控只读模式，严格禁止执行数据变更指令。请在对应的业务操作控制台由授权人员完成处理。`,
       toolCalls: [],
       requestId: `req-ai-${Date.now().toString().slice(-6)}`,
       model: "grok-4.6",
       timeRange: "即时拦截",
-      sources: ["防写安全策略网关"],
+      sources: ["防写安全策略网关 (Guardrail)"],
       isBlocked: true,
       time: timeStr
     });

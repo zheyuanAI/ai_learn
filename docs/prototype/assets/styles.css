@@ -2267,3 +2267,14 @@ tbody tr:last-child td { border-bottom: 0; }
   .console-dialog-panel { max-height: calc(100vh - 20px); }
 }
 
+/* 全局键盘可访问性聚焦样式（所有视口生效） */
+.console-card:focus-visible,
+.console-table tr:focus-visible,
+.console-scenario-tabs button:focus-visible,
+.console-filter-row button:focus-visible,
+.console-action-btn:focus-visible,
+.console-tab-btn:focus-visible,
+.console-dialog-close:focus-visible {
+  outline: 2px solid var(--c-cyan);
+  outline-offset: 2px;
+}

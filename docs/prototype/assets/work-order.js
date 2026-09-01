@@ -1,28 +1,58 @@
 /**
  * 制造执行与质检高保真交互控制台 (work-order.js)
- * 严格执行已冻结业务规则：
+ * 严格执行已冻结业务规则与规范契约：
  * 1. 生产工单人工关联来源销售订单明细，一期不触发自动 MRP/APS；
- * 2. 审核并下达时锁定 BOM 与工艺路线版本；
+ * 2. 审核并下达时锁定 BOM 与工艺路线版本（规范接口：POST /api/work-orders/{id}/submit, POST /api/work-orders/{id}/approve, POST /api/work-orders/{id}/complete）；
  * 3. 生产领料通过库存应用服务扣减原料库存，退料增加退回库位库存；
- * 4. 派工单与 OperationExecution 分离，记录开始、暂停（必填原因）、恢复、完成、人员和设备事实；
- * 5. 报工：reported_qty = qualified_qty + defective_qty；
- * 6. 成品质检判定合格品与不良品处置，合格成品分批确认入库到 FG-A-01；
- * 7. 人工完成终止未完工余量，已发生领退料与入库流水永久保留。
+ * 4. 派工单与 OperationExecution 分离，支持工序状态机：未开始 -> 开始(Running)、进行中 -> 暂停(Paused,必填原因)/完成(Completed)、已暂停 -> 恢复(Running)；
+ * 5. 报工与成品质检独立两个步骤：
+ *    - 提交工序报工 (report) 仅增加 reportedQualifiedQty 和 reportedDefectiveQty，严禁自动增加 inspectedPassedQty 或 inspectedFailedQty；
+ *    - 只有工序处于“已完成”（Completed）时，才启用“提交工序报工”；工序处于“未开始”、“进行中”或“已暂停”时强制禁用；
+ *    - 成品质检判定 (inspect_fg) 独立判定并更新 inspectedPassedQty 和 inspectedFailedQty，在存在已报工未质检数量 (reportedQualifiedQty > inspectedPassedQty) 时启用；
+ * 6. 成品入库：在存在已质检未入库合格品 (inspectedPassedQty > receivedToFgQty) 时由仓库人员确认入库到 FG-A-01；
+ * 7. 人工完成终止未完工余量，已发生领退料、报工、质检与入库流水永久保留；
+ * 8. 角色统一使用 6 类正式角色：生产质检人员 (mes.inspector)、仓库人员 (wh.operator)。
  */
 
+/**
+ * 生产工单控制台支持的模拟操作角色。
+ * 生产质检人员负责工单审核、工序执行控制、报工申报与成品质检；仓库人员负责生产发料、退料确认与成品入库。
+ */
 const roleLabelsForWorkOrder = {
   inspector: "生产质检人员 (mes.inspector)",
   warehouse: "仓库人员 (wh.operator)"
 };
 
+/**
+ * 工单生命周期标准中文状态标签映射表。
+ */
 const workOrderStatusLabels = {
   Draft: "未提交",
+  PendingApproval: "待审核",
   Submitted: "待审核",
+  Rejected: "审核拒绝",
   Released: "已下达",
   InProgress: "生产中",
-  Completed: "已完工"
+  Completed: "已完成"
 };
 
+/**
+ * 获取工单完整中文状态标签。
+ * 针对已完成状态，按 completionType 细分已完成（正常）与已完成（人工）。
+ * @param {Object} wo 工单对象
+ * @returns {string} 格式化后的中文状态文本
+ */
+function getWorkOrderStatusText(wo) {
+  if (!wo) return "";
+  if (wo.status === "Completed") {
+    return wo.completionType === "Manual" ? "已完成（人工）" : "已完成（正常）";
+  }
+  return workOrderStatusLabels[wo.status] || wo.status;
+}
+
+/**
+ * 工单示例场景数据集（包含执行中、待入库、已完工等不同阶段的典型数据）。
+ */
 const workOrderScenarios = {
   running: {
     featuredOrderId: "WO-20260826-018",
@@ -45,22 +75,22 @@ const workOrderScenarios = {
         priority: "紧急",
         materialIssuedQty: 70,
         materialReturnedQty: 2,
-        reportedQualifiedQty: 58,
-        reportedDefectiveQty: 2,
-        inspectedPassedQty: 58,
-        inspectedFailedQty: 2,
+        reportedQualifiedQty: 0,
+        reportedDefectiveQty: 0,
+        inspectedPassedQty: 0,
+        inspectedFailedQty: 0,
         receivedToFgQty: 0,
         currentOperation: "工序 30 - 性能检测与标定包装",
         operations: [
           { seq: 10, name: "定子转子机加工与装配", workCenter: "WC-ASSY-01", operator: "张工", device: "无", status: "Completed", plannedQty: 80, completedQty: 80 },
           { seq: 20, name: "轴承与电气控制接线", workCenter: "WC-ELEC-01", operator: "李工", device: "无", status: "Completed", plannedQty: 80, completedQty: 80 },
-          { seq: 30, name: "性能检测与标定包装", workCenter: "WC-TEST-01", operator: "王工", device: "DEV-C12 (全自动包装测试线)", status: "Running", plannedQty: 80, completedQty: 58, executionId: "OE-20260826-033", executionStatus: "Running" }
+          { seq: 30, name: "性能检测与标定包装", workCenter: "WC-TEST-01", operator: "王工", device: "DEV-C12 (全自动包装测试线)", status: "Running", plannedQty: 80, completedQty: 0, executionId: "OE-20260826-033", executionStatus: "Running" }
         ],
         events: [
-          { time: "08-26 16:10", action: "工序 30 报工与成品质检", actor: "mes.inspector", session: "jti…310a", key: "RPT-20260826-08", impact: "申报合格 58 台并通过成品质检；申报不良 2 台待报废隔离" },
           { time: "08-26 14:00", action: "工序 30 OperationExecution 开始", actor: "mes.inspector", session: "jti…310a", key: "OE-20260826-033", impact: "王工在 DEV-C12 开始工序 30；记录设备与工序上下文" },
           { time: "08-26 11:30", action: "生产领料确认", actor: "wh.operator", session: "jti…7c91", key: "MI-20260826-01", impact: "原料一仓领用 RM-SERVO-ST 70 件；扣减原料库存" },
-          { time: "08-26 09:00", action: "工单审核与下达", actor: "mes.inspector", session: "jti…310a", key: "WO-REL-20260826-01", impact: "工单下达，锁定 BOM 与工艺路线版本" }
+          { time: "08-26 09:00", action: "工单审核与下达", actor: "mes.inspector", session: "jti…310a", key: "WO-REL-20260826-01", impact: "工单审核通过并下达，锁定 BOM 与工艺路线版本" },
+          { time: "08-26 08:30", action: "工单提交审核", actor: "mes.inspector", session: "jti…310a", key: "WO-SUB-20260826-01", impact: "工单提交审核，进入待审核状态" }
         ]
       },
       {
@@ -92,7 +122,41 @@ const workOrderScenarios = {
           { seq: 20, name: "整机总装与老化测试", workCenter: "WC-ASSY-02", operator: "孙工", device: "无", status: "NotStarted", plannedQty: 20, completedQty: 0 }
         ],
         events: [
-          { time: "08-26 10:00", action: "工单下达", actor: "mes.inspector", session: "jti…310a", key: "WO-REL-20260826-02", impact: "工单下达，待生产领料与派工" }
+          { time: "08-26 10:00", action: "工单审核与下达", actor: "mes.inspector", session: "jti…310a", key: "WO-REL-20260826-02", impact: "工单审核通过并下达，锁定 BOM 与工艺路线版本，待生产领料与派工" },
+          { time: "08-26 09:30", action: "工单提交审核", actor: "mes.inspector", session: "jti…310a", key: "WO-SUB-20260826-02", impact: "工单提交审核，进入待审核状态" }
+        ]
+      },
+      {
+        id: "WO-20260826-030",
+        sku: "FG-SERVO-01",
+        product: "伺服电机总成",
+        uom: "台",
+        plannedQty: 30,
+        sourceSalesOrderLine: "SO-20260826-019 / L10",
+        sourceSalesCustomer: "苏州智能机器人有限公司",
+        bomVersion: "BOM-FG-SERVO-V1 (待锁定)",
+        routingVersion: "RT-SERVO-01-V1 (待锁定)",
+        plannedStartDate: "2026-08-28",
+        plannedEndDate: "2026-08-30",
+        status: "Draft",
+        completionType: null,
+        completionReason: null,
+        priority: "标准",
+        materialIssuedQty: 0,
+        materialReturnedQty: 0,
+        reportedQualifiedQty: 0,
+        reportedDefectiveQty: 0,
+        inspectedPassedQty: 0,
+        inspectedFailedQty: 0,
+        receivedToFgQty: 0,
+        currentOperation: "工单未提交",
+        operations: [
+          { seq: 10, name: "定子转子机加工与装配", workCenter: "WC-ASSY-01", operator: "待派工", device: "无", status: "NotStarted", plannedQty: 30, completedQty: 0 },
+          { seq: 20, name: "轴承与电气控制接线", workCenter: "WC-ELEC-01", operator: "待派工", device: "无", status: "NotStarted", plannedQty: 30, completedQty: 0 },
+          { seq: 30, name: "性能检测与标定包装", workCenter: "WC-TEST-01", operator: "待派工", device: "DEV-C12", status: "NotStarted", plannedQty: 30, completedQty: 0 }
+        ],
+        events: [
+          { time: "08-26 08:30", action: "创建生产工单", actor: "mes.inspector", session: "jti…310a", key: "WO-CRT-20260826-03", impact: "创建草稿工单；关联销售订单 SO-20260826-019" }
         ]
       }
     ]
@@ -123,15 +187,16 @@ const workOrderScenarios = {
         inspectedPassedQty: 68,
         inspectedFailedQty: 2,
         receivedToFgQty: 0,
-        currentOperation: "全部工序已完工待入库",
+        currentOperation: "全部工序已完成，质检合格待入库",
         operations: [
           { seq: 10, name: "定子转子机加工与装配", workCenter: "WC-ASSY-01", operator: "张工", device: "无", status: "Completed", plannedQty: 70, completedQty: 70 },
           { seq: 20, name: "轴承与电气控制接线", workCenter: "WC-ELEC-01", operator: "李工", device: "无", status: "Completed", plannedQty: 70, completedQty: 70 },
           { seq: 30, name: "性能检测与标定包装", workCenter: "WC-TEST-01", operator: "王工", device: "DEV-C12", status: "Completed", plannedQty: 70, completedQty: 70, executionId: "OE-20260825-019", executionStatus: "Completed" }
         ],
         events: [
-          { time: "08-26 15:30", action: "成品质检合格确认", actor: "mes.inspector", session: "jti…310a", key: "QA-FG-20260826-01", impact: "成品质检合格 68 台，不良 2 台报废；生成成品入库单待仓库确认" },
-          { time: "08-26 14:10", action: "工序 30 全部完工报工", actor: "mes.inspector", session: "jti…310a", key: "RPT-20260826-05", impact: "报工 70 台：申报合格 68 台，不良 2 台" }
+          { time: "08-26 15:30", action: "成品质检判定", actor: "mes.inspector", session: "jti…310a", key: "QA-FG-20260826-01", impact: "成品质检判定：合格 68 台（可入库），不良 2 台（隔离/报废）；生成成品入库单待仓库确认" },
+          { time: "08-26 14:10", action: "工序完工报工申报", actor: "mes.inspector", session: "jti…310a", key: "RPT-20260826-05", impact: "申报产出 70 台：申报合格 68 台，不良 2 台；等待质检判定" },
+          { time: "08-26 13:00", action: "工序 30 全部完工", actor: "mes.inspector", session: "jti…310a", key: "OE-20260825-019", impact: "工序 30 完工；OE 状态进入 Completed" }
         ]
       }
     ]
@@ -171,7 +236,9 @@ const workOrderScenarios = {
           { seq: 30, name: "性能检测与标定包装", workCenter: "WC-TEST-01", operator: "王工", device: "DEV-C12", status: "Completed", plannedQty: 50, completedQty: 50, executionId: "OE-20260824-002", executionStatus: "Completed" }
         ],
         events: [
-          { time: "08-25 17:00", action: "成品入库与正常完工", actor: "wh.operator", session: "jti…7c91", key: "FGR-20260825-01", impact: "50 台全量入库至 FG-A-01；工单 Completed / Normal" }
+          { time: "08-25 17:00", action: "成品入库确认", actor: "wh.operator", session: "jti…7c91", key: "FGR-20260825-01", impact: "50 台全量入库至 FG-A-01；工单已完成（正常）" },
+          { time: "08-25 16:00", action: "成品质检判定", actor: "mes.inspector", session: "jti…310a", key: "QA-FG-20260825-01", impact: "成品质检判定：合格 50 台（可入库），不良 0 台" },
+          { time: "08-25 15:00", action: "工序完工报工申报", actor: "mes.inspector", session: "jti…310a", key: "RPT-20260825-01", impact: "申报产出 50 台：申报合格 50 台，不良 0 台" }
         ]
       }
     ]
@@ -197,13 +264,23 @@ function showWorkOrderToast(message, type = "success") {
   setTimeout(() => { toast.classList.remove("is-visible"); }, 3600);
 }
 
+/**
+ * 渲染左侧工单卡片队列。
+ * 遵循无障碍规范添加 tabindex="0" role="button" 和键盘 onkeydown 响应支持。
+ */
 function renderWorkOrderQueue() {
   const listEl = document.getElementById("workOrderList");
   const countEl = document.getElementById("workOrderCount");
   if (!listEl || !countEl) return;
 
   const filtered = currentWorkOrders.filter(wo => {
-    if (workOrderStatusFilter !== "all" && wo.status !== workOrderStatusFilter) return false;
+    if (workOrderStatusFilter !== "all") {
+      if (workOrderStatusFilter === "Submitted") {
+        if (wo.status !== "Submitted" && wo.status !== "PendingApproval") return false;
+      } else if (wo.status !== workOrderStatusFilter) {
+        return false;
+      }
+    }
     if (workOrderSearchQuery) {
       const q = workOrderSearchQuery.toLowerCase();
       const matchId = wo.id.toLowerCase().includes(q);
@@ -223,10 +300,11 @@ function renderWorkOrderQueue() {
 
   listEl.innerHTML = filtered.map(wo => {
     const isSelected = wo.id === selectedWorkOrderId ? "is-active" : "";
-    const accentClass = wo.status === "Released" ? "approved" : wo.status === "InProgress" ? "inprogress" : "completed";
+    const accentClass = wo.status === "Released" ? "approved" : (wo.status === "InProgress" ? "inprogress" : (wo.status === "Completed" ? "completed" : ""));
+    const statusText = getWorkOrderStatusText(wo);
 
     return `
-      <div class="console-card ${isSelected}" onclick="selectWorkOrder('${wo.id}')">
+      <div class="console-card ${isSelected}" tabindex="0" role="button" onclick="selectWorkOrder('${wo.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectWorkOrder('${wo.id}');}">
         <span class="console-card-accent ${accentClass}"></span>
         <div class="console-card-top">
           <strong>${wo.id}</strong>
@@ -236,49 +314,82 @@ function renderWorkOrderQueue() {
         <div style="font-size:11px;color:var(--c-cyan);">计划: ${wo.plannedQty} ${wo.uom} · 完工: ${wo.receivedToFgQty}</div>
         <div class="console-card-foot">
           <span>来源: ${wo.sourceSalesOrderLine ? wo.sourceSalesOrderLine.split(' / ')[0] : '无'}</span>
-          <span class="console-badge ${accentClass}">${workOrderStatusLabels[wo.status] || wo.status}</span>
+          <span class="console-badge ${accentClass}">${statusText}</span>
         </div>
       </div>
     `;
   }).join("");
 }
 
+/**
+ * 切换选中的工单并重新渲染队列与详情区域。
+ * @param {string} orderId 选中的工单单号
+ */
 function selectWorkOrder(orderId) {
   selectedWorkOrderId = orderId;
   renderWorkOrderQueue();
   renderWorkOrderDetail();
 }
 
+/**
+ * 渲染右侧工单详情区。
+ * 严格按照状态机、角色权限及工序完工状态计算各操作按钮的启用/禁用。
+ */
 function renderWorkOrderDetail() {
   const detailEl = document.getElementById("workOrderDetail");
   const wo = getSelectedWorkOrder();
   if (!detailEl || !wo) return;
 
-  const currentOp = wo.operations.find(o => o.status === "Running") || wo.operations.find(o => o.status === "NotStarted") || wo.operations[wo.operations.length - 1];
-  const pendingIssue = Math.max(0, wo.plannedQty - wo.materialIssuedQty);
-  const pendingReceipt = Math.max(0, wo.inspectedPassedQty - wo.receivedToFgQty);
+  // 确定当前待执行/执行中的工序（优先查找进行中/暂停/未开始的第一道工序，全部完成时取最后一道）
+  const activeOp = wo.operations.find(o => o.status === "Running" || o.status === "Paused" || o.status === "NotStarted") || wo.operations[wo.operations.length - 1];
 
-  const canApproveRelease = wo.status === "Draft" && currentWorkOrderRole === "inspector";
+  // 判定是否全部工序均处于“已完成”(Completed) 状态
+  const isAllOpsCompleted = wo.operations.length > 0 && wo.operations.every(op => op.status === "Completed");
+
+  // 数量余量计算
+  const pendingIssue = Math.max(0, wo.plannedQty - wo.materialIssuedQty);
+  const pendingReport = Math.max(0, wo.plannedQty - (wo.reportedQualifiedQty + wo.reportedDefectiveQty));
+  const pendingInspect = Math.max(0, wo.reportedQualifiedQty - wo.inspectedPassedQty);
+  const pendingReceipt = Math.max(0, wo.inspectedPassedQty - wo.receivedToFgQty);
+  const pendingDisposal = Math.max(0, (wo.inspectedFailedQty + wo.reportedDefectiveQty) - (wo.defectiveDisposedQty || 0));
+  const returnableMat = Math.max(0, wo.materialIssuedQty - wo.materialReturnedQty);
+
+  // 按钮启用状态逻辑（严格遵守业务规则）：
+  // 1. 提交工单审核：仅在 Draft 或 Rejected 且为生产质检人员时启用
+  const canSubmit = (wo.status === "Draft" || wo.status === "Rejected") && currentWorkOrderRole === "inspector";
+  // 2. 审核并下达：仅在 Submitted 或 PendingApproval 且为生产质检人员时启用
+  const canApprove = (wo.status === "Submitted" || wo.status === "PendingApproval") && currentWorkOrderRole === "inspector";
+  // 3. 确认生产发料：存在待发料量，工单已下达或生产中，且操作角色为仓库人员
   const canIssue = pendingIssue > 0 && (wo.status === "Released" || wo.status === "InProgress") && currentWorkOrderRole === "warehouse";
-  const canReturnMat = wo.materialIssuedQty > 0 && currentWorkOrderRole === "warehouse";
-  const canOperateOp = (wo.status === "Released" || wo.status === "InProgress") && currentWorkOrderRole === "inspector";
-  const canReport = wo.status === "InProgress" && currentWorkOrderRole === "inspector";
-  const canInspect = wo.reportedQualifiedQty > wo.inspectedPassedQty && currentWorkOrderRole === "inspector";
+  // 4. 工序执行控制：工单已下达或生产中，存在未完工工序，且操作角色为生产质检人员
+  const canOperateOp = (wo.status === "Released" || wo.status === "InProgress") && currentWorkOrderRole === "inspector" && !isAllOpsCompleted;
+  // 5. 提交工序报工：工序处于“未开始”、“进行中”或“已暂停”时必须禁用！只有工序处于“已完成”（Completed）时才启用
+  const canReport = isAllOpsCompleted && pendingReport > 0 && (wo.status === "InProgress" || wo.status === "Released") && currentWorkOrderRole === "inspector";
+  // 6. 成品质检判定：存在已报工未质检数量 (reportedQualifiedQty > inspectedPassedQty) 且为生产质检人员时启用
+  const canInspect = pendingInspect > 0 && currentWorkOrderRole === "inspector";
+  // 7. 确认成品入库：存在已质检未入库合格品 (inspectedPassedQty > receivedToFgQty) 且为仓库人员时启用
   const canReceiveFg = pendingReceipt > 0 && currentWorkOrderRole === "warehouse";
+  // 8. 不良品报废/隔离处置：存在未处置不良品且为生产质检人员时启用
+  const canDisposeDefect = pendingDisposal > 0 && currentWorkOrderRole === "inspector";
+  // 9. 生产退料确认：存在可退原料余量且为仓库人员时启用
+  const canReturnMat = returnableMat > 0 && currentWorkOrderRole === "warehouse";
+  // 10. 人工完成工单：工单处于已下达或生产中，且为生产质检人员时启用
   const canManualComplete = (wo.status === "Released" || wo.status === "InProgress") && currentWorkOrderRole === "inspector";
+
+  const statusBadgeClass = wo.status === 'Completed' ? 'green' : (wo.status === 'InProgress' ? 'amber' : (wo.status === 'Released' ? 'cyan' : ''));
 
   detailEl.innerHTML = `
     <header class="console-detail-head">
       <div>
         <div class="console-title-meta">
           <span class="console-module-code">WORK ORDER</span>
-          <span class="console-badge ${wo.status === 'Completed' ? 'green' : 'amber'}">${workOrderStatusLabels[wo.status] || wo.status}</span>
+          <span class="console-badge ${statusBadgeClass}">${getWorkOrderStatusText(wo)}</span>
         </div>
         <h2>${wo.id}</h2>
         <p>产品：${wo.product} (${wo.sku}) · 计划生产：${wo.plannedQty} ${wo.uom} · 计划周期：${wo.plannedStartDate} 至 ${wo.plannedEndDate}</p>
       </div>
       <div class="console-detail-status">
-        <span class="console-badge cyan">来源需求: ${wo.sourceSalesOrderLine} (${wo.sourceSalesCustomer})</span>
+        <span class="console-badge cyan">来源需求: ${wo.sourceSalesOrderLine || '无'} (${wo.sourceSalesCustomer || '自产备货'})</span>
         <small>BOM: ${wo.bomVersion}</small>
       </div>
     </header>
@@ -287,18 +398,18 @@ function renderWorkOrderDetail() {
       <div>
         <span>工单执行进度</span>
         <strong>${wo.currentOperation}</strong>
-        <small>当前节点状态: ${currentOp ? currentOp.status : '未开始'}</small>
+        <small>当前活跃节点状态: ${activeOp ? (activeOp.status === 'Completed' ? '已完成' : activeOp.status === 'Running' ? '进行中' : activeOp.status === 'Paused' ? '已暂停' : '未开始') : '未开始'}</small>
       </div>
       <div class="console-state-divider">→</div>
       <div>
         <span>数量事实跟踪</span>
-        <strong>已领料 ${wo.materialIssuedQty} / 已报工 ${wo.reportedQualifiedQty}</strong>
+        <strong>已领料 ${wo.materialIssuedQty} / 申报合格 ${wo.reportedQualifiedQty}</strong>
         <small>质检合格 ${wo.inspectedPassedQty} / 成品入库 ${wo.receivedToFgQty}</small>
       </div>
       <p>
-        <strong>制造事实守恒：</strong><br/>
-        报工申报：<code>reported_qty = qualified_qty + defective_qty</code><br/>
-        成品入库通过库存应用服务增加 <code>FG-A-01</code> 成品库存，并生成来源明确的库存流水。
+        <strong>制造事实守恒与两步质检：</strong><br/>
+        工序报工申报：<code>reported_qty = qualified_qty + defective_qty</code>（仅记录申报数量，严禁自动增加入库合格数）；<br/>
+        成品质检判定：由生产质检人员独立对报工合格品进行检验放行，放行后由仓库人员确认入库到 <code>FG-A-01</code>。
       </p>
     </div>
 
@@ -317,12 +428,12 @@ function renderWorkOrderDetail() {
       <div class="console-kpi-item highlight-cyan">
         <span>已领用原料</span>
         <strong>${wo.materialIssuedQty} <small>套</small></strong>
-        <small>退料: ${wo.materialReturnedQty} 套</small>
+        <small>已退料: ${wo.materialReturnedQty} 套</small>
       </div>
       <div class="console-kpi-item highlight-amber">
         <span>已申报合格</span>
         <strong>${wo.reportedQualifiedQty} <small>${wo.uom}</small></strong>
-        <small>报工不良: ${wo.reportedDefectiveQty}</small>
+        <small>申报不良: ${wo.reportedDefectiveQty}</small>
       </div>
       <div class="console-kpi-item highlight-green">
         <span>成品质检合格</span>
@@ -365,8 +476,8 @@ function renderWorkOrderDetail() {
                 <td><code>${op.device}</code></td>
                 <td>${op.plannedQty} / <strong style="color:var(--c-cyan);">${op.completedQty}</strong></td>
                 <td>
-                  <span class="console-badge ${op.status === 'Completed' ? 'green' : op.status === 'Running' ? 'amber' : ''}">
-                    ${op.status === 'Completed' ? '已完工' : op.status === 'Running' ? '进行中' : op.status === 'Paused' ? '已暂停' : '未开始'}
+                  <span class="console-badge ${op.status === 'Completed' ? 'green' : (op.status === 'Running' ? 'amber' : (op.status === 'Paused' ? 'red' : ''))}">
+                    ${op.status === 'Completed' ? '已完成' : (op.status === 'Running' ? '进行中' : (op.status === 'Paused' ? '已暂停' : '未开始'))}
                   </span>
                 </td>
                 <td><code>${op.executionId || '-'}</code></td>
@@ -384,6 +495,18 @@ function renderWorkOrderDetail() {
       </div>
 
       <div class="console-action-buttons">
+        <button class="console-action-btn primary" ${canSubmit ? '' : 'disabled'} onclick="openWorkOrderActionDialog('submit')">
+          <span class="console-action-title">提交工单审核</span>
+          <span class="console-action-desc">提交未提交/审核拒绝工单进入待审核</span>
+          <span class="console-action-perm">POST /api/work-orders/{id}/submit (生产)</span>
+        </button>
+
+        <button class="console-action-btn primary" ${canApprove ? '' : 'disabled'} onclick="openWorkOrderActionDialog('approve')">
+          <span class="console-action-title">审核并下达工单</span>
+          <span class="console-action-desc">审核工单并锁定 BOM 与工艺路线版本</span>
+          <span class="console-action-perm">POST /api/work-orders/{id}/approve (生产)</span>
+        </button>
+
         <button class="console-action-btn primary" ${canIssue ? '' : 'disabled'} onclick="openWorkOrderActionDialog('issue')">
           <span class="console-action-title">1. 确认生产发料</span>
           <span class="console-action-desc">仓库确认发料，扣减原料库存并生成领料流水</span>
@@ -392,26 +515,32 @@ function renderWorkOrderDetail() {
 
         <button class="console-action-btn primary" ${canOperateOp ? '' : 'disabled'} onclick="openWorkOrderActionDialog('operate_op')">
           <span class="console-action-title">2. 工序执行控制</span>
-          <span class="console-action-desc">开始 / 暂停 / 恢复 / 完工 OperationExecution</span>
+          <span class="console-action-desc">开始 / 暂停 (必填原因) / 恢复 / 完工工序</span>
           <span class="console-action-perm">manufacturing.execution.manage (生产)</span>
         </button>
 
         <button class="console-action-btn primary" ${canReport ? '' : 'disabled'} onclick="openWorkOrderActionDialog('report')">
           <span class="console-action-title">3. 提交工序报工</span>
-          <span class="console-action-desc">申报合格数与不良数，受工单上限策略约束</span>
+          <span class="console-action-desc">工序已完成时申报产出，仅记录申报数量</span>
           <span class="console-action-perm">manufacturing.work-report.submit (生产)</span>
         </button>
 
         <button class="console-action-btn primary" ${canInspect ? '' : 'disabled'} onclick="openWorkOrderActionDialog('inspect_fg')">
           <span class="console-action-title">4. 成品质检判定</span>
-          <span class="console-action-desc">检验报工数量，判定合格成品与不良处置</span>
+          <span class="console-action-desc">独立判定报工合格品与不良处置</span>
           <span class="console-action-perm">quality.inspection.submit (质检)</span>
         </button>
 
         <button class="console-action-btn primary" ${canReceiveFg ? '' : 'disabled'} onclick="openWorkOrderActionDialog('receive_fg')">
           <span class="console-action-title">5. 确认成品入库</span>
-          <span class="console-action-desc">仓库确认合格成品入库至 FG-A-01，增加实物库存</span>
+          <span class="console-action-desc">仓库确认合格成品入库至 FG-A-01 增加实物库存</span>
           <span class="console-action-perm">inventory.fgr.confirm (仓库)</span>
+        </button>
+
+        <button class="console-action-btn primary" ${canDisposeDefect ? '' : 'disabled'} onclick="openWorkOrderActionDialog('dispose_defect')">
+          <span class="console-action-title">6. 不良品报废/隔离处置</span>
+          <span class="console-action-desc">生产质检人员确认不良品报废或隔离，记录质量处置事实</span>
+          <span class="console-action-perm">quality.defect-disposition.confirm (质检)</span>
         </button>
 
         <button class="console-action-btn warning" ${canReturnMat ? '' : 'disabled'} onclick="openWorkOrderActionDialog('return_mat')">
@@ -423,7 +552,7 @@ function renderWorkOrderDetail() {
         <button class="console-action-btn danger" ${canManualComplete ? '' : 'disabled'} onclick="openWorkOrderActionDialog('complete')">
           <span class="console-action-title">人工完成工单</span>
           <span class="console-action-desc">终止未生产余量，已发生流水永久保留</span>
-          <span class="console-action-perm">manufacturing.work-order.complete (生产)</span>
+          <span class="console-action-perm">POST /api/work-orders/{id}/complete (生产)</span>
         </button>
       </div>
     </div>
@@ -431,7 +560,7 @@ function renderWorkOrderDetail() {
     <section class="console-section">
       <div class="console-section-head">
         <h3>制造执行与库存审计时间线</h3>
-        <small>领退料、工序状态变更、报工与入库事实</small>
+        <small>领退料、工序状态变更、报工申报、成品质检与入库事实</small>
       </div>
       <div class="console-timeline">
         ${wo.events.map(ev => `
@@ -451,6 +580,11 @@ function renderWorkOrderDetail() {
   `;
 }
 
+/**
+ * 弹出工单动作弹窗对话框。
+ * 根据 actionType 动态构建表单字段与业务影响提示。
+ * @param {string} actionType 动作类型 ('submit' | 'approve' | 'issue' | 'operate_op' | 'report' | 'inspect_fg' | 'receive_fg' | 'return_mat' | 'complete')
+ */
 function openWorkOrderActionDialog(actionType) {
   const dialogEl = document.getElementById("workOrderActionDialog");
   const wo = getSelectedWorkOrder();
@@ -461,9 +595,46 @@ function openWorkOrderActionDialog(actionType) {
   let impactNote = "";
 
   const pendingIssue = Math.max(0, wo.plannedQty - wo.materialIssuedQty);
+  const pendingReport = Math.max(0, wo.plannedQty - (wo.reportedQualifiedQty + wo.reportedDefectiveQty));
+  const pendingInspect = Math.max(0, wo.reportedQualifiedQty - wo.inspectedPassedQty);
   const pendingReceipt = Math.max(0, wo.inspectedPassedQty - wo.receivedToFgQty);
+  const activeOp = wo.operations.find(o => o.status === "Running" || o.status === "Paused" || o.status === "NotStarted") || wo.operations[wo.operations.length - 1];
 
-  if (actionType === "issue") {
+  if (actionType === "submit") {
+    dialogTitle = "提交生产工单审核 (POST /api/work-orders/{id}/submit)";
+    impactNote = "提交工单进入待审核状态 (PendingApproval)，等待生产质检人员审核并下达。";
+    formHtml = `
+      <div class="console-form-field">
+        <span>目标工单号</span>
+        <input type="text" readonly value="${wo.id} - ${wo.product} (${wo.sku})" style="background:rgba(255,255,255,0.05);" />
+      </div>
+      <div class="console-form-field">
+        <span>计划生产数量</span>
+        <input type="text" readonly value="${wo.plannedQty} ${wo.uom}" style="background:rgba(255,255,255,0.05);" />
+      </div>
+      <div class="console-form-field">
+        <span>BOM 与工艺路线</span>
+        <input type="text" readonly value="${wo.bomVersion} / ${wo.routingVersion}" style="background:rgba(255,255,255,0.05);" />
+      </div>
+    `;
+  } else if (actionType === "approve") {
+    dialogTitle = "审核并下达生产工单 (POST /api/work-orders/{id}/approve)";
+    impactNote = "审核通过生产工单，锁定有效 BOM 与工艺路线版本，状态流转为已下达 (Released)，允许后续发料与工序执行。";
+    formHtml = `
+      <div class="console-form-field">
+        <span>目标工单号</span>
+        <input type="text" readonly value="${wo.id} - ${wo.product} (${wo.sku})" style="background:rgba(255,255,255,0.05);" />
+      </div>
+      <div class="console-form-field">
+        <span>锁定 BOM 版本 <b>*</b></span>
+        <input type="text" readonly value="${wo.bomVersion.replace('待锁定', '已锁定')}" style="background:rgba(255,255,255,0.05);" />
+      </div>
+      <div class="console-form-field">
+        <span>锁定工艺路线版本 <b>*</b></span>
+        <input type="text" readonly value="${wo.routingVersion.replace('待锁定', '已锁定')}" style="background:rgba(255,255,255,0.05);" />
+      </div>
+    `;
+  } else if (actionType === "issue") {
     dialogTitle = "仓库确认生产发料";
     impactNote = "根据已锁定 BOM 从原料一仓确认发料，扣减对应物料（RM-SERVO-ST 等）库存，并生成领料流水。";
     formHtml = `
@@ -478,30 +649,44 @@ function openWorkOrderActionDialog(actionType) {
       </div>
     `;
   } else if (actionType === "operate_op") {
-    dialogTitle = "工序执行状态控制 (OperationExecution)";
-    impactNote = "控制工序 30 的实际运行生命周期；暂停必须填写原因，恢复沿用同一次执行事实。";
+    dialogTitle = `工序执行状态控制 (OperationExecution) - 工序 ${activeOp.seq}`;
+    impactNote = "控制工序生命周期：未开始->开始(Running)；进行中->完工(Completed)或暂停(Paused,必填原因)；已暂停->恢复(Running)。";
+
+    let optionsHtml = "";
+    if (activeOp.status === "NotStarted") {
+      optionsHtml = `<option value="start">开始工序 (Start) - 未开始 → 进行中</option>`;
+    } else if (activeOp.status === "Running") {
+      optionsHtml = `
+        <option value="complete">工序完工 (Complete) - 进行中 → 已完成</option>
+        <option value="pause">工序暂停 (Pause) - 进行中 → 已暂停</option>
+      `;
+    } else if (activeOp.status === "Paused") {
+      optionsHtml = `<option value="resume">工序恢复 (Resume) - 已暂停 → 进行中</option>`;
+    }
+
     formHtml = `
       <div class="console-form-field">
         <span>操作目标工序</span>
-        <input type="text" readonly value="工序 30 - 性能检测与标定包装 (DEV-C12)" style="background:rgba(255,255,255,0.05);" />
+        <input type="text" readonly value="工序 ${activeOp.seq} - ${activeOp.name} (${activeOp.device || '无设备'})" style="background:rgba(255,255,255,0.05);" />
+      </div>
+      <div class="console-form-field">
+        <span>当前工序状态</span>
+        <input type="text" readonly value="${activeOp.status === 'Completed' ? '已完成' : (activeOp.status === 'Running' ? '进行中' : (activeOp.status === 'Paused' ? '已暂停' : '未开始'))}" style="background:rgba(255,255,255,0.05);" />
       </div>
       <div class="console-form-field">
         <span>执行动作选择 <b>*</b></span>
-        <select id="dlg_op_action">
-          <option value="complete">工序完工 (Complete)</option>
-          <option value="pause">工序暂停 (Pause)</option>
-          <option value="resume">工序恢复 (Resume)</option>
+        <select id="dlg_op_action" onchange="const r=document.getElementById('dlg_pause_reason_box'); if(r) r.style.display = this.value==='pause'?'block':'none';">
+          ${optionsHtml}
         </select>
       </div>
-      <div class="console-form-field">
-        <span>暂停原因 (仅暂停时必填)</span>
+      <div id="dlg_pause_reason_box" class="console-form-field" style="display:none;">
+        <span>暂停原因 (仅暂停时必填) <b>*</b></span>
         <input id="dlg_pause_reason" type="text" placeholder="如：等待设备点检 / 刀具更换 / 现场换料" />
       </div>
     `;
   } else if (actionType === "report") {
-    dialogTitle = "工序完工报工";
-    impactNote = "申报工序 30 实际产出数量，报工总数 = 申报合格数 + 不良数，受工单计划总量约束。";
-    const pendingReport = wo.plannedQty - (wo.reportedQualifiedQty + wo.reportedDefectiveQty);
+    dialogTitle = "工序完工报工 (WorkReport)";
+    impactNote = "工序已完成时申报产出数量：报工总数 = 申报合格数 + 不良数；仅记录生产申报事实，严禁自动增加入库合格数。";
     formHtml = `
       <div class="console-form-field">
         <span>本次申报合格数量 <b>*</b></span>
@@ -509,17 +694,17 @@ function openWorkOrderActionDialog(actionType) {
       </div>
       <div class="console-form-field">
         <span>本次申报不良数量</span>
-        <input id="dlg_report_defect" type="number" min="0" value="0" />
+        <input id="dlg_report_defect" type="number" min="0" max="${pendingReport}" value="0" />
       </div>
       <div class="console-form-field">
         <span>不良现象说明</span>
         <input id="dlg_defect_reason" type="text" placeholder="如：绝缘阻抗不良 / 动平衡超差" />
       </div>
+      <small style="color:var(--c-muted);font-size:11px;">提示：提交报工后需由生产质检人员进行成品质检判定方可入库。</small>
     `;
   } else if (actionType === "inspect_fg") {
-    dialogTitle = "生产成品质检判定";
-    impactNote = "对报工合格品进行最终成品质检判定，合格品进入待入库状态，不合格品报废隔离。";
-    const pendingInspect = wo.reportedQualifiedQty - wo.inspectedPassedQty;
+    dialogTitle = "生产成品质检判定 (QualityInspection)";
+    impactNote = "对已报工合格品进行独立成品质检判定：判定合格品进入待入库状态，不合格品报废隔离处置。";
     formHtml = `
       <div class="console-form-field">
         <span>待质检判定数量</span>
@@ -531,12 +716,16 @@ function openWorkOrderActionDialog(actionType) {
       </div>
       <div class="console-form-field">
         <span>质检判定不合格数</span>
-        <input id="dlg_fg_fail" type="number" min="0" value="0" />
+        <input id="dlg_fg_fail" type="number" min="0" max="${pendingInspect}" value="0" />
+      </div>
+      <div class="console-form-field">
+        <span>质检判定意见</span>
+        <input id="dlg_inspect_remark" type="text" value="成品质检合格，放行待入库" />
       </div>
     `;
   } else if (actionType === "receive_fg") {
-    dialogTitle = "仓库确认合格成品入库";
-    impactNote = "将检验合格的成品入库至成品一仓 FG-A-01，增加企业实物库存，生成成品入库流水。";
+    dialogTitle = "仓库确认合格成品入库 (FinishedGoodsReceipt)";
+    impactNote = "将质检合格的成品入库至成品一仓 FG-A-01，增加企业实物库存，生成成品入库流水。";
     formHtml = `
       <div class="console-form-field">
         <span>本次入库成品数量 <b>*</b></span>
@@ -548,22 +737,48 @@ function openWorkOrderActionDialog(actionType) {
       </div>
     `;
   } else if (actionType === "return_mat") {
-    dialogTitle = "生产退料确认";
+    const returnable = Math.max(0, wo.materialIssuedQty - wo.materialReturnedQty);
+    dialogTitle = "生产退料确认 (MaterialReturn)";
     impactNote = "将未使用原料确认退回仓库，增加指定退回库位库存，生成生产退料流水。";
     formHtml = `
       <div class="console-form-field">
         <span>退料物料与数量 <b>*</b></span>
-        <input id="dlg_return_qty" type="number" min="1" max="${wo.materialIssuedQty}" value="2" />
-        <small>已领料量：${wo.materialIssuedQty} 套</small>
+        <input id="dlg_return_qty" type="number" min="1" max="${returnable}" value="${Math.min(returnable, 2)}" />
+        <small>可退料套数：${returnable} 套</small>
       </div>
       <div class="console-form-field">
         <span>退料原因 <b>*</b></span>
         <input id="dlg_mat_ret_reason" type="text" value="工单批次结余原料，退回原料仓" />
       </div>
     `;
+  } else if (actionType === "dispose_defect") {
+    const pendingDisposal = Math.max(0, (wo.inspectedFailedQty + wo.reportedDefectiveQty) - (wo.defectiveDisposedQty || 0));
+    dialogTitle = "不良品报废/隔离处置确认 (DefectDisposition)";
+    impactNote = "生产质检人员对质检不合格品或报工不良品进行报废/隔离处置；记录处置结果，扣减在制并结清工单质量闭环。";
+    formHtml = `
+      <div class="console-form-field">
+        <span>待处置不良品数量</span>
+        <input type="text" readonly value="${pendingDisposal} ${wo.uom}" style="background:rgba(255,255,255,0.05);" />
+      </div>
+      <div class="console-form-field">
+        <span>本次处置数量 <b>*</b></span>
+        <input id="dlg_defect_dispose_qty" type="number" min="1" max="${pendingDisposal}" value="${pendingDisposal}" />
+      </div>
+      <div class="console-form-field">
+        <span>处置方式 <b>*</b></span>
+        <select id="dlg_defect_dispose_type">
+          <option value="scrap">质量报废 (Scrap) - 扣减在制并结案</option>
+          <option value="quarantine">隔离待复判 (Quarantine) - 移至隔离区</option>
+        </select>
+      </div>
+      <div class="console-form-field">
+        <span>处置原因与说明 <b>*</b></span>
+        <input id="dlg_defect_dispose_reason" type="text" value="定子动平衡超差严重，无法返工，执行报废处置" />
+      </div>
+    `;
   } else if (actionType === "complete") {
-    dialogTitle = "人工完成生产工单";
-    impactNote = "终止尚未生产的剩余工单数量；已领料、已报工和已入库历史全部永久保留。";
+    dialogTitle = "人工完成生产工单 (POST /api/work-orders/{id}/complete)";
+    impactNote = "终止尚未生产的剩余工单数量；已领料、已报工、已质检和已入库历史全部永久保留。";
     formHtml = `
       <div class="console-form-field">
         <span>人工完成原因 <b>*</b></span>
@@ -600,24 +815,70 @@ function openWorkOrderActionDialog(actionType) {
   dialogEl.hidden = false;
 }
 
+/**
+ * 关闭工单操作弹窗。
+ */
 function closeWorkOrderActionDialog() {
   const dialogEl = document.getElementById("workOrderActionDialog");
   if (dialogEl) dialogEl.hidden = true;
 }
 
+/**
+ * 处理工单各种业务动作的提交。
+ * 严格执行报工与质检解耦、工序生命周期控制、状态机转换与幂等事件记录。
+ * @param {Event} event 表单提交事件
+ * @param {string} actionType 动作类型
+ */
 function handleWorkOrderActionSubmit(event, actionType) {
   event.preventDefault();
   const wo = getSelectedWorkOrder();
   const errEl = document.getElementById("dlg_wo_error");
+  if (!wo) return;
 
   const now = new Date();
   const timeStr = `${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
   const key = `MES-CMD-${Date.now().toString().slice(-6)}`;
 
-  if (actionType === "issue") {
+  if (actionType === "submit") {
+    // 提交工单审核：Draft / Rejected -> Submitted (PendingApproval)
+    wo.status = "Submitted";
+    wo.events.unshift({
+      time: timeStr,
+      action: "工单提交审核",
+      actor: "mes.inspector",
+      session: "jti…310a",
+      key,
+      impact: "工单提交审核，进入待审核状态 (PendingApproval)"
+    });
+    showWorkOrderToast(`工单 ${wo.id} 已提交审核`);
+  } else if (actionType === "approve") {
+    // 审核并下达：Submitted -> Released，锁定 BOM 与工艺路线版本
+    wo.status = "Released";
+    wo.bomVersion = wo.bomVersion.replace("待锁定", "已锁定");
+    if (!wo.bomVersion.includes("已锁定")) wo.bomVersion += " (已锁定)";
+    wo.routingVersion = wo.routingVersion.replace("待锁定", "已锁定");
+    if (!wo.routingVersion.includes("已锁定")) wo.routingVersion += " (已锁定)";
+
+    wo.events.unshift({
+      time: timeStr,
+      action: "工单审核与下达",
+      actor: "mes.inspector",
+      session: "jti…310a",
+      key,
+      impact: "工单审核通过并下达，锁定 BOM 与工艺路线版本"
+    });
+    showWorkOrderToast(`工单 ${wo.id} 审核通过并已下达`);
+  } else if (actionType === "issue") {
+    // 仓库确认生产发料
     const qty = parseInt(document.getElementById("dlg_issue_qty")?.value, 10) || 0;
+    const maxIssue = Math.max(0, wo.plannedQty - wo.materialIssuedQty);
+    if (qty <= 0) { errEl.textContent = "发料套数必须大于 0"; return; }
+    if (qty > maxIssue) { errEl.textContent = `发料套数不能超过待发料套数 (${maxIssue})`; return; }
+
     wo.materialIssuedQty += qty;
-    wo.status = "InProgress";
+    if (wo.status === "Released") {
+      wo.status = "InProgress";
+    }
 
     wo.events.unshift({
       time: timeStr,
@@ -627,78 +888,150 @@ function handleWorkOrderActionSubmit(event, actionType) {
       key,
       impact: `领用原料 ${qty} 套；原料一仓实物库存扣减并生成领料流水`
     });
-
     showWorkOrderToast(`生产发料确认成功：${qty} 套原料已出库交付生产`);
   } else if (actionType === "operate_op") {
+    // 工序执行状态机控制
     const opAction = document.getElementById("dlg_op_action")?.value;
     const pauseReason = document.getElementById("dlg_pause_reason")?.value.trim();
-    const op30 = wo.operations.find(o => o.seq === 30);
+    const activeOp = wo.operations.find(o => o.status === "Running" || o.status === "Paused" || o.status === "NotStarted") || wo.operations[wo.operations.length - 1];
 
-    if (opAction === "pause") {
+    if (opAction === "start") {
+      // 未开始 -> 开始 (Running)
+      activeOp.status = "Running";
+      activeOp.executionStatus = "Running";
+      activeOp.executionId = activeOp.executionId || `OE-${Date.now().toString().slice(-6)}`;
+      if (wo.status === "Released") {
+        wo.status = "InProgress";
+      }
+      wo.currentOperation = `工序 ${activeOp.seq} - ${activeOp.name}`;
+      wo.events.unshift({
+        time: timeStr,
+        action: `工序 ${activeOp.seq} 开始执行`,
+        actor: "mes.inspector",
+        session: "jti…310a",
+        key,
+        impact: `${activeOp.operator || '操作工'} 开始工序 ${activeOp.seq}；记录设备与执行上下文，工单进入生产中`
+      });
+      showWorkOrderToast(`工序 ${activeOp.seq} (${activeOp.name}) 已开始执行`);
+    } else if (opAction === "pause") {
+      // 进行中 -> 暂停 (Paused)，必填原因
       if (!pauseReason) { errEl.textContent = "暂停工序必须填写原因"; return; }
-      op30.status = "Paused";
-      op30.executionStatus = "Paused";
+      activeOp.status = "Paused";
+      activeOp.executionStatus = "Paused";
       wo.events.unshift({
         time: timeStr,
-        action: "工序 30 暂停执行",
+        action: `工序 ${activeOp.seq} 暂停执行`,
         actor: "mes.inspector",
         session: "jti…310a",
         key,
-        impact: `工序 30 暂停执行；原因：${pauseReason}`
+        impact: `工序 ${activeOp.seq} 暂停执行；原因：${pauseReason}`
       });
-      showWorkOrderToast("工序 30 已暂停");
+      showWorkOrderToast(`工序 ${activeOp.seq} 已暂停`);
     } else if (opAction === "resume") {
-      op30.status = "Running";
-      op30.executionStatus = "Running";
+      // 已暂停 -> 恢复 (Running)
+      activeOp.status = "Running";
+      activeOp.executionStatus = "Running";
       wo.events.unshift({
         time: timeStr,
-        action: "工序 30 恢复执行",
+        action: `工序 ${activeOp.seq} 恢复执行`,
         actor: "mes.inspector",
         session: "jti…310a",
         key,
-        impact: "工序 30 恢复执行；沿用原 OE 记录"
+        impact: `工序 ${activeOp.seq} 恢复执行；沿用原 OE 记录`
       });
-      showWorkOrderToast("工序 30 已恢复执行");
+      showWorkOrderToast(`工序 ${activeOp.seq} 已恢复执行`);
     } else if (opAction === "complete") {
-      op30.status = "Completed";
-      op30.executionStatus = "Completed";
-      op30.completedQty = wo.plannedQty;
+      // 进行中 -> 完成 (Completed)
+      activeOp.status = "Completed";
+      activeOp.executionStatus = "Completed";
+      activeOp.completedQty = activeOp.plannedQty;
+
+      const nextOp = wo.operations.find(o => o.seq > activeOp.seq);
+      if (nextOp) {
+        wo.currentOperation = `工序 ${nextOp.seq} - ${nextOp.name}`;
+      } else {
+        wo.currentOperation = "全部工序已完成，待报工与质检";
+      }
+
       wo.events.unshift({
         time: timeStr,
-        action: "工序 30 全部完工",
+        action: `工序 ${activeOp.seq} 全部完工`,
         actor: "mes.inspector",
         session: "jti…310a",
         key,
-        impact: `工序 30 完工；OE 状态进入 Completed`
+        impact: `工序 ${activeOp.seq} 完工；OE 状态进入 Completed`
       });
-      showWorkOrderToast("工序 30 已全部完工");
+      showWorkOrderToast(`工序 ${activeOp.seq} (${activeOp.name}) 已全部完工`);
     }
   } else if (actionType === "report") {
+    // 提交工序报工：仅增加 reportedQualifiedQty 和 reportedDefectiveQty，严禁自动增加入库质检合格数！
     const qual = parseInt(document.getElementById("dlg_report_qual")?.value, 10) || 0;
     const defect = parseInt(document.getElementById("dlg_report_defect")?.value, 10) || 0;
+    const defectReason = document.getElementById("dlg_defect_reason")?.value.trim();
+
+    const maxReport = Math.max(0, wo.plannedQty - (wo.reportedQualifiedQty + wo.reportedDefectiveQty));
+    if (qual + defect <= 0) { errEl.textContent = "报工申报数量必须大于 0"; return; }
+    if (qual + defect > maxReport) { errEl.textContent = `申报总量 (${qual + defect}) 超出剩余允许报工上限 (${maxReport})`; return; }
 
     wo.reportedQualifiedQty += qual;
     wo.reportedDefectiveQty += defect;
-    wo.inspectedPassedQty += qual;
-    wo.inspectedFailedQty += defect;
+
+    let impactText = `申报产出 ${qual + defect} 台（合格 ${qual} 台，不良 ${defect} 台）；等待生产质检人员判定`;
+    if (defect > 0 && defectReason) {
+      impactText += `；不良原因：${defectReason}`;
+    }
 
     wo.events.unshift({
       time: timeStr,
-      action: "工序报工与成品质检",
+      action: "工序完工报工申报",
       actor: "mes.inspector",
       session: "jti…310a",
       key,
-      impact: `申报产出 ${qual + defect} 台（合格 ${qual} 台，不良 ${defect} 台）；质检合格 ${qual} 台待入库`
+      impact: impactText
     });
 
-    showWorkOrderToast(`报工与质检成功：合格 ${qual} 台待入库`);
+    showWorkOrderToast(`工序报工成功：申报合格 ${qual} 台，不良 ${defect} 台（待质检判定）`);
+  } else if (actionType === "inspect_fg") {
+    // 成品质检判定：独立判定并更新 inspectedPassedQty 和 inspectedFailedQty
+    const pendingInspect = Math.max(0, wo.reportedQualifiedQty - wo.inspectedPassedQty);
+    const passQty = parseInt(document.getElementById("dlg_fg_pass")?.value, 10) || 0;
+    const failQty = parseInt(document.getElementById("dlg_fg_fail")?.value, 10) || 0;
+    const remark = document.getElementById("dlg_inspect_remark")?.value.trim();
+
+    if (passQty + failQty <= 0) { errEl.textContent = "质检判定数量必须大于 0"; return; }
+    if (passQty + failQty > pendingInspect) { errEl.textContent = `质检判定总量 (${passQty + failQty}) 超出待质检数量 (${pendingInspect})`; return; }
+
+    wo.inspectedPassedQty += passQty;
+    wo.inspectedFailedQty += failQty;
+
+    wo.events.unshift({
+      time: timeStr,
+      action: "成品质检判定",
+      actor: "mes.inspector",
+      session: "jti…310a",
+      key,
+      impact: `成品质检判定：合格 ${passQty} 台（可入库），不良 ${failQty} 台（隔离/报废）${remark ? '；' + remark : ''}`
+    });
+
+    showWorkOrderToast(`成品质检判定完成：合格 ${passQty} 台待入库，不良 ${failQty} 台隔离`);
   } else if (actionType === "receive_fg") {
+    // 仓库确认合格成品入库
+    const pendingReceipt = Math.max(0, wo.inspectedPassedQty - wo.receivedToFgQty);
     const qty = parseInt(document.getElementById("dlg_fgr_qty")?.value, 10) || 0;
+    if (qty <= 0) { errEl.textContent = "入库数量必须大于 0"; return; }
+    if (qty > pendingReceipt) { errEl.textContent = `入库数量 (${qty}) 超出待入库合格品数量 (${pendingReceipt})`; return; }
+
     wo.receivedToFgQty += qty;
 
-    if (wo.receivedToFgQty >= wo.plannedQty) {
+    const totalAccounted = wo.receivedToFgQty + (wo.defectiveDisposedQty || 0);
+    const isAllOpsCompleted = wo.operations.length > 0 && wo.operations.every(op => op.status === "Completed");
+    const isAllReported = (wo.reportedQualifiedQty + wo.reportedDefectiveQty >= wo.plannedQty);
+    if (isAllOpsCompleted && (totalAccounted >= wo.plannedQty || (isAllReported && totalAccounted >= wo.reportedQualifiedQty + wo.reportedDefectiveQty))) {
       wo.status = "Completed";
       wo.completionType = "Normal";
+      wo.completedAt = timeStr;
+      wo.completedBy = "wh.operator";
+      wo.currentOperation = "已完工（成品已入库与不良处置完成）";
     }
 
     wo.events.unshift({
@@ -707,12 +1040,53 @@ function handleWorkOrderActionSubmit(event, actionType) {
       actor: "wh.operator",
       session: "jti…7c91",
       key,
-      impact: `成品 ${qty} 台入库至 FG-A-01；实物库存增加并生成 FGR 流水`
+      impact: `合格成品 ${qty} 台入库至 FG-A-01；实物库存增加并生成 FGR 流水`
     });
 
     showWorkOrderToast(`成品入库成功：${qty} 台已进入成品一仓`);
+  } else if (actionType === "dispose_defect") {
+    // 生产质检人员不良品报废/隔离处置确认
+    const pendingDisposal = Math.max(0, (wo.inspectedFailedQty + wo.reportedDefectiveQty) - (wo.defectiveDisposedQty || 0));
+    const qty = parseInt(document.getElementById("dlg_defect_dispose_qty")?.value, 10) || 0;
+    const dispType = document.getElementById("dlg_defect_dispose_type")?.value || "scrap";
+    const reason = document.getElementById("dlg_defect_dispose_reason")?.value.trim();
+
+    if (qty <= 0) { errEl.textContent = "处置数量必须大于 0"; return; }
+    if (qty > pendingDisposal) { errEl.textContent = `处置数量 (${qty}) 超出待处置不良品数量 (${pendingDisposal})`; return; }
+    if (!reason) { errEl.textContent = "处置原因必须填写"; return; }
+
+    wo.defectiveDisposedQty = (wo.defectiveDisposedQty || 0) + qty;
+
+    const totalAccounted = wo.receivedToFgQty + (wo.defectiveDisposedQty || 0);
+    const isAllOpsCompleted = wo.operations.length > 0 && wo.operations.every(op => op.status === "Completed");
+    const isAllReported = (wo.reportedQualifiedQty + wo.reportedDefectiveQty >= wo.plannedQty);
+    if (isAllOpsCompleted && (totalAccounted >= wo.plannedQty || (isAllReported && totalAccounted >= wo.reportedQualifiedQty + wo.reportedDefectiveQty))) {
+      wo.status = "Completed";
+      wo.completionType = "Normal";
+      wo.completedAt = timeStr;
+      wo.completedBy = "mes.inspector";
+      wo.currentOperation = "已完工（成品已入库与不良处置完成）";
+    }
+
+    wo.events.unshift({
+      time: timeStr,
+      action: "不良品处置确认",
+      actor: "mes.inspector",
+      session: "jti…310a",
+      key,
+      impact: `不良品处置：${dispType === 'scrap' ? '报废' : '隔离'} ${qty} 台；原因：${reason}`
+    });
+
+    showWorkOrderToast(`不良品处置完成：${qty} 台已执行${dispType === 'scrap' ? '报废' : '隔离'}`);
   } else if (actionType === "return_mat") {
+    // 生产退料确认
+    const returnable = Math.max(0, wo.materialIssuedQty - wo.materialReturnedQty);
     const qty = parseInt(document.getElementById("dlg_return_qty")?.value, 10) || 0;
+    const reason = document.getElementById("dlg_mat_ret_reason")?.value.trim();
+    if (qty <= 0) { errEl.textContent = "退料数量必须大于 0"; return; }
+    if (qty > returnable) { errEl.textContent = `退料数量 (${qty}) 超出可退上限 (${returnable})`; return; }
+    if (!reason) { errEl.textContent = "退料原因必须填写"; return; }
+
     wo.materialReturnedQty += qty;
 
     wo.events.unshift({
@@ -721,17 +1095,20 @@ function handleWorkOrderActionSubmit(event, actionType) {
       actor: "wh.operator",
       session: "jti…7c91",
       key,
-      impact: `退回原料 ${qty} 套至原料仓退料库位；库存增加并生成退料流水`
+      impact: `退回原料 ${qty} 套至原料仓退料库位；库存增加并生成退料流水；原因：${reason}`
     });
 
     showWorkOrderToast(`退料确认成功：${qty} 套已退回仓库`);
   } else if (actionType === "complete") {
+    // 人工完成工单
     const reason = document.getElementById("dlg_wo_comp_reason")?.value.trim();
     if (!reason) { errEl.textContent = "人工完成必须填写原因"; return; }
 
     wo.status = "Completed";
     wo.completionType = "Manual";
     wo.completionReason = reason;
+    wo.completedAt = timeStr;
+    wo.completedBy = "mes.inspector";
 
     wo.events.unshift({
       time: timeStr,
@@ -750,6 +1127,10 @@ function handleWorkOrderActionSubmit(event, actionType) {
   renderWorkOrderDetail();
 }
 
+/**
+ * 初始化制造执行与质检控制台交互逻辑。
+ * 绑定角色切换、评审场景切换、状态筛选按钮与实时搜索事件。
+ */
 function initWorkOrderConsole() {
   const roleSelect = document.getElementById("workOrderRole");
   roleSelect?.addEventListener("change", (e) => {

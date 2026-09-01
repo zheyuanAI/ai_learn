@@ -26,8 +26,9 @@
         <label class="console-role-control" for="mapRole">
           <span>模拟查看角色</span>
           <select id="mapRole">
-            <option value="viewer" selected>全域调度员 (dispatcher)</option>
-            <option value="admin">GIS 配置管理员 (gis.admin)</option>
+            <option value="admin" selected>租户管理员 (tenant.admin)</option>
+            <option value="iot">IoT人员 (iot.engineer)</option>
+            <option value="warehouse">仓库人员 (wh.operator)</option>
           </select>
         </label>
       </header>
@@ -38,10 +39,10 @@
           <strong>点击点位查看业务事实摘要并直达关联业务控制台</strong>
         </div>
         <div class="console-scenario-tabs" role="group" aria-label="图层过滤">
-          <button type="button" class="is-active" data-filter="all" aria-pressed="true">全部点位</button>
-          <button type="button" data-filter="alarm" aria-pressed="false">🚨 仅看告警</button>
-          <button type="button" data-filter="device" aria-pressed="false">🏭 生产设备</button>
-          <button type="button" data-filter="warehouse" aria-pressed="false">📦 仓库库区</button>
+          <button type="button" class="is-active" data-filter="all" aria-pressed="true" tabindex="0" role="button">全部点位</button>
+          <button type="button" data-filter="alarm" aria-pressed="false" tabindex="0" role="button">🚨 仅看告警</button>
+          <button type="button" data-filter="device" aria-pressed="false" tabindex="0" role="button">🏭 生产设备</button>
+          <button type="button" data-filter="warehouse" aria-pressed="false" tabindex="0" role="button">📦 仓库库区</button>
         </div>
         <p><strong>只读空间投影</strong> · 坐标相对百分比防偏移</p>
       </section>

@@ -9,23 +9,63 @@
  */
 
 let currentTimeRange = "today";
+let currentSyncStatus = "healthy";
 let countdownSeconds = 30;
 let refreshInterval = null;
+
+const syncStatusConfigs = {
+  healthy: {
+    badgeClass: "green",
+    badgeText: "● 数据正常 (Healthy)",
+    syncTimeText: "2026-08-26 16:30:15 (实时)",
+    bannerHtml: ""
+  },
+  delayed: {
+    badgeClass: "amber",
+    badgeText: "⚠️ 数据更新延迟 (Delayed)",
+    syncTimeText: "2026-08-26 15:45:00 (45分钟前)",
+    bannerHtml: `
+      <div class="console-banner warning" style="display:flex;align-items:center;gap:12px;padding:12px 18px;border-radius:8px;border:1px solid var(--c-amber);background:rgba(243,180,93,0.12);color:var(--c-ink);margin-bottom:18px;">
+        <span style="font-size:18px;">⚠️</span>
+        <div style="flex:1;">
+          <strong style="color:var(--c-amber);">数据陈旧提示 (Stale Data Warning)：</strong>
+          <span style="font-size:12px;color:var(--c-muted);">当前看板源领域数据最后更新于 45 分钟前（2026-08-26 15:45:00），存在跨服务数据更新延迟，请以各业务系统实时账面为准。</span>
+        </div>
+        <button type="button" class="console-action-btn warning" onclick="refreshDashboardNow()" style="padding:6px 12px;min-height:0;font-size:11px;white-space:nowrap;" tabindex="0" role="button">立即同步</button>
+      </div>
+    `
+  },
+  degraded: {
+    badgeClass: "red",
+    badgeText: "🛑 数据源暂不可用 (Degraded)",
+    syncTimeText: "2026-08-26 14:10:00 (已中断)",
+    bannerHtml: `
+      <div class="console-banner danger" style="display:flex;align-items:center;gap:12px;padding:12px 18px;border-radius:8px;border:1px solid var(--c-red);background:rgba(255,124,115,0.14);color:var(--c-ink);margin-bottom:18px;">
+        <span style="font-size:18px;">🛑</span>
+        <div style="flex:1;">
+          <strong style="color:var(--c-red);">服务降级警示 (Service Degraded Alert)：</strong>
+          <span style="font-size:12px;color:var(--c-muted);">IoT 遥测与履约聚合服务响应超时，部分指标已启用只读缓存降级展示，严禁依据当前降级缓存数据执行关键质量放行或销售发货操作！</span>
+        </div>
+        <span class="console-badge red" style="font-weight:700;">只读降级模式</span>
+      </div>
+    `
+  }
+};
 
 const dashboardFactData = {
   today: {
     timeRangeLabel: "今日 (2026-08-26 00:00 - 23:59)",
     syncTime: "2026-08-26 16:30:15",
     inventory: {
-      onHand: 600,
-      reserved: 120,
-      available: 480,
-      qualityHold: 75,
+      onHand: 940,
+      reserved: 20,
+      available: 920,
+      qualityHold: 0,
       shippingStaged: 20
     },
     fulfillment: {
       poPendingArrival: 5,
-      poPendingInspect: 75,
+      poPendingInspect: 0,
       poPendingPutaway: 70,
       soPendingPick: 60,
       soShippingStaged: 20,
@@ -40,7 +80,7 @@ const dashboardFactData = {
       completedManual: 1
     },
     quality: {
-      poPendingBatch: 1,
+      poPendingBatch: 0,
       mesPendingBatch: 1,
       passRate: "97.2%",
       scrappedTotal: 7
@@ -68,15 +108,15 @@ const dashboardFactData = {
     timeRangeLabel: "近 7 天 (2026-08-20 至 2026-08-26)",
     syncTime: "2026-08-26 16:30:15",
     inventory: {
-      onHand: 600,
-      reserved: 120,
-      available: 480,
-      qualityHold: 75,
+      onHand: 940,
+      reserved: 20,
+      available: 920,
+      qualityHold: 0,
       shippingStaged: 20
     },
     fulfillment: {
       poPendingArrival: 24,
-      poPendingInspect: 75,
+      poPendingInspect: 0,
       poPendingPutaway: 70,
       soPendingPick: 180,
       soShippingStaged: 20,
@@ -91,7 +131,7 @@ const dashboardFactData = {
       completedManual: 3
     },
     quality: {
-      poPendingBatch: 1,
+      poPendingBatch: 0,
       mesPendingBatch: 1,
       passRate: "98.1%",
       scrappedTotal: 19
@@ -119,15 +159,15 @@ const dashboardFactData = {
     timeRangeLabel: "近 30 天 (2026-07-28 至 2026-08-26)",
     syncTime: "2026-08-26 16:30:15",
     inventory: {
-      onHand: 600,
-      reserved: 120,
-      available: 480,
-      qualityHold: 75,
+      onHand: 940,
+      reserved: 20,
+      available: 920,
+      qualityHold: 0,
       shippingStaged: 20
     },
     fulfillment: {
       poPendingArrival: 60,
-      poPendingInspect: 75,
+      poPendingInspect: 0,
       poPendingPutaway: 70,
       soPendingPick: 450,
       soShippingStaged: 20,
@@ -142,7 +182,7 @@ const dashboardFactData = {
       completedManual: 8
     },
     quality: {
-      poPendingBatch: 1,
+      poPendingBatch: 0,
       mesPendingBatch: 1,
       passRate: "98.6%",
       scrappedTotal: 54
@@ -188,10 +228,21 @@ function renderDashboardView() {
   const container = document.getElementById("dashboardGrid");
   const timeLabel = document.getElementById("dashTimeRangeLabel");
   const lastSync = document.getElementById("dashLastSync");
+  const syncBadge = document.getElementById("dashSyncBadge");
+  const bannerContainer = document.getElementById("dashDegradedBanner");
   const data = dashboardFactData[currentTimeRange] || dashboardFactData.today;
+  const syncConfig = syncStatusConfigs[currentSyncStatus] || syncStatusConfigs.healthy;
 
   if (timeLabel) timeLabel.textContent = data.timeRangeLabel;
-  if (lastSync) lastSync.textContent = data.syncTime;
+  if (lastSync) lastSync.textContent = syncConfig.syncTimeText;
+  if (syncBadge) {
+    syncBadge.className = `console-badge ${syncConfig.badgeClass}`;
+    syncBadge.textContent = syncConfig.badgeText;
+  }
+  if (bannerContainer) {
+    bannerContainer.innerHTML = syncConfig.bannerHtml;
+    bannerContainer.style.display = syncConfig.bannerHtml ? "block" : "none";
+  }
 
   if (!container) return;
 
@@ -390,6 +441,12 @@ function renderDashboardView() {
 }
 
 function initDashboardConsole() {
+  const syncSelect = document.getElementById("dashSyncStatusSelect");
+  syncSelect?.addEventListener("change", (e) => {
+    currentSyncStatus = e.target.value;
+    renderDashboardView();
+  });
+
   const tabs = document.querySelectorAll(".console-scenario-tabs button");
   tabs.forEach(tab => {
     tab.addEventListener("click", () => {
@@ -401,6 +458,13 @@ function initDashboardConsole() {
       tab.setAttribute("aria-pressed", "true");
       currentTimeRange = tab.dataset.range;
       renderDashboardView();
+    });
+
+    tab.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        tab.click();
+      }
     });
   });
 

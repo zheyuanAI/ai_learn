@@ -7,10 +7,57 @@
  * 4. 动态加载当前角色权限与菜单树。
  */
 
+/**
+ * 6 类正式角色配置列表（遵循 Issue #4 规范）
+ * 包含：租户管理员、销售人员、采购人员、仓库人员、生产质检人员、IoT人员
+ */
 const roleProfiles = {
+  admin: {
+    username: "admin.zhang",
+    name: "租户管理员 (admin.zhang)",
+    role: "租户管理员",
+    redirect: "dashboard.html",
+    jti: "jti_9901aa48f712",
+    perms: [
+      "dashboard:view (全域综合看板查看)",
+      "site-map:view (厂区二维空间地图)",
+      "master-data:manage (主数据管理)",
+      "ai:chat (AI 受控智能问答)",
+      "ai:audit:view (AI 工具调用审计日志)",
+      "system:tenant:manage (租户与权限管理)"
+    ]
+  },
+  sales: {
+    username: "sales.liu",
+    name: "销售人员 (sales.liu)",
+    role: "销售人员",
+    redirect: "sales-outbound.html",
+    jti: "jti_441bc882e190",
+    perms: [
+      "sales.order.create (创建销售订单)",
+      "sales.order.submit (提交销售订单)",
+      "sales.order.approve (审核销售订单)",
+      "sales.order.track (销售订单履约跟踪)",
+      "inventory.balance.view (查看可用库存余额)"
+    ]
+  },
+  buyer: {
+    username: "buyer.chen",
+    name: "采购人员 (buyer.chen)",
+    role: "采购人员",
+    redirect: "purchase-inbound.html",
+    jti: "jti_552de17a94cc",
+    perms: [
+      "purchase.order.create (创建采购单)",
+      "purchase.order.submit (提交采购单)",
+      "purchase.order.approve (审核采购单)",
+      "purchase.order.complete (人工完成采购单)",
+      "quality.purchase-disposition.return (决定退回供应方)"
+    ]
+  },
   warehouse: {
     username: "wh.operator",
-    name: "仓库操作员 (wh.operator)",
+    name: "仓库人员 (wh.operator)",
     role: "仓库人员",
     redirect: "sales-outbound.html",
     jti: "jti_7c91d8a4f210",
@@ -26,7 +73,7 @@ const roleProfiles = {
   },
   inspector: {
     username: "mes.inspector",
-    name: "生产质检主管 (mes.inspector)",
+    name: "生产质检人员 (mes.inspector)",
     role: "生产质检人员",
     redirect: "work-order.html",
     jti: "jti_310ad59c8814",
@@ -39,36 +86,22 @@ const roleProfiles = {
       "quality.inspection.submit (成品质检判定)"
     ]
   },
-  buyer: {
-    username: "buyer.chen",
-    name: "高级采购员 (buyer.chen)",
-    role: "采购人员",
-    redirect: "purchase-inbound.html",
-    jti: "jti_552de17a94cc",
+  iot: {
+    username: "iot.engineer",
+    name: "IoT人员 (iot.engineer)",
+    role: "IoT人员",
+    redirect: "device-alarm.html",
+    jti: "jti_8842bc11df33",
     perms: [
-      "purchase.order.create (创建采购单)",
-      "purchase.order.submit (提交采购单)",
-      "purchase.order.approve (审核采购单)",
-      "purchase.order.complete (人工完成采购单)",
-      "quality.purchase-disposition.return (决定退回供应方)"
-    ]
-  },
-  admin: {
-    username: "admin.zhang",
-    name: "全域调度员 (admin.zhang)",
-    role: "调度管理员",
-    redirect: "dashboard.html",
-    jti: "jti_9901aa48f712",
-    perms: [
-      "dashboard:view (全域综合看板查看)",
-      "site-map:view (厂区二维空间地图)",
-      "ai:chat (AI 受控智能问答)",
-      "ai:audit:view (AI 工具调用审计日志)"
+      "iot.telemetry.view (设备遥测与状态监控)",
+      "iot.alarm.ack (设备告警确认与消警)",
+      "iot.device.manage (设备台账与点位配置)",
+      "iot.digital-twin.view (数字孪生与拓扑查看)"
     ]
   }
 };
 
-let currentActiveRoleKey = "warehouse";
+let currentActiveRoleKey = "admin";
 let isCurrentSessionValid = true;
 
 function showLoginToast(message, type = "success") {
@@ -116,14 +149,38 @@ function quickFillRole(username, roleKey) {
 
 function handleLoginSubmit(event) {
   event.preventDefault();
-  const tenant = document.getElementById("loginTenant")?.value;
-  const username = document.getElementById("loginUsername")?.value;
+  const tenant = document.getElementById("loginTenant")?.value?.trim();
+  const username = document.getElementById("loginUsername")?.value?.trim();
+  const password = document.getElementById("loginPassword")?.value?.trim();
+
+  if (!tenant) {
+    showLoginToast("登录失败：请选择所属租户", "danger");
+    return;
+  }
+  if (!username) {
+    showLoginToast("登录失败：请输入登录用户名", "danger");
+    return;
+  }
+  if (!password) {
+    showLoginToast("登录失败：请输入登录密码", "danger");
+    return;
+  }
+
+  // 根据输入的用户名匹配对应的角色配置
+  let matchedKey = currentActiveRoleKey;
+  for (const [key, profile] of Object.entries(roleProfiles)) {
+    if (profile.username.toLowerCase() === username.toLowerCase()) {
+      matchedKey = key;
+      break;
+    }
+  }
+  currentActiveRoleKey = matchedKey;
   const p = roleProfiles[currentActiveRoleKey] || roleProfiles.warehouse;
 
   isCurrentSessionValid = true;
   renderAuthContext();
 
-  showLoginToast(`登录成功！正在进入默认首页：${p.redirect}...`);
+  showLoginToast(`登录成功！当前身份：${p.role}，正在进入默认首页：${p.redirect}...`);
   setTimeout(() => {
     window.location.href = p.redirect;
   }, 1200);

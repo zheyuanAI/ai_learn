@@ -26,9 +26,8 @@
         <label class="console-role-control" for="inventoryRole">
           <span>模拟操作角色</span>
           <select id="inventoryRole">
-            <option value="manager" selected>仓库主管 (wh.manager)</option>
-            <option value="operator">仓库操作员 (wh.operator)</option>
-            <option value="planner">计划员 (planner.zhang)</option>
+            <option value="warehouse" selected>仓库人员 (wh.operator)</option>
+            <option value="admin">租户管理员 (tenant.admin)</option>
           </select>
         </label>
       </header>
@@ -39,11 +38,11 @@
           <strong>核对 6 类标准库位、实物/预留/可用口径、调拨与盘点流水</strong>
         </div>
         <div class="console-scenario-tabs" role="group" aria-label="库存功能模块切换">
-          <button type="button" data-tab="balance" aria-pressed="true">实时库存余额</button>
-          <button type="button" data-tab="transfer_stocktake" aria-pressed="false">调拨与盘点</button>
-          <button type="button" data-tab="products" aria-pressed="false">商品物料主数据</button>
-          <button type="button" data-tab="locations" aria-pressed="false">仓库与库位</button>
-          <button type="button" data-tab="transactions" aria-pressed="false">库存审计流水</button>
+          <button type="button" class="is-active" data-tab="balance" aria-pressed="true" tabindex="0" role="button">实时库存余额</button>
+          <button type="button" data-tab="transfer_stocktake" aria-pressed="false" tabindex="0" role="button">调拨与盘点</button>
+          <button type="button" data-tab="products" aria-pressed="false" tabindex="0" role="button">商品物料主数据</button>
+          <button type="button" data-tab="locations" aria-pressed="false" tabindex="0" role="button">仓库与库位</button>
+          <button type="button" data-tab="transactions" aria-pressed="false" tabindex="0" role="button">库存审计流水</button>
         </div>
         <p><strong>目标设计 · 接口未实现</strong> · 假数据模拟</p>
       </section>

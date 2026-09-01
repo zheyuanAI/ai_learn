@@ -43,7 +43,7 @@
 
             <div class="console-form-field">
               <span>账号用户名 (Username) <b>*</b></span>
-              <input id="loginUsername" type="text" value="wh.operator" />
+              <input id="loginUsername" type="text" value="admin.zhang" />
             </div>
 
             <div class="console-form-field">
@@ -58,8 +58,20 @@
           </form>
 
           <div style="border-top:1px solid var(--c-line);padding-top:16px;">
-            <span style="font-size:11px;color:var(--c-muted);display:block;margin-bottom:10px;">快速切换演示角色登录：</span>
+            <span style="font-size:11px;color:var(--c-muted);display:block;margin-bottom:10px;">快速切换演示角色登录（6 类正式角色）：</span>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <button type="button" class="console-action-btn" onclick="quickFillRole('admin.zhang', 'admin')" style="padding:8px 10px;">
+                <span class="console-action-title" style="font-size:12px;">租户管理员</span>
+                <span class="console-action-desc">admin.zhang</span>
+              </button>
+              <button type="button" class="console-action-btn" onclick="quickFillRole('sales.liu', 'sales')" style="padding:8px 10px;">
+                <span class="console-action-title" style="font-size:12px;">销售人员</span>
+                <span class="console-action-desc">sales.liu</span>
+              </button>
+              <button type="button" class="console-action-btn" onclick="quickFillRole('buyer.chen', 'buyer')" style="padding:8px 10px;">
+                <span class="console-action-title" style="font-size:12px;">采购人员</span>
+                <span class="console-action-desc">buyer.chen</span>
+              </button>
               <button type="button" class="console-action-btn" onclick="quickFillRole('wh.operator', 'warehouse')" style="padding:8px 10px;">
                 <span class="console-action-title" style="font-size:12px;">仓库人员</span>
                 <span class="console-action-desc">wh.operator</span>
@@ -68,13 +80,9 @@
                 <span class="console-action-title" style="font-size:12px;">生产质检人员</span>
                 <span class="console-action-desc">mes.inspector</span>
               </button>
-              <button type="button" class="console-action-btn" onclick="quickFillRole('buyer.chen', 'buyer')" style="padding:8px 10px;">
-                <span class="console-action-title" style="font-size:12px;">采购人员</span>
-                <span class="console-action-desc">buyer.chen</span>
-              </button>
-              <button type="button" class="console-action-btn" onclick="quickFillRole('admin.zhang', 'admin')" style="padding:8px 10px;">
-                <span class="console-action-title" style="font-size:12px;">系统调度员</span>
-                <span class="console-action-desc">admin.zhang</span>
+              <button type="button" class="console-action-btn" onclick="quickFillRole('iot.engineer', 'iot')" style="padding:8px 10px;">
+                <span class="console-action-title" style="font-size:12px;">IoT人员</span>
+                <span class="console-action-desc">iot.engineer</span>
               </button>
             </div>
           </div>
@@ -98,15 +106,15 @@
             </div>
             <div class="console-fact-item">
               <span class="console-fact-label">当前登录用户</span>
-              <span id="ctxUser" class="console-fact-val">wh.operator</span>
+              <span id="ctxUser" class="console-fact-val">admin.zhang</span>
             </div>
             <div class="console-fact-item">
               <span class="console-fact-label">生效角色</span>
-              <span id="ctxRole" class="console-fact-val">仓库人员 (Warehouse Operator)</span>
+              <span id="ctxRole" class="console-fact-val">租户管理员</span>
             </div>
             <div class="console-fact-item">
               <span class="console-fact-label">当前 JWT 会话标识 (jti)</span>
-              <span id="ctxJti" class="console-fact-val" style="font-family:monospace;color:var(--c-cyan);">jti_7c91d8a4f210</span>
+              <span id="ctxJti" class="console-fact-val" style="font-family:monospace;color:var(--c-cyan);">jti_9901aa48f712</span>
             </div>
           </div>
 

@@ -287,9 +287,9 @@ function renderPurchaseQueue() {
     const line = order.lines[0] || {};
     const unreceived = line.orderedQty - line.receivedQty;
     const accentClass = order.status === "Draft" ? "draft" : order.status === "Approved" ? "approved" : order.status === "PartiallyReceived" ? "partial" : "completed";
-    
+
     return `
-      <div class="console-card ${isSelected}" onclick="selectPurchaseOrder('${order.id}')">
+      <div class="console-card ${isSelected}" tabindex="0" role="button" aria-label="采购订单 ${order.id}" onclick="selectPurchaseOrder('${order.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectPurchaseOrder('${order.id}');}">
         <span class="console-card-accent ${accentClass}"></span>
         <div class="console-card-top">
           <strong>${order.id}</strong>
@@ -428,16 +428,16 @@ function renderPurchaseDetail() {
               <td><strong>${line.product}</strong></td>
               <td>${line.orderedQty} ${line.uom}</td>
               <td>
-                <span style="color:var(--c-red);">${line.rejectedQty} 拒收</span> / 
+                <span style="color:var(--c-red);">${line.rejectedQty} 拒收</span> /
                 <span style="color:var(--c-cyan);">${line.receivedQty} 实收</span>
               </td>
               <td>
-                <span style="color:var(--c-green);">${line.qualifiedQty} 合格</span> / 
+                <span style="color:var(--c-green);">${line.qualifiedQty} 合格</span> /
                 <span style="color:var(--c-red);">${line.unqualifiedQty} 不合格</span>
               </td>
               <td>
-                <span style="color:var(--c-green);">${line.releaseExecutedQty} 放行</span> / 
-                <span style="color:var(--c-red);">${line.scrapExecutedQty} 报废</span> / 
+                <span style="color:var(--c-green);">${line.releaseExecutedQty} 放行</span> /
+                <span style="color:var(--c-red);">${line.scrapExecutedQty} 报废</span> /
                 <span style="color:var(--c-amber);">${line.returnExecutedQty} 退回</span>
               </td>
               <td><strong>${line.putawayQty} ${line.uom}</strong></td>
@@ -580,14 +580,16 @@ function openPurchaseActionDialog(actionType) {
   } else if (actionType === "inspect") {
     dialogTitle = "生产质检人员采购到货质检";
     impactNote = "对质量隔离位中的货物进行检验；记录合格与不合格数量，只生成质检结论，不改变库存余额。";
+    const uninspectedQty = Math.max(0, line.receivedQty - line.inspectedQty);
     formHtml = `
       <div class="console-form-field">
         <span>本次检验总数 (inspected_qty) <b>*</b></span>
-        <input id="dlg_inspected_qty" type="number" min="1" max="${inQualityHold}" value="${inQualityHold}" oninput="calcInspectSplit()" />
+        <input id="dlg_inspected_qty" type="number" min="1" max="${uninspectedQty}" value="${uninspectedQty}" oninput="calcInspectSplit()" />
+        <small>待检验最大数量：${uninspectedQty} ${line.uom}（实际接收 ${line.receivedQty} - 累计已检 ${line.inspectedQty}）</small>
       </div>
       <div class="console-form-field">
         <span>质检合格数量 (qualified_qty) <b>*</b></span>
-        <input id="dlg_qualified_qty" type="number" min="0" max="${inQualityHold}" value="${inQualityHold}" oninput="calcInspectSplit()" />
+        <input id="dlg_qualified_qty" type="number" min="0" max="${uninspectedQty}" value="${uninspectedQty}" oninput="calcInspectSplit()" />
       </div>
       <div class="console-form-field">
         <span>质检不合格数量 (unqualified_qty)</span>
@@ -606,6 +608,7 @@ function openPurchaseActionDialog(actionType) {
       <div class="console-form-field">
         <span>决定放行数量 <b>*</b></span>
         <input id="dlg_release_decide_qty" type="number" min="1" max="${pendingReleaseDecide}" value="${pendingReleaseDecide}" />
+        <small>未处置合格数量：${pendingReleaseDecide} ${line.uom}</small>
       </div>
     `;
   } else if (actionType === "scrap_decide") {
@@ -616,6 +619,7 @@ function openPurchaseActionDialog(actionType) {
       <div class="console-form-field">
         <span>决定报废数量 <b>*</b></span>
         <input id="dlg_scrap_decide_qty" type="number" min="1" max="${pendingScrapDecide}" value="${pendingScrapDecide}" />
+        <small>未处置不合格数量：${pendingScrapDecide} ${line.uom}</small>
       </div>
       <div class="console-form-field">
         <span>报废处置原因 <b>*</b></span>
@@ -630,6 +634,7 @@ function openPurchaseActionDialog(actionType) {
       <div class="console-form-field">
         <span>决定退货数量 <b>*</b></span>
         <input id="dlg_return_decide_qty" type="number" min="1" max="${pendingReturnDecide}" value="${pendingReturnDecide}" />
+        <small>未处置不合格数量：${pendingReturnDecide} ${line.uom}</small>
       </div>
       <div class="console-form-field">
         <span>退回协调原因 <b>*</b></span>
@@ -651,7 +656,7 @@ function openPurchaseActionDialog(actionType) {
     `;
   } else if (actionType === "putaway") {
     dialogTitle = "仓库确认上架存储";
-    impactNote = "将收货暂存位（RS-01）中的货物移动至最终存储位（${order.storageLocation}），企业总实物库存不变。";
+    impactNote = `将收货暂存位（RS-01）中的货物移动至最终存储位（${order.storageLocation}），企业总实物库存不变。`;
     formHtml = `
       <div class="console-form-field">
         <span>本次上架数量 <b>*</b></span>
@@ -771,6 +776,12 @@ function handlePurchaseActionSubmit(event, actionType) {
     const qualified = parseInt(document.getElementById("dlg_qualified_qty")?.value, 10) || 0;
     const unqualified = inspected - qualified;
     const reason = document.getElementById("dlg_inspect_reason")?.value.trim() || "";
+    const uninspected = line.receivedQty - line.inspectedQty;
+
+    if (inspected <= 0) { errEl.textContent = "检验总数必须大于 0"; return; }
+    if (inspected > uninspected) { errEl.textContent = `本次检验总数不得超过待检数量（${uninspected} 件）`; return; }
+    if (qualified < 0 || qualified > inspected) { errEl.textContent = "合格数量必须在 0 到检验总数之间"; return; }
+    if (unqualified > 0 && !reason) { errEl.textContent = "存在不合格品时必须录入不合格原因"; return; }
 
     line.inspectedQty += inspected;
     line.qualifiedQty += qualified;
@@ -789,6 +800,11 @@ function handlePurchaseActionSubmit(event, actionType) {
     showPurchaseToast(`质检完成：合格 ${qualified} 件，不合格 ${unqualified} 件`);
   } else if (actionType === "release_decide") {
     const qty = parseInt(document.getElementById("dlg_release_decide_qty")?.value, 10) || 0;
+    const unreleased = line.qualifiedQty - line.releaseDecidedQty;
+
+    if (qty <= 0) { errEl.textContent = "放行数量必须大于 0"; return; }
+    if (qty > unreleased) { errEl.textContent = `放行数量不得超过未处置合格数量（${unreleased} 件）`; return; }
+
     line.releaseDecidedQty += qty;
 
     order.events.unshift({
@@ -804,6 +820,11 @@ function handlePurchaseActionSubmit(event, actionType) {
   } else if (actionType === "scrap_decide") {
     const qty = parseInt(document.getElementById("dlg_scrap_decide_qty")?.value, 10) || 0;
     const reason = document.getElementById("dlg_scrap_reason")?.value.trim() || "报废处置";
+    const undisposed = line.unqualifiedQty - (line.scrapDecidedQty + line.returnDecidedQty);
+
+    if (qty <= 0) { errEl.textContent = "报废数量必须大于 0"; return; }
+    if (qty > undisposed) { errEl.textContent = `报废数量不得超过未处置不合格数量（${undisposed} 件）`; return; }
+
     line.scrapDecidedQty += qty;
 
     order.events.unshift({
@@ -819,6 +840,11 @@ function handlePurchaseActionSubmit(event, actionType) {
   } else if (actionType === "return_decide") {
     const qty = parseInt(document.getElementById("dlg_return_decide_qty")?.value, 10) || 0;
     const reason = document.getElementById("dlg_return_reason")?.value.trim() || "退回供应方";
+    const undisposed = line.unqualifiedQty - (line.scrapDecidedQty + line.returnDecidedQty);
+
+    if (qty <= 0) { errEl.textContent = "退货数量必须大于 0"; return; }
+    if (qty > undisposed) { errEl.textContent = `退货数量不得超过未处置不合格数量（${undisposed} 件）`; return; }
+
     line.returnDecidedQty += qty;
 
     order.events.unshift({
@@ -840,6 +866,12 @@ function handlePurchaseActionSubmit(event, actionType) {
     line.scrapExecutedQty = line.scrapDecidedQty;
     line.returnExecutedQty = line.returnDecidedQty;
 
+    const totalAccountedDisp = line.putawayQty + line.rejectedQty + line.scrapExecutedQty + line.returnExecutedQty;
+    if (totalAccountedDisp >= line.orderedQty && line.releaseDecidedQty === line.putawayQty) {
+      order.status = "Completed";
+      order.completionType = "Normal";
+    }
+
     order.events.unshift({
       time: timeStr,
       action: "仓库确认质量处置实物执行",
@@ -854,7 +886,8 @@ function handlePurchaseActionSubmit(event, actionType) {
     const qty = parseInt(document.getElementById("dlg_putaway_qty")?.value, 10) || 0;
     line.putawayQty += qty;
 
-    if (line.putawayQty >= line.orderedQty) {
+    const totalAccounted = line.putawayQty + line.rejectedQty + line.scrapExecutedQty + line.returnExecutedQty;
+    if (totalAccounted >= line.orderedQty) {
       order.status = "Completed";
       order.completionType = "Normal";
     }

@@ -10,12 +10,11 @@
  */
 
 const roleLabelsForInventory = {
-  manager: "仓库主管 (wh.manager)",
-  operator: "仓库操作员 (wh.operator)",
-  planner: "计划员 (planner.zhang)"
+  warehouse: "仓库人员 (wh.operator)",
+  admin: "租户管理员 (tenant.admin)"
 };
 
-let currentInventoryRole = "manager";
+let currentInventoryRole = "warehouse";
 let currentInventoryTab = "balance";
 
 // 基础物料主数据
@@ -40,11 +39,11 @@ const mockLocations = [
   { code: "ADJ-01", name: "系统差异调整位", warehouse: "虚拟仓库 (WH-SYS)", type: "Adjustment", desc: "盘点溢缺与受控异常调整专用虚拟位" }
 ];
 
-// 实时库存余额
+// 实时库存余额（黄金业务链同一时点快照：质量处置已完成，QH-01为0，RS-01为70待上架）
 let mockBalances = [
   { sku: "FG-SERVO-01", product: "伺服电机总成", warehouse: "成品一仓", location: "FG-A-01", type: "Storage", onHand: 400, reserved: 0, batch: "LOT-20260825-01" },
   { sku: "FG-SERVO-01", product: "伺服电机总成", warehouse: "成品一仓", location: "SHP-01", type: "ShippingStaging", onHand: 20, reserved: 20, batch: "LOT-20260825-01" },
-  { sku: "RM-SERVO-ST", product: "定子转子组件", warehouse: "原料一仓", location: "QH-01", type: "QualityHold", onHand: 75, reserved: 0, batch: "LOT-20260826-01" },
+  { sku: "RM-SERVO-ST", product: "定子转子组件", warehouse: "原料一仓", location: "QH-01", type: "QualityHold", onHand: 0, reserved: 0, batch: "LOT-20260826-01" },
   { sku: "RM-SERVO-ST", product: "定子转子组件", warehouse: "原料一仓", location: "RS-01", type: "ReceivingStaging", onHand: 70, reserved: 0, batch: "LOT-20260826-01" },
   { sku: "RM-SERVO-ST", product: "定子转子组件", warehouse: "原料一仓", location: "ST-A-01", type: "Storage", onHand: 150, reserved: 0, batch: "LOT-20260820-09" },
   { sku: "RM-BEARING-01", product: "高精轴承组件", warehouse: "原料一仓", location: "ST-B-02", type: "Storage", onHand: 300, reserved: 0, batch: "-" }
@@ -96,22 +95,22 @@ function renderMasterDataView() {
         <div class="console-kpi-item highlight-cyan">
           <span>企业总实物库存 (On Hand)</span>
           <strong>${totalOnHand} <small>件</small></strong>
-          <small>实际拥有总实物</small>
+          <small>实际拥有总实物 (400+20+0+70+150+300)</small>
         </div>
         <div class="console-kpi-item highlight-amber">
           <span>总业务预留 (Reserved)</span>
           <strong>${totalReserved} <small>件</small></strong>
-          <small>发货暂存/业务锁定</small>
+          <small>发货暂存/业务锁定 (SHP-01: 20)</small>
         </div>
         <div class="console-kpi-item highlight-green">
           <span>总可用库存 (Available)</span>
           <strong>${totalAvailable} <small>件</small></strong>
-          <small>公式: 实物 - 预留</small>
+          <small>公式: 实物 - 预留 (940 - 20 = 920)</small>
         </div>
         <div class="console-kpi-item highlight-red">
           <span>质量隔离位数量 (QualityHold)</span>
           <strong>${qhOnHand} <small>件</small></strong>
-          <small>实物已接管但禁止正常使用</small>
+          <small>处置完成放行70至RS-01/报废5</small>
         </div>
       </div>
 
@@ -141,20 +140,21 @@ function renderMasterDataView() {
                 const avail = b.onHand - b.reserved;
                 const isQH = b.type === "QualityHold";
                 const isSHP = b.type === "ShippingStaging";
+                const isRS = b.type === "ReceivingStaging";
                 return `
                   <tr>
                     <td><code>${b.sku}</code></td>
                     <td><strong>${b.product}</strong></td>
                     <td>${b.warehouse}</td>
                     <td><strong style="color:var(--c-cyan);">${b.location}</strong></td>
-                    <td><span class="console-badge ${isQH ? 'red' : isSHP ? 'amber' : 'green'}">${b.type}</span></td>
+                    <td><span class="console-badge ${isQH ? 'red' : isSHP ? 'amber' : isRS ? 'cyan' : 'green'}">${b.type}</span></td>
                     <td><small>${b.batch}</small></td>
                     <td><strong>${b.onHand}</strong></td>
                     <td style="color:var(--c-amber);">${b.reserved}</td>
                     <td><strong style="color:${isQH ? 'var(--c-dim)' : 'var(--c-green)'};">${isQH ? '0 (隔离)' : avail}</strong></td>
                     <td>
-                      <small style="color:${isQH ? 'var(--c-red)' : 'var(--c-muted)'};">
-                        ${isQH ? '⚠️ 隔离中：禁止预留与领料' : isSHP ? '🚚 发货暂存：已拣货待发货' : '✅ 正常可用'}
+                      <small style="color:${isQH ? 'var(--c-muted)' : isSHP ? 'var(--c-amber)' : isRS ? 'var(--c-cyan)' : 'var(--c-muted)'};">
+                        ${isQH ? '⚠️ 隔离位：处置已完成，实物为0 (禁止预留)' : isSHP ? '🚚 发货暂存：已拣货待发货' : isRS ? '📦 收货暂存：质检合格待上架' : '✅ 正常可用'}
                       </small>
                     </td>
                   </tr>
@@ -199,7 +199,7 @@ function renderMasterDataView() {
               <span>调拨数量 <b>*</b></span>
               <input id="tr_qty" type="number" min="1" max="100" value="10" />
             </div>
-            <button type="submit" class="console-action-btn primary" style="justify-content:center;min-height:42px;">
+            <button type="submit" class="console-action-btn primary" style="justify-content:center;min-height:42px;" tabindex="0" role="button">
               <span class="console-action-title">执行库位调拨</span>
               <span class="console-action-perm">inventory.transfer.confirm</span>
             </button>
@@ -243,7 +243,7 @@ function renderMasterDataView() {
               <span>差异原因说明</span>
               <input id="stk_reason" type="text" placeholder="如有盘盈/盘亏请录入调查原因" value="${mockStocktake.reason}" />
             </div>
-            <button type="button" class="console-action-btn primary" onclick="handleStocktakeConfirm()" style="justify-content:center;min-height:42px;">
+            <button type="button" class="console-action-btn primary" onclick="handleStocktakeConfirm()" style="justify-content:center;min-height:42px;" tabindex="0" role="button">
               <span class="console-action-title">确认并调整库存</span>
               <span class="console-action-perm">inventory.stocktake.adjust</span>
             </button>
@@ -383,9 +383,54 @@ function handleTransferSubmit(event) {
   const to = document.getElementById("tr_to")?.value;
   const qty = parseInt(document.getElementById("tr_qty")?.value, 10) || 0;
 
-  if (from === to) {
-    showInventoryToast("调拨来源与目标库位不能相同", "danger");
+  if (qty <= 0) {
+    showInventoryToast("调拨失败：调拨数量必须大于 0", "danger");
     return;
+  }
+  if (from === to) {
+    showInventoryToast("调拨失败：调拨来源与目标库位不能相同", "danger");
+    return;
+  }
+
+  const fromBal = mockBalances.find(b => b.location === from && b.sku === sku);
+  if (!fromBal) {
+    showInventoryToast(`调拨失败：来源库位 ${from} 未找到物料 ${sku}`, "danger");
+    return;
+  }
+  if (fromBal.available < qty) {
+    showInventoryToast(`调拨失败：来源库位 ${from} 可用数量不足（当前可用: ${fromBal.available} 件，申请调拨: ${qty} 件）`, "danger");
+    return;
+  }
+
+  // 1. 真实扣减来源库位余额
+  fromBal.onHand -= qty;
+  fromBal.available = fromBal.onHand - fromBal.reserved;
+
+  // 2. 真实增加目标库位余额
+  let toBal = mockBalances.find(b => b.location === to && b.sku === sku);
+  if (toBal) {
+    toBal.onHand += qty;
+    toBal.available = toBal.onHand - toBal.reserved;
+  } else {
+    const locNameMap = {
+      "ST-A-01": { wh: "原料一仓", name: "标准货架 A-01", type: "Storage" },
+      "ST-B-02": { wh: "原料一仓", name: "重型货架 B-02", type: "Storage" },
+      "RS-01": { wh: "原料一仓", name: "收货暂存位", type: "ReceivingStaging" },
+      "FG-A-01": { wh: "成品一仓", name: "成品立体货架 A-01", type: "Storage" }
+    };
+    const locMeta = locNameMap[to] || { wh: "原料一仓", name: to, type: "Storage" };
+    mockBalances.push({
+      warehouse: locMeta.wh,
+      location: to,
+      locationName: locMeta.name,
+      type: locMeta.type,
+      sku: sku,
+      product: fromBal.product,
+      onHand: qty,
+      reserved: 0,
+      available: qty,
+      status: "Normal"
+    });
   }
 
   const now = new Date();
@@ -402,19 +447,38 @@ function handleTransferSubmit(event) {
     actor: "wh.operator"
   });
 
-  showInventoryToast(`调拨成功：${sku} ${qty} 件从 ${from} 移动至 ${to}，总库存不变`);
+  showInventoryToast(`调拨成功：${sku} ${qty} 件已从 ${from} 转移至 ${to}，实际库位余额已实时更新`);
   renderMasterDataView();
 }
 
 function handleStocktakeConfirm() {
-  const counted = parseInt(document.getElementById("stk_counted")?.value, 10) || 0;
-  const reason = document.getElementById("stk_reason")?.value.trim() || "例行盘点无差异";
+  const countedEl = document.getElementById("stk_counted");
+  const counted = parseInt(countedEl?.value, 10);
+  if (isNaN(counted) || counted < 0) {
+    showInventoryToast("盘点失败：实盘数量必须为大于等于 0 的整数", "danger");
+    return;
+  }
+  const reasonInput = document.getElementById("stk_reason")?.value?.trim();
   const diff = counted - mockStocktake.systemQty;
+
+  // 严格校验：存在非零差异时必须录入真实原因，禁止默认为无差异
+  if (diff !== 0 && (!reasonInput || reasonInput === "例行盘点无差异")) {
+    showInventoryToast("盘点差异处理：存在盘盈/盘亏差异时必须录入调查调整原因", "danger");
+    return;
+  }
+  const reason = diff === 0 ? "例行盘点无差异" : reasonInput;
 
   mockStocktake.countedQty = counted;
   mockStocktake.variance = diff;
   mockStocktake.reason = reason;
   mockStocktake.status = "Adjusted";
+
+  // 真实更新目标库位库存余额
+  const targetBal = mockBalances.find(b => b.location === mockStocktake.location && b.sku === mockStocktake.sku);
+  if (targetBal) {
+    targetBal.onHand = counted;
+    targetBal.available = targetBal.onHand - targetBal.reserved;
+  }
 
   const now = new Date();
   const timeStr = `2026-08-26 ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -428,11 +492,11 @@ function handleStocktakeConfirm() {
       from: diff < 0 ? mockStocktake.location : "ADJ-01",
       to: diff > 0 ? mockStocktake.location : "ADJ-01",
       doc: mockStocktake.id,
-      actor: "wh.manager"
+      actor: "wh.operator"
     });
   }
 
-  showInventoryToast(`盘点确认完成：差异 ${diff} 已生成调整流水并更新余额`);
+  showInventoryToast(`盘点调整确认完成：库位 ${mockStocktake.location} 实盘 ${counted} 件 (差异: ${diff > 0 ? '+' + diff : diff})，实际余额已完成更新`);
   renderMasterDataView();
 }
 
@@ -453,6 +517,13 @@ function initMasterDataConsole() {
       tab.setAttribute("aria-pressed", "true");
       currentInventoryTab = tab.dataset.tab;
       renderMasterDataView();
+    });
+
+    tab.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        tab.click();
+      }
     });
   });
 

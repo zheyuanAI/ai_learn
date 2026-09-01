@@ -24,25 +24,40 @@
         </div>
 
         <div style="display:flex;align-items:center;gap:12px;">
-          <button type="button" class="console-action-btn primary" onclick="refreshDashboardNow()" style="padding:8px 14px;min-height:0;display:flex;flex-direction:row;align-items:center;gap:6px;">
+          <button type="button" class="console-action-btn primary" onclick="refreshDashboardNow()" style="padding:8px 14px;min-height:0;display:flex;flex-direction:row;align-items:center;gap:6px;" tabindex="0" role="button">
             <span>🔄 立即刷新</span>
             <span id="dashRefreshTimer" style="font-size:10px;color:var(--c-cyan);">30s</span>
           </button>
         </div>
       </header>
 
-      <section class="console-review-bar" aria-label="看板时间范围与筛选">
+      <section class="console-review-bar" aria-label="看板时间范围与数据同步状态">
         <div>
           <span class="console-section-index">统计时间范围</span>
           <strong id="dashTimeRangeLabel">今日 (2026-08-26 00:00 - 23:59)</strong>
         </div>
         <div class="console-scenario-tabs" role="group" aria-label="时间范围切换">
-          <button type="button" class="is-active" data-range="today" aria-pressed="true">今日</button>
-          <button type="button" data-range="week" aria-pressed="false">近 7 天</button>
-          <button type="button" data-range="month" aria-pressed="false">近 30 天</button>
+          <button type="button" class="is-active" data-range="today" aria-pressed="true" tabindex="0" role="button">今日</button>
+          <button type="button" data-range="week" aria-pressed="false" tabindex="0" role="button">近 7 天</button>
+          <button type="button" data-range="month" aria-pressed="false" tabindex="0" role="button">近 30 天</button>
         </div>
-        <p><strong>自动刷新</strong> · 源领域最后更新: <span id="dashLastSync">16:30:15</span></p>
+        <div style="display:grid;gap:6px;justify-items:end;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label for="dashSyncStatusSelect" class="console-section-index" style="font-size:10px;cursor:pointer;">同步状态控制</label>
+            <select id="dashSyncStatusSelect" class="console-select" style="min-height:30px;height:30px;padding:2px 8px;font-size:11px;width:auto;" aria-label="数据同步状态">
+              <option value="healthy" selected>数据正常 (Healthy)</option>
+              <option value="delayed">数据更新延迟 (Delayed)</option>
+              <option value="degraded">数据源暂不可用 (Degraded)</option>
+            </select>
+          </div>
+          <p style="margin:0;">
+            <strong>源领域同步:</strong> <span id="dashLastSync">2026-08-26 16:30:15 (实时)</span>
+            <span id="dashSyncBadge" class="console-badge green" style="margin-left:4px;">● 数据正常 (Healthy)</span>
+          </p>
+        </div>
       </section>
+
+      <div id="dashDegradedBanner" role="alert" aria-live="assertive" style="display:none;"></div>
 
       <section id="dashboardGrid" class="console-layout-full" aria-live="polite"></section>
 

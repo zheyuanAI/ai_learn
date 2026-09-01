@@ -43,13 +43,15 @@ const workflowSteps = [
     index: "02",
     title: "生产工单与来源关联",
     owner: "生产质检人员",
-    summary: "人工选择来源销售订单行，创建并下达生产工单。",
-    state: "Draft → Released → InProgress → Completed",
-    interfaces: ["POST /api/work-orders", "POST /api/work-orders/{id}/release", "POST /api/work-orders/{id}/complete"],
+    summary: "人工选择来源销售订单行，创建、审核并下达生产工单；锁定 BOM 与工艺路线版本。",
+    state: "未提交 (Draft) → 待审核 (PendingApproval) → 已下达 (Released) → 生产中 (InProgress) → 已完成 (Completed)",
+    interfaces: ["POST /api/work-orders", "POST /api/work-orders/{id}/submit", "POST /api/work-orders/{id}/approve", "POST /api/work-orders/{id}/complete"],
     page: "work-order.html",
     actions: [
-      { label: "创建生产工单", permission: "manufacturing.work-order.create", roles: ["production-quality"], note: "来源销售行可为空或人工选择" },
-      { label: "下达生产工单", permission: "manufacturing.work-order.release", roles: ["production-quality"], note: "要求 BOM 与工艺路线有效" }
+      { label: "创建生产工单", permission: "manufacturing.work-order.create", roles: ["production-quality"], note: "来源销售行可为空或人工选择，创建为未提交状态" },
+      { label: "提交工单审核", permission: "manufacturing.work-order.submit", roles: ["production-quality"], note: "仅未提交 (Draft) 或审核拒绝 (Rejected) 可提交" },
+      { label: "审核并下达工单", permission: "manufacturing.work-order.approve", roles: ["production-quality"], note: "仅待审核 (PendingApproval)，审核通过后锁定 BOM 与工艺路线版本并进入已下达" },
+      { label: "人工完成工单", permission: "manufacturing.work-order.complete", roles: ["production-quality"], note: "仅已下达或生产中，要求填写原因；终止未生产余量，保留已发生流水" }
     ]
   },
   {

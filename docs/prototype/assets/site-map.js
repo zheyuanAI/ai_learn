@@ -7,6 +7,14 @@
  * 4. 点位抽屉展示实时业务事实与直达业务页面的跳转链接。
  */
 
+const roleLabelsForMap = {
+  admin: "租户管理员 (tenant.admin)",
+  iot: "IoT人员 (iot.engineer)",
+  warehouse: "仓库人员 (wh.operator)"
+};
+
+let currentMapRole = "admin";
+
 const mapPointsData = [
   {
     id: "MAP-PT-0017",
@@ -96,12 +104,12 @@ const mapPointsData = [
     left: 14,
     top: 65,
     status: "Normal",
-    statusText: "收货质检中",
+    statusText: "质检放行待上架",
     detail: "包含 QH-01 质量隔离位与 RS-01 收货暂存位",
     metrics: [
-      { label: "质量隔离位", value: "75 件" },
+      { label: "质量隔离位", value: "0 件" },
       { label: "收货暂存位", value: "70 件" },
-      { label: "常规存储量", value: "450 件" }
+      { label: "常规存储量", value: "150 件" }
     ],
     targetLinks: [
       { label: "进入采购收货与到货质检", href: "purchase-inbound.html" },
@@ -133,6 +141,13 @@ const mapPointsData = [
 let currentMapFilter = "all";
 let selectedPointId = "MAP-PT-0017";
 
+function handlePointKeydown(event, ptId) {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    selectMapPoint(ptId);
+  }
+}
+
 function renderMapPoints() {
   const container = document.getElementById("mapPointContainer");
   if (!container) return;
@@ -151,23 +166,30 @@ function renderMapPoints() {
     const bgCol = isAlarm ? "var(--c-red)" : isWarn ? "var(--c-amber)" : "var(--c-green)";
 
     return `
-      <div onclick="selectMapPoint('${pt.id}')" style="
-        position:absolute;
-        left:${pt.left}%;
-        top:${pt.top}%;
-        transform:translate(-50%, -50%);
-        cursor:pointer;
-        display:flex;
-        align-items:center;
-        gap:6px;
-        padding:6px 10px;
-        border-radius:20px;
-        background:rgba(7,16,23,0.92);
-        border:1px solid ${isSelected ? 'var(--c-cyan)' : 'var(--c-line-strong)'};
-        box-shadow:${isAlarm ? '0 0 16px rgba(255,124,115,0.45)' : '0 4px 12px rgba(0,0,0,0.4)'};
-        transition:all 160ms ease;
-        z-index:${isSelected ? 10 : 2};
-      ">
+      <div
+        tabindex="0"
+        role="button"
+        aria-label="${pt.name} - ${pt.statusText}"
+        onclick="selectMapPoint('${pt.id}')"
+        onkeydown="handlePointKeydown(event, '${pt.id}')"
+        style="
+          position:absolute;
+          left:${pt.left}%;
+          top:${pt.top}%;
+          transform:translate(-50%, -50%);
+          cursor:pointer;
+          display:flex;
+          align-items:center;
+          gap:6px;
+          padding:6px 10px;
+          border-radius:20px;
+          background:rgba(7,16,23,0.92);
+          border:1px solid ${isSelected ? 'var(--c-cyan)' : 'var(--c-line-strong)'};
+          box-shadow:${isAlarm ? '0 0 16px rgba(255,124,115,0.45)' : '0 4px 12px rgba(0,0,0,0.4)'};
+          transition:all 160ms ease;
+          z-index:${isSelected ? 10 : 2};
+        "
+      >
         <span style="width:8px;height:8px;border-radius:50%;background:${bgCol};${isAlarm ? 'animation:console-pulse 1.2s infinite;' : ''}"></span>
         <span style="font-size:11px;font-weight:700;color:${isSelected ? 'var(--c-cyan)' : 'var(--c-ink)'};">${pt.name}</span>
       </div>
@@ -238,7 +260,7 @@ function renderMapPointDrawer() {
       </div>
       <div style="padding:16px 18px;display:grid;gap:10px;">
         ${pt.targetLinks.map(lnk => `
-          <a href="${lnk.href}" class="console-action-btn primary" style="text-decoration:none;">
+          <a href="${lnk.href}" class="console-action-btn primary" style="text-decoration:none;" tabindex="0" role="button">
             <span class="console-action-title">🔗 ${lnk.label}</span>
             <span class="console-action-desc">跳转至对应业务页面查看全量明细与执行操作 ↗</span>
           </a>
@@ -249,6 +271,11 @@ function renderMapPointDrawer() {
 }
 
 function initSiteMapConsole() {
+  const roleSelect = document.getElementById("mapRole");
+  roleSelect?.addEventListener("change", (e) => {
+    currentMapRole = e.target.value;
+  });
+
   const tabs = document.querySelectorAll(".console-scenario-tabs button");
   tabs.forEach(tab => {
     tab.addEventListener("click", () => {
@@ -260,6 +287,13 @@ function initSiteMapConsole() {
       tab.setAttribute("aria-pressed", "true");
       currentMapFilter = tab.dataset.filter;
       renderMapPoints();
+    });
+
+    tab.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        tab.click();
+      }
     });
   });
 

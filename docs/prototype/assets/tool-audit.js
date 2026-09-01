@@ -7,12 +7,27 @@
  * 4. 严禁记录登录密码、设备凭证、中转站密钥等无关敏感数据。
  */
 
+/**
+ * HTML 转义函数，防止 XSS / HTML 注入
+ * @param {string} str - 待转义字符串
+ * @returns {string} - 转义后的安全 HTML 字符串
+ */
+function escapeHtml(str) {
+  if (typeof str !== "string") return str == null ? "" : String(str);
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 const mockAuditLogs = [
   {
     id: "req-ai-20260826-0182",
     time: "2026-08-26 16:30:05",
     tenant: "tenant_demo_a",
-    user: "dispatcher.wang",
+    user: "sales.liu",
     tool: "queryTrace",
     latency: "520ms",
     status: "Success",
@@ -40,7 +55,7 @@ const mockAuditLogs = [
     id: "req-ai-20260826-0188",
     time: "2026-08-26 16:15:44",
     tenant: "tenant_demo_a",
-    user: "planner.zhang",
+    user: "admin.zhang",
     tool: "generateDailyOperationReport",
     latency: "980ms",
     status: "Success",
@@ -54,7 +69,7 @@ const mockAuditLogs = [
     id: "req-ai-20260826-0199",
     time: "2026-08-26 15:50:20",
     tenant: "tenant_demo_a",
-    user: "guest.user",
+    user: "buyer.chen",
     tool: "updatePurchaseOrder",
     latency: "45ms",
     status: "Denied",
@@ -68,7 +83,7 @@ const mockAuditLogs = [
     id: "req-ai-20260826-0170",
     time: "2026-08-26 14:10:02",
     tenant: "tenant_demo_a",
-    user: "wh.manager",
+    user: "wh.operator",
     tool: "queryInventoryByProductAndWarehouse",
     latency: "3000ms",
     status: "Timeout",
@@ -123,15 +138,15 @@ function renderAuditTable() {
     const isTimeout = log.status === "Timeout";
 
     return `
-      <tr onclick="selectAuditRecord('${log.id}')" style="cursor:pointer;background:${isSelected ? 'rgba(113,225,220,0.08)' : 'transparent'};">
-        <td><small>${log.time}</small></td>
-        <td><code>${log.id}</code></td>
-        <td><strong>${log.user}</strong> <small style="color:var(--c-dim);">(${log.tenant})</small></td>
-        <td><code style="color:var(--c-cyan);">${log.tool}</code></td>
-        <td><small>${log.latency}</small></td>
+      <tr tabindex="0" role="button" aria-pressed="${isSelected}" onclick="selectAuditRecord('${escapeHtml(log.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectAuditRecord('${escapeHtml(log.id)}');}" style="cursor:pointer;background:${isSelected ? 'rgba(113,225,220,0.08)' : 'transparent'};">
+        <td><small>${escapeHtml(log.time)}</small></td>
+        <td><code>${escapeHtml(log.id)}</code></td>
+        <td><strong>${escapeHtml(log.user)}</strong> <small style="color:var(--c-dim);">(${escapeHtml(log.tenant)})</small></td>
+        <td><code style="color:var(--c-cyan);">${escapeHtml(log.tool)}</code></td>
+        <td><small>${escapeHtml(log.latency)}</small></td>
         <td>
           <span class="console-badge ${isSuccess ? 'green' : isDenied ? 'red' : 'amber'}">
-            ${log.status}
+            ${escapeHtml(log.status)}
           </span>
         </td>
       </tr>
@@ -158,29 +173,29 @@ function renderAuditDetailDrawer() {
       <div>
         <div class="console-title-meta">
           <span class="console-module-code">AUDIT / REQUEST LOG</span>
-          <span class="console-badge ${isSuccess ? 'green' : isDenied ? 'red' : 'amber'}">${log.status}</span>
+          <span class="console-badge ${isSuccess ? 'green' : isDenied ? 'red' : 'amber'}">${escapeHtml(log.status)}</span>
         </div>
-        <h2>${log.id}</h2>
-        <p>调用时间：${log.time} · 耗时：${log.latency} · 模型：${log.model}</p>
+        <h2>${escapeHtml(log.id)}</h2>
+        <p>调用时间：${escapeHtml(log.time)} · 耗时：${escapeHtml(log.latency)} · 模型：${escapeHtml(log.model)}</p>
       </div>
     </header>
 
     <div class="console-fact-grid">
       <div class="console-fact-item">
         <span class="console-fact-label">操作租户 / 用户</span>
-        <span class="console-fact-val">${log.tenant} / ${log.user}</span>
+        <span class="console-fact-val">${escapeHtml(log.tenant)} / ${escapeHtml(log.user)}</span>
       </div>
       <div class="console-fact-item">
         <span class="console-fact-label">调用工具名称</span>
-        <span class="console-fact-val highlight">${log.tool}</span>
+        <span class="console-fact-val highlight">${escapeHtml(log.tool)}</span>
       </div>
       <div class="console-fact-item">
         <span class="console-fact-label">数据统计时间范围</span>
-        <span class="console-fact-val">${log.timeRange}</span>
+        <span class="console-fact-val">${escapeHtml(log.timeRange)}</span>
       </div>
       <div class="console-fact-item">
         <span class="console-fact-label">数据来源服务</span>
-        <span class="console-fact-val">${log.sources.join(", ")}</span>
+        <span class="console-fact-val">${log.sources.map(s => escapeHtml(s)).join(", ")}</span>
       </div>
     </div>
 
@@ -189,7 +204,7 @@ function renderAuditDetailDrawer() {
         <h3>工具入参 JSON (Input Payload)</h3>
         <small>校验租户隔离与参数合法性</small>
       </div>
-      <pre style="padding:14px 18px;margin:0;font-size:12px;font-family:monospace;color:var(--c-cyan);background:rgba(0,0,0,0.3);overflow-x:auto;">${JSON.stringify(log.inputParams, null, 2)}</pre>
+      <pre style="padding:14px 18px;margin:0;font-size:12px;font-family:monospace;color:var(--c-cyan);background:rgba(0,0,0,0.3);overflow-x:auto;">${escapeHtml(JSON.stringify(log.inputParams, null, 2))}</pre>
     </section>
 
     <section class="console-section">
@@ -198,7 +213,7 @@ function renderAuditDetailDrawer() {
         <small>脱敏后的事实数据或拦截原因</small>
       </div>
       <div style="padding:14px 18px;font-size:12px;line-height:1.6;color:#c6d8df;white-space:pre-wrap;">
-        ${log.outputSummary}
+        ${escapeHtml(log.outputSummary)}
       </div>
     </section>
   `;

@@ -10,8 +10,8 @@
  */
 
 const roleLabelsForDevice = {
-  engineer: "IoT 运维工程师 (iot.engineer)",
-  operator: "现场操作员 (wh.operator)"
+  engineer: "IoT人员 (iot.engineer)",
+  operator: "仓库人员 (wh.operator)"
 };
 
 const deviceScenarios = {
@@ -232,7 +232,7 @@ function renderDeviceQueue() {
     const accentClass = isAlarm ? "alarm" : dev.runningStatus === "Running" ? "running" : "draft";
 
     return `
-      <div class="console-card ${isSelected}" onclick="selectDevice('${dev.id}')">
+      <div class="console-card ${isSelected}" tabindex="0" role="button" aria-label="设备 ${dev.id} ${dev.name}" onclick="selectDevice('${dev.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectDevice('${dev.id}');}">
         <span class="console-card-accent ${accentClass}"></span>
         <div class="console-card-top">
           <strong>${dev.id}</strong>
@@ -261,19 +261,31 @@ function renderDeviceDetail() {
   if (!detailEl || !dev) return;
 
   const alarm = dev.alarm;
-  const isAlarmTriggered = alarm && alarm.stage === "Triggered";
-  const canAck = isAlarmTriggered;
+  const canAck = currentDeviceRole === "engineer" && dev.alarm && (dev.alarm.stage === "Triggered" || (dev.alarm.stage === "Recovered" && !dev.alarm.ackedAt));
+  const canEditContext = currentDeviceRole === "engineer" && dev.alarm !== null;
+
+  const alarmStageBadge = alarm
+    ? (alarm.stage === 'Triggered'
+        ? 'red'
+        : (alarm.stage === 'Acked' || (alarm.stage === 'Recovered' && !alarm.ackedAt) ? 'amber' : 'green'))
+    : '';
+  const alarmStageText = alarm
+    ? (alarm.stage === 'Triggered'
+        ? 'Triggered (未确认)'
+        : (alarm.stage === 'Acked'
+            ? 'Acked (已确认待恢复)'
+            : (!alarm.ackedAt ? 'Recovered (待确认)' : 'Recovered (已闭环)')))
+    : '';
 
   detailEl.innerHTML = `
     <header class="console-detail-head">
       <div>
         <div class="console-title-meta">
-          <span class="console-module-code">DEVICE / TELEMETRY</span>
-          <span class="console-badge ${dev.alarmStatus === 'Alarm' ? 'red' : 'green'}">${dev.alarmStatus === 'Alarm' ? '告警异常' : '运行正常'}</span>
-          <span class="console-badge cyan">${dev.onlineStatus}</span>
+          <span class="console-module-code">IOT / TELEMETRY &amp; ALARM</span>
+          <span class="console-badge ${dev.alarmStatus === 'Alarm' ? 'red' : 'green'}">${dev.alarmStatus === 'Alarm' ? '超温告警' : '运行正常'}</span>
         </div>
         <h2>${dev.name} (${dev.id})</h2>
-        <p>设备模型：${dev.profile} · 安装区域：${dev.area} · 地图点位：${dev.mapPointId}</p>
+        <p>设备类型：${dev.profile} · 安装位置：${dev.area} · 地图点位：${dev.mapPointId}</p>
       </div>
       <div class="console-detail-status">
         <span class="console-badge amber">通信去重键: ${dev.lastMessageKey}</span>
@@ -285,7 +297,7 @@ function renderDeviceDetail() {
       <div>
         <span>当前设备状态快照</span>
         <strong>${dev.onlineStatus} / ${dev.runningStatus}</strong>
-        <small>${dev.alarmStatus === 'Alarm' ? '活动告警中' : '无未恢复告警'}</small>
+        <small>${dev.alarmStatus === 'Alarm' ? '活动告警中' : (alarm && alarm.stage === 'Recovered' && !alarm.ackedAt ? '已恢复待确认' : '无未恢复告警')}</small>
       </div>
       <div class="console-state-divider">→</div>
       <div>
@@ -300,12 +312,12 @@ function renderDeviceDetail() {
     </div>
 
     ${alarm ? `
-      <section class="console-section" style="border-color:${alarm.stage === 'Recovered' ? 'var(--c-green)' : 'var(--c-red)'};background:${alarm.stage === 'Recovered' ? 'rgba(124,224,167,0.04)' : 'rgba(255,124,115,0.06)'};">
+      <section class="console-section" style="border-color:${alarm.stage === 'Recovered' ? (alarm.ackedAt ? 'var(--c-green)' : 'var(--c-amber)') : 'var(--c-red)'};background:${alarm.stage === 'Recovered' ? (alarm.ackedAt ? 'rgba(124,224,167,0.04)' : 'rgba(243,180,93,0.06)') : 'rgba(255,124,115,0.06)'};">
         <div class="console-section-head">
-          <h3 style="color:${alarm.stage === 'Recovered' ? 'var(--c-green)' : 'var(--c-red)'};">
-            ${alarm.stage === 'Triggered' ? '🚨 活动单指标阈值告警' : alarm.stage === 'Acked' ? '⚠️ 告警已确认待恢复' : '✅ 告警已恢复闭环'} (${alarm.id})
+          <h3 style="color:${alarm.stage === 'Recovered' ? (alarm.ackedAt ? 'var(--c-green)' : 'var(--c-amber)') : 'var(--c-red)'};">
+            ${alarm.stage === 'Triggered' ? '🚨 活动单指标阈值告警' : alarm.stage === 'Acked' ? '⚠️ 告警已确认待恢复' : (!alarm.ackedAt ? '⚠️ 告警已恢复（待人工确认）' : '✅ 告警已恢复闭环')} (${alarm.id})
           </h3>
-          <span class="console-badge ${alarm.stage === 'Recovered' ? 'green' : alarm.stage === 'Acked' ? 'amber' : 'red'}">${alarm.stage}</span>
+          <span class="console-badge ${alarmStageBadge}">${alarmStageText}</span>
         </div>
         <div class="console-fact-grid">
           <div class="console-fact-item">
@@ -313,11 +325,11 @@ function renderDeviceDetail() {
             <span class="console-fact-val">${alarm.rule}</span>
           </div>
           <div class="console-fact-item">
-            <span class="console-fact-label">触发时指标值</span>
+            <span class="console-fact-label">当前/最新指标值</span>
             <span class="console-fact-val highlight">${alarm.triggerValue} (阈值 ${alarm.threshold})</span>
           </div>
           <div class="console-fact-item">
-            <span class="console-fact-label">触发时间</span>
+            <span class="console-fact-label">首次触发时间</span>
             <span class="console-fact-val">${alarm.triggeredAt}</span>
           </div>
           <div class="console-fact-item">
@@ -413,13 +425,13 @@ function renderDeviceDetail() {
         <button class="console-action-btn primary" ${canAck ? '' : 'disabled'} onclick="openDeviceActionDialog('ack_alarm')">
           <span class="console-action-title">人工确认告警</span>
           <span class="console-action-desc">现场确认告警，记录确认人、时间与处理措施</span>
-          <span class="console-action-perm">alarm:ack (运维/现场)</span>
+          <span class="console-action-perm">alarm:ack (IoT人员)</span>
         </button>
 
-        <button class="console-action-btn primary" onclick="openDeviceActionDialog('edit_context')">
+        <button class="console-action-btn primary" ${canEditContext ? '' : 'disabled'} onclick="openDeviceActionDialog('edit_context')">
           <span class="console-action-title">补充工序执行上下文</span>
           <span class="console-action-desc">人工补充或更正关联的 OperationExecution 与工单</span>
-          <span class="console-action-perm">alarm:context:edit (运维)</span>
+          <span class="console-action-perm">alarm:context:edit (IoT人员)</span>
         </button>
       </div>
     </div>
@@ -430,6 +442,13 @@ function openDeviceActionDialog(actionType) {
   const dialogEl = document.getElementById("deviceActionDialog");
   const dev = getSelectedDevice();
   if (!dialogEl || !dev) return;
+
+  if (actionType === "ack_alarm" || actionType === "edit_context") {
+    if (currentDeviceRole !== "engineer") {
+      showDeviceToast("权限不足：该操作仅允许 IoT人员 (iot.engineer) 执行", "danger");
+      return;
+    }
+  }
 
   let formHtml = "";
   let dialogTitle = "";
@@ -463,7 +482,7 @@ function openDeviceActionDialog(actionType) {
     `;
   } else if (actionType === "simulate_dup") {
     dialogTitle = "模拟 MQTT 重复消息幂等拦截";
-    impactNote = "发送与上一条完全相同的去重键（${dev.lastMessageKey}），系统校验后按幂等成功返回，不重复写遥测、不生成重复告警。";
+    impactNote = `发送与上一条完全相同的去重键（${dev.lastMessageKey}），系统校验后按幂等成功返回，不重复写遥测、不生成重复告警。`;
     formHtml = `
       <div class="console-form-field">
         <span>去重标识 (device_id + message_id)</span>
@@ -489,11 +508,11 @@ function openDeviceActionDialog(actionType) {
     formHtml = `
       <div class="console-form-field">
         <span>关联工序执行标识 (OperationExecution ID) <b>*</b></span>
-        <input id="dlg_ctx_oe" type="text" value="OE-20260826-033" />
+        <input id="dlg_ctx_oe" type="text" value="${dev.alarm ? dev.alarm.operationExecutionId : 'OE-20260826-033'}" />
       </div>
       <div class="console-form-field">
         <span>关联生产工单号 (WorkOrder ID) <b>*</b></span>
-        <input id="dlg_ctx_wo" type="text" value="WO-20260826-018" />
+        <input id="dlg_ctx_wo" type="text" value="${dev.alarm ? dev.alarm.workOrderId : 'WO-20260826-018'}" />
       </div>
     `;
   }
@@ -533,73 +552,104 @@ function closeDeviceActionDialog() {
 function handleDeviceActionSubmit(event, actionType) {
   event.preventDefault();
   const dev = getSelectedDevice();
+  if (!dev) return;
   const now = new Date();
   const timeStr = `2026-08-26 ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
 
-  if (actionType === "simulate_normal") {
-    const temp = parseFloat(document.getElementById("dlg_sim_temp")?.value) || 71.2;
-    const msgId = document.getElementById("dlg_sim_msgid")?.value;
+  if (actionType === "simulate_normal" || actionType === "simulate_alarm") {
+    const isNormalDlg = actionType === "simulate_normal";
+    const tempInputId = isNormalDlg ? "dlg_sim_temp" : "dlg_sim_temp_alarm";
+    const msgInputId = isNormalDlg ? "dlg_sim_msgid" : "dlg_sim_msgid_alarm";
+    const defaultTemp = isNormalDlg ? 71.2 : 78.5;
+
+    const inputVal = document.getElementById(tempInputId)?.value;
+    const temp = (inputVal !== undefined && inputVal !== "" && !isNaN(parseFloat(inputVal)))
+      ? parseFloat(inputVal)
+      : defaultTemp;
+    const msgId = document.getElementById(msgInputId)?.value || `MSG-${dev.id}-${Date.now().toString().slice(-6)}`;
+
     dev.telemetry.temperature = temp;
     dev.telemetryHistory.push(temp);
     if (dev.telemetryHistory.length > 6) dev.telemetryHistory.shift();
     dev.lastSeenAt = timeStr;
     dev.lastMessageKey = `${dev.id} + ${msgId}`;
 
-    if (dev.alarm && temp <= 75.0) {
-      dev.alarm.stage = "Recovered";
-      dev.alarm.recoveredAt = timeStr;
+    if (temp <= 75.0) {
       dev.alarmStatus = "Normal";
+      if (dev.alarm && dev.alarm.stage !== "Recovered") {
+        dev.alarm.stage = "Recovered";
+        dev.alarm.recoveredAt = timeStr;
+        if (!dev.alarm.ackedAt) {
+          showDeviceToast(`MQTT 遥测上报成功：温度 ${temp}℃ <= 75.0℃，告警 (${dev.alarm.id}) 已恢复（待人工确认）`);
+        } else {
+          showDeviceToast(`MQTT 遥测上报成功：温度 ${temp}℃ <= 75.0℃，告警 (${dev.alarm.id}) 已恢复并完成闭环`);
+        }
+      } else {
+        showDeviceToast(`MQTT 遥测上报成功：温度 ${temp}℃ <= 75.0℃，设备运行正常`);
+      }
+    } else {
+      dev.alarmStatus = "Alarm";
+      if (dev.alarm && dev.alarm.stage !== "Recovered") {
+        // 已有活动告警（Triggered 或 Acked），更新最新值与最后上报时间，严禁覆盖首次触发时间 triggeredAt
+        dev.alarm.triggerValue = `${temp} ℃`;
+        dev.alarm.lastTriggeredAt = timeStr;
+        showDeviceToast(`超温告警持续！温度 ${temp}℃ > 75.0℃，已更新活动告警 (${dev.alarm.id}) 最新遥测指标 (${temp}℃)`, "danger");
+      } else {
+        // 之前无告警或已恢复，生成新的单指标阈值告警
+        dev.alarm = {
+          id: `ALM-${Date.now().toString().slice(-6)}`,
+          rule: "主轴轴承超温告警 (> 75.0 ℃)",
+          metric: "temperature",
+          triggerValue: `${temp} ℃`,
+          threshold: "75.0 ℃",
+          level: "严重",
+          stage: "Triggered",
+          triggeredAt: timeStr,
+          lastTriggeredAt: timeStr,
+          ackedAt: null,
+          ackedBy: null,
+          ackNote: null,
+          recoveredAt: null,
+          operationExecutionId: "OE-20260826-033",
+          workOrderId: "WO-20260826-018",
+          product: "伺服电机总成 (FG-SERVO-01)"
+        };
+        showDeviceToast(`超温告警触发！温度 ${temp}℃ > 75.0℃，已生成告警 ${dev.alarm.id} 并关联工序 OE-20260826-033`, "danger");
+      }
     }
-
-    showDeviceToast(`MQTT 消息上报成功：温度 ${temp}℃，状态正常`);
-  } else if (actionType === "simulate_alarm") {
-    const temp = parseFloat(document.getElementById("dlg_sim_temp_alarm")?.value) || 78.5;
-    const msgId = document.getElementById("dlg_sim_msgid_alarm")?.value;
-    dev.telemetry.temperature = temp;
-    dev.telemetryHistory.push(temp);
-    if (dev.telemetryHistory.length > 6) dev.telemetryHistory.shift();
-    dev.lastSeenAt = timeStr;
-    dev.lastMessageKey = `${dev.id} + ${msgId}`;
-    dev.alarmStatus = "Alarm";
-
-    dev.alarm = {
-      id: `ALM-${Date.now().toString().slice(-6)}`,
-      rule: "主轴轴承超温告警 (> 75.0 ℃)",
-      metric: "temperature",
-      triggerValue: `${temp} ℃`,
-      threshold: "75.0 ℃",
-      level: "严重",
-      stage: "Triggered",
-      triggeredAt: timeStr,
-      ackedAt: null,
-      ackedBy: null,
-      ackNote: null,
-      recoveredAt: null,
-      operationExecutionId: "OE-20260826-033",
-      workOrderId: "WO-20260826-018",
-      product: "伺服电机总成 (FG-SERVO-01)"
-    };
-
-    showDeviceToast(`超温告警触发！温度 ${temp}℃ > 75℃，已关联工单 WO-20260826-018`, "danger");
   } else if (actionType === "simulate_dup") {
     showDeviceToast(`QoS 1 幂等拦截：重复消息编号已成功去重，不重复记录遥测与告警`, "warning");
   } else if (actionType === "ack_alarm") {
-    const note = document.getElementById("dlg_ack_note")?.value.trim();
-    if (dev.alarm) {
-      dev.alarm.stage = "Acked";
+    if (currentDeviceRole !== "engineer") {
+      showDeviceToast("权限不足：仅 IoT人员 (iot.engineer) 允许确认告警", "danger");
+      return;
+    }
+    const note = document.getElementById("dlg_ack_note")?.value.trim() || "现场已开启辅助风冷降温，降低主轴切削负荷，持续观察";
+    if (dev.alarm && (dev.alarm.stage === "Triggered" || (dev.alarm.stage === "Recovered" && !dev.alarm.ackedAt))) {
+      if (dev.alarm.stage !== "Recovered") {
+        dev.alarm.stage = "Acked";
+      }
       dev.alarm.ackedAt = timeStr;
       dev.alarm.ackedBy = "iot.engineer";
       dev.alarm.ackNote = note;
+      showDeviceToast(`告警 ${dev.alarm.id} 已完成人工确认，排查措施已记录`);
+    } else {
+      showDeviceToast("当前无可确认的活动告警", "warning");
     }
-    showDeviceToast("告警已确认，排查措施已记录");
   } else if (actionType === "edit_context") {
+    if (currentDeviceRole !== "engineer") {
+      showDeviceToast("权限不足：仅 IoT人员 (iot.engineer) 允许补充工序上下文", "danger");
+      return;
+    }
     const oe = document.getElementById("dlg_ctx_oe")?.value.trim();
     const wo = document.getElementById("dlg_ctx_wo")?.value.trim();
     if (dev.alarm) {
-      dev.alarm.operationExecutionId = oe;
-      dev.alarm.workOrderId = wo;
+      dev.alarm.operationExecutionId = oe || dev.alarm.operationExecutionId;
+      dev.alarm.workOrderId = wo || dev.alarm.workOrderId;
+      showDeviceToast("生产工序执行上下文已更新");
+    } else {
+      showDeviceToast("当前设备无告警事实可关联上下文", "warning");
     }
-    showDeviceToast("生产上下文已更新");
   }
 
   closeDeviceActionDialog();

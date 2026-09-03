@@ -1,12 +1,65 @@
 server:
-  port: 10001
+  port: 20001
 
 spring:
   application:
     name: platform-gateway
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      routes:
+        # Auth 认证与用户服务路由 (10002)
+        - id: auth-service
+          uri: ${AUTH_SERVICE_URI:http://localhost:10002}
+          predicates:
+            - Path=/api/auth/**,/api/me/**
+
+        # Core 业务核心服务路由 (10003)
+        - id: core-service
+          uri: ${CORE_SERVICE_URI:http://localhost:10003}
+          predicates:
+            - Path=/api/core/**,/api/purchasing/**,/api/sales/**,/api/inventory/**,/api/manufacturing/**,/api/quality/**,/api/traceability/**,/api/dashboard/**,/api/ai/**,/api/products/**,/api/warehouses/**,/api/locations/**,/api/purchase-orders/**,/api/purchase-receipts/**,/api/purchase-quality-dispositions/**,/api/putaway-tasks/**,/api/sales-orders/**,/api/pick-tasks/**,/api/sales-shipments/**,/api/transfers/**,/api/stocktakes/**,/api/work-orders/**,/api/dispatch-orders/**,/api/operation-executions/**,/api/work-reports/**,/api/quality-inspections/**,/api/material-issues/**,/api/material-returns/**,/api/finished-goods-receipts/**
+
+        # IoT 物联网与设备告警服务路由 (10004)
+        - id: iot-service
+          uri: ${IOT_SERVICE_URI:http://localhost:10004}
+          predicates:
+            - Path=/api/iot/**
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      timeout: 3000ms
+
+gateway:
+  security:
+    # RSA 验签公钥（若为空且处于非生产配置，网关可使用默认/共享测试公钥进行验签）
+    public-key: ${GATEWAY_JWT_PUBLIC_KEY:}
+    # 未注入固定公钥时，从 Auth 的 JWKS 端点按需加载动态公钥
+    jwks-url: ${AUTH_JWKS_URL:http://localhost:10002/api/auth/jwks}
+    # 是否启用 Redis 会话有效性与踢出置换校验
+    session-check-enabled: ${GATEWAY_SESSION_CHECK_ENABLED:true}
+    # 会话在 Redis 中的 key 前缀
+    session-key-prefix: "auth:session:"
+    # 免登录白名单路径列表
+    whitelist:
+      - /api/auth/login
+      - /api/auth/jwks
+      - /api/auth/refresh
+      - /actuator/**
+      - /actuator/health
+      - /internal/**
+      - /v3/api-docs/**
+      - /swagger-ui/**
+      - /swagger-ui.html
+      - /webjars/**
+      - /doc.html
+      - /favicon.ico
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,gateway

@@ -1,10 +1,11 @@
 services:
   postgres:
-    image: postgres:16
+    # 推荐使用 postgres:12.1；如该精确标签在目标环境不可用，可替换为与 PostgreSQL 12.1 兼容的 PostgreSQL 12 系列镜像。
+    image: postgres:12.1
     environment:
       POSTGRES_DB: ai_learn
-      POSTGRES_USER: ai_learn
-      POSTGRES_PASSWORD: ai_learn
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
       - "127.0.0.1:5433:5432"
     volumes:

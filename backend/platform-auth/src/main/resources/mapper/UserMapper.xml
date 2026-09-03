@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ailearn.platform.auth.mapper.UserMapper">
+
+    <!-- 根据用户 ID 与租户 ID 联查用户拥有的有效角色实体列表 -->
+    <select id="findRolesByUserIdAndTenantId" resultType="com.ailearn.platform.auth.domain.entity.Role">
+        SELECT r.id,
+               r.tenant_id AS tenantId,
+               r.role_code AS roleCode,
+               r.role_name AS roleName,
+               r.description,
+               r.status,
+               r.created_by AS createdBy,
+               r.created_at AS createdAt,
+               r.updated_by AS updatedBy,
+               r.updated_at AS updatedAt,
+               r.isdel
+        FROM auth_role r
+        INNER JOIN auth_user_role ur ON r.id = ur.role_id
+        WHERE ur.user_id = #{userId}
+          AND ur.tenant_id = #{tenantId}
+          AND r.status = 'ACTIVE'
+          AND r.isdel = 0
+          AND ur.isdel = 0
+        ORDER BY r.created_at ASC
+    </select>
+
+    <!-- 根据用户 ID 与租户 ID 联查用户拥有的有效角色编码列表 -->
+    <select id="findRoleCodesByUserIdAndTenantId" resultType="java.lang.String">
+        SELECT r.role_code
+        FROM auth_role r
+        INNER JOIN auth_user_role ur ON r.id = ur.role_id
+        WHERE ur.user_id = #{userId}
+          AND ur.tenant_id = #{tenantId}
+          AND r.status = 'ACTIVE'
+          AND r.isdel = 0
+          AND ur.isdel = 0
+        ORDER BY r.created_at ASC
+    </select>
+
+    <!-- 分页多条件动态检索用户列表 -->
+    <select id="selectUserPage" resultType="com.ailearn.platform.auth.domain.entity.User">
+        SELECT DISTINCT u.id,
+               u.tenant_id AS tenantId,
+               u.user_no AS userNo,
+               u.username,
+               u.password_hash AS passwordHash,
+               u.real_name AS realName,
+               u.email,
+               u.phone,
+               u.status,
+               u.created_by AS createdBy,
+               u.created_at AS createdAt,
+               u.updated_by AS updatedBy,
+               u.updated_at AS updatedAt,
+               u.isdel
+        FROM auth_user u
+        <if test="req.roleId != null">
+            INNER JOIN auth_user_role ur ON u.id = ur.user_id AND ur.isdel = 0
+        </if>
+        WHERE u.tenant_id = #{tenantId}
+          AND u.isdel = 0
+        <if test="req.username != null and req.username != ''">
+            AND u.username LIKE CONCAT('%', #{req.username}, '%')
+        </if>
+        <if test="req.realName != null and req.realName != ''">
+            AND u.real_name LIKE CONCAT('%', #{req.realName}, '%')
+        </if>
+        <if test="req.userNo != null and req.userNo != ''">
+            AND u.user_no LIKE CONCAT('%', #{req.userNo}, '%')
+        </if>
+        <if test="req.status != null and req.status != ''">
+            AND u.status = #{req.status}
+        </if>
+        <if test="req.roleId != null">
+            AND ur.role_id = #{req.roleId}
+            AND ur.tenant_id = #{tenantId}
+        </if>
+        ORDER BY u.created_at DESC
+    </select>
+
+    <!-- 统计指定租户下处于正常状态的管理员用户总数 -->
+    <select id="countActiveAdmins" resultType="int">
+        SELECT COUNT(DISTINCT u.id)
+        FROM auth_user u
+        INNER JOIN auth_user_role ur ON u.id = ur.user_id AND ur.tenant_id = #{tenantId} AND ur.isdel = 0
+        INNER JOIN auth_role r ON ur.role_id = r.id AND r.tenant_id = #{tenantId} AND r.isdel = 0
+        WHERE u.tenant_id = #{tenantId}
+          AND u.status = 'ACTIVE'
+          AND u.isdel = 0
+          AND r.status = 'ACTIVE'
+          AND (r.role_code = 'tenant.admin' OR r.role_code = 'TENANT_ADMIN')
+    </select>
+
+</mapper>

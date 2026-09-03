@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ailearn.platform.auth.mapper.MenuMapper">
+
+    <!-- 根据用户 ID 与租户 ID 联查用户关联的全部可见且启用的菜单列表 -->
+    <select id="findMenusByUserIdAndTenantId" resultType="com.ailearn.platform.auth.domain.entity.Menu">
+        SELECT DISTINCT m.id,
+                        m.parent_id AS parentId,
+                        m.tenant_id AS tenantId,
+                        m.menu_code AS menuCode,
+                        m.menu_name AS menuName,
+                        m.route_path AS routePath,
+                        m.component_path AS componentPath,
+                        m.icon,
+                        m.sort_order AS sortOrder,
+                        m.permission_code AS permissionCode,
+                        m.visible,
+                        m.status,
+                        m.created_at AS createdAt,
+                        m.updated_at AS updatedAt,
+                        m.isdel
+        FROM auth_menu m
+        INNER JOIN auth_role_menu rm ON m.id = rm.menu_id
+        INNER JOIN auth_user_role ur ON rm.role_id = ur.role_id
+        INNER JOIN auth_role r ON r.id = ur.role_id
+        WHERE ur.user_id = #{userId}
+          AND ur.tenant_id = #{tenantId}
+          AND m.tenant_id = #{tenantId}
+          AND m.visible = true
+          AND m.status = 'ACTIVE'
+          AND r.status = 'ACTIVE'
+          AND m.isdel = 0
+          AND rm.isdel = 0
+          AND ur.isdel = 0
+          AND r.isdel = 0
+        ORDER BY m.parent_id ASC NULLS FIRST, m.sort_order ASC
+    </select>
+
+    <!-- 管理后台查询指定租户下所有未删除的菜单并稳定排序 -->
+    <select id="findAllMenusForAdmin" resultType="com.ailearn.platform.auth.domain.entity.Menu">
+        SELECT m.id,
+               m.parent_id AS parentId,
+               m.tenant_id AS tenantId,
+               m.menu_code AS menuCode,
+               m.menu_name AS menuName,
+               m.route_path AS routePath,
+               m.component_path AS componentPath,
+               m.icon,
+               m.sort_order AS sortOrder,
+               m.permission_code AS permissionCode,
+               m.visible,
+               m.status,
+               m.created_at AS createdAt,
+               m.updated_at AS updatedAt,
+               m.isdel
+        FROM auth_menu m
+        WHERE m.tenant_id = #{tenantId}
+          AND m.isdel = 0
+        ORDER BY m.parent_id ASC NULLS FIRST, m.sort_order ASC, m.created_at ASC
+    </select>
+
+    <!-- 一次性查询当前租户内未删除且启用的菜单，用于授权前置完整校验 -->
+    <select id="findActiveMenusByIdsAndTenantId" resultType="com.ailearn.platform.auth.domain.entity.Menu">
+        SELECT m.id,
+               m.parent_id AS parentId,
+               m.tenant_id AS tenantId,
+               m.menu_code AS menuCode,
+               m.menu_name AS menuName,
+               m.route_path AS routePath,
+               m.component_path AS componentPath,
+               m.icon,
+               m.sort_order AS sortOrder,
+               m.permission_code AS permissionCode,
+               m.visible,
+               m.status,
+               m.created_at AS createdAt,
+               m.updated_at AS updatedAt,
+               m.isdel
+        FROM auth_menu m
+        WHERE m.tenant_id = #{tenantId}
+          AND m.isdel = 0
+          AND m.status = 'ACTIVE'
+          AND m.id IN
+          <foreach collection="menuIds" item="menuId" open="(" separator="," close=")">
+              #{menuId}
+          </foreach>
+    </select>
+
+    <!-- 统计指定租户下的直接子菜单数量 -->
+    <select id="countChildrenByParentId" resultType="int">
+        SELECT COUNT(1)
+        FROM auth_menu
+        WHERE parent_id = #{parentId}
+          AND tenant_id = #{tenantId}
+          AND isdel = 0
+    </select>
+
+    <!-- 统计指定租户内已被角色关联的记录数 -->
+    <select id="countAssignedRoles" resultType="int">
+        SELECT COUNT(1)
+        FROM auth_role_menu rm
+        INNER JOIN auth_role r ON rm.role_id = r.id AND r.tenant_id = #{tenantId} AND r.isdel = 0
+        WHERE rm.menu_id = #{menuId}
+          AND rm.isdel = 0
+    </select>
+
+    <!-- 根据角色 ID 查询分配的菜单 ID 列表 -->
+    <select id="findMenuIdsByRoleId" resultType="java.util.UUID">
+        SELECT rm.menu_id
+        FROM auth_role_menu rm
+        INNER JOIN auth_menu m ON rm.menu_id = m.id AND m.isdel = 0
+        WHERE rm.role_id = #{roleId}
+          AND rm.isdel = 0
+        ORDER BY m.parent_id ASC NULLS FIRST, m.sort_order ASC
+    </select>
+
+    <!-- 根据角色 ID 查询分配的菜单列表 -->
+    <select id="findMenusByRoleId" resultType="com.ailearn.platform.auth.domain.entity.Menu">
+        SELECT m.id,
+               m.parent_id AS parentId,
+               m.tenant_id AS tenantId,
+               m.menu_code AS menuCode,
+               m.menu_name AS menuName,
+               m.route_path AS routePath,
+               m.component_path AS componentPath,
+               m.icon,
+               m.sort_order AS sortOrder,
+               m.permission_code AS permissionCode,
+               m.visible,
+               m.status,
+               m.created_at AS createdAt,
+               m.updated_at AS updatedAt,
+               m.isdel
+        FROM auth_menu m
+        INNER JOIN auth_role_menu rm ON m.id = rm.menu_id
+        WHERE rm.role_id = #{roleId}
+          AND rm.isdel = 0
+          AND m.isdel = 0
+        ORDER BY m.parent_id ASC NULLS FIRST, m.sort_order ASC
+    </select>
+
+</mapper>

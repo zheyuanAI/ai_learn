@@ -9,7 +9,20 @@
   </parent>
   <artifactId>platform-auth</artifactId>
 
+  <properties>
+    <!-- 默认仅指向预先启动的独立 PostgreSQL 12.1 验证实例，绝不指向当前开发库；命令行 -D 可覆盖。 -->
+    <auth.test.pg12.jdbc-url>jdbc:postgresql://127.0.0.1:55432/postgres</auth.test.pg12.jdbc-url>
+    <auth.test.pg12.username>postgres</auth.test.pg12.username>
+    <auth.test.pg12.password>postgres</auth.test.pg12.password>
+  </properties>
+
   <dependencies>
+    <!-- 公共共享模块 -->
+    <dependency>
+      <groupId>com.ailearn</groupId>
+      <artifactId>platform-shared</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
@@ -19,17 +32,86 @@
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.ailearn</groupId>
-      <artifactId>platform-shared</artifactId>
-      <version>${project.version}</version>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-redis</artifactId>
+    </dependency>
+
+    <!-- 持久层与数据库 -->
+    <dependency>
+      <groupId>com.baomidou</groupId>
+      <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
+    </dependency>
+
+    <!-- OpenAPI 3 UI -->
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+    </dependency>
+
+    <!-- Nimbus JOSE + JWT (用于标准 RSA JWT 签发、验签与 JWKS 端点暴露) -->
+    <dependency>
+      <groupId>com.nimbusds</groupId>
+      <artifactId>nimbus-jose-jwt</artifactId>
+      <version>9.40</version>
+    </dependency>
+
+    <!-- 测试框架与内存数据库 -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 
   <build>
     <plugins>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <auth.test.pg12.jdbc-url>${auth.test.pg12.jdbc-url}</auth.test.pg12.jdbc-url>
+            <auth.test.pg12.username>${auth.test.pg12.username}</auth.test.pg12.username>
+            <auth.test.pg12.password>${auth.test.pg12.password}</auth.test.pg12.password>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+      <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>repackage</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

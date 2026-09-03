@@ -221,7 +221,7 @@ window.businessArchitectureData = {
         { direction: "read", module: "GIS / 看板 / AI", text: "提供设备、状态和告警只读事实。" }
       ],
       ownedFacts: ["设备身份与接入状态", "原始遥测", "当前设备状态快照", "告警生命周期"],
-      boundaries: ["IoT 使用独立 schema（数据库命名空间），不直接读写 Core 表。", "设备主数据不保存当前工单；生产关联属于工序执行上下文。", "Core 故障不得导致已接收遥测或告警丢失。", "遥测、状态、告警三类事实不可合并。"],
+      boundaries: ["IoT 与 Core 共用同一 PostgreSQL 12.1 实例的 public schema，通过表名前缀、服务访问边界和软引用/受控外键隔离，不直接读写 Core 表。", "设备主数据不保存当前工单；生产关联属于工序执行上下文。", "Core 故障不得导致已接收遥测或告警丢失。", "遥测、状态、告警三类事实不可合并。"],
       exceptions: ["QoS 1 重复投递", "同一去重键不同载荷", "凭证失效或设备停用", "消息指标不在设备模型或类型错误", "延迟数据试图回滚当前状态", "Core 暂不可用或告警上下文无法可靠判断"],
       extensions: ["真实 PLC 接入", "OPC UA / Modbus 适配", "规则引擎", "边缘计算", "三维数字孪生", "设备预测维护"],
       specs: [
@@ -418,7 +418,7 @@ window.businessArchitectureData = {
         states: ["页面本地交互状态"], exceptions: ["不得把前端隐藏按钮当作最终授权"], sources: ["项目架构设计", "原型与交互说明"]
       },
       {
-        id: "gateway", title: "Gateway", port: "10001", detail: "统一入口，并分别路由到 Auth、Core 或 IoT。",
+        id: "gateway", title: "Gateway", port: "20001", detail: "统一入口，并分别路由到 Auth、Core 或 IoT。",
         roles: ["系统入口"], inputs: ["Frontend 请求", "Token 与权限元数据"], outputs: ["Auth / Core / IoT 路由请求", "统一异常响应"],
         states: ["无领域状态"], exceptions: ["不执行领域业务逻辑", "不把 IoT 请求转发给 Core"], sources: ["项目架构设计 / 服务边界"]
       },

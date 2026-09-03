@@ -11,3 +11,4 @@ runtime/*
 /tmp/
 /output/
 /.playwright-cli/
+/.mvn-local-repo/

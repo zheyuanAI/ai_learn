@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="IotApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <module name="platform-iot" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.ailearn.platform.iot.IotApplication" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

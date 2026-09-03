@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ailearn.platform.auth.mapper.PermissionMapper">
+
+    <!-- 根据用户 ID 与租户 ID 多表联查用户对应的全部功能权限点编码集合 -->
+    <select id="findPermissionCodesByUserIdAndTenantId" resultType="java.lang.String">
+        SELECT DISTINCT p.permission_code
+        FROM auth_permission p
+        INNER JOIN auth_role_permission rp ON p.id = rp.permission_id
+        INNER JOIN auth_user_role ur ON rp.role_id = ur.role_id
+        INNER JOIN auth_role r ON r.id = ur.role_id
+        WHERE ur.user_id = #{userId}
+          AND ur.tenant_id = #{tenantId}
+          AND r.status = 'ACTIVE'
+          AND p.isdel = 0
+          AND rp.isdel = 0
+          AND ur.isdel = 0
+          AND r.isdel = 0
+        ORDER BY p.permission_code ASC
+    </select>
+
+    <!-- 根据用户 ID 与租户 ID 多表联查用户对应的全部功能权限实体列表 -->
+    <select id="findPermissionsByUserIdAndTenantId" resultType="com.ailearn.platform.auth.domain.entity.Permission">
+        SELECT DISTINCT p.id,
+                        p.permission_code AS permissionCode,
+                        p.permission_name AS permissionName,
+                        p.module,
+                        p.description,
+                        p.created_at AS createdAt,
+                        p.updated_at AS updatedAt,
+                        p.isdel
+        FROM auth_permission p
+        INNER JOIN auth_role_permission rp ON p.id = rp.permission_id
+        INNER JOIN auth_user_role ur ON rp.role_id = ur.role_id
+        INNER JOIN auth_role r ON r.id = ur.role_id
+        WHERE ur.user_id = #{userId}
+          AND ur.tenant_id = #{tenantId}
+          AND r.status = 'ACTIVE'
+          AND p.isdel = 0
+          AND rp.isdel = 0
+          AND ur.isdel = 0
+          AND r.isdel = 0
+        ORDER BY p.permission_code ASC
+    </select>
+
+    <!-- 多条件动态查询权限点列表 -->
+    <select id="selectPermissionsByCondition" resultType="com.ailearn.platform.auth.domain.entity.Permission">
+        SELECT p.id,
+               p.permission_code AS permissionCode,
+               p.permission_name AS permissionName,
+               p.module,
+               p.description,
+               p.created_at AS createdAt,
+               p.updated_at AS updatedAt,
+               p.isdel
+        FROM auth_permission p
+        WHERE p.isdel = 0
+        <if test="module != null and module != ''">
+            AND p.module = #{module}
+        </if>
+        <if test="permissionCode != null and permissionCode != ''">
+            AND p.permission_code LIKE CONCAT('%', #{permissionCode}, '%')
+        </if>
+        <if test="permissionName != null and permissionName != ''">
+            AND p.permission_name LIKE CONCAT('%', #{permissionName}, '%')
+        </if>
+        ORDER BY p.module ASC, p.permission_code ASC
+    </select>
+
+    <!-- 根据角色 ID 查询已分配的权限点 ID 列表 -->
+    <select id="findPermissionIdsByRoleId" resultType="java.util.UUID">
+        SELECT rp.permission_id
+        FROM auth_role_permission rp
+        INNER JOIN auth_permission p ON rp.permission_id = p.id AND p.isdel = 0
+        WHERE rp.role_id = #{roleId}
+          AND rp.isdel = 0
+        ORDER BY p.module ASC, p.permission_code ASC
+    </select>
+
+    <!-- 根据角色 ID 查询已分配的权限点实体列表 -->
+    <select id="findPermissionsByRoleId" resultType="com.ailearn.platform.auth.domain.entity.Permission">
+        SELECT p.id,
+               p.permission_code AS permissionCode,
+               p.permission_name AS permissionName,
+               p.module,
+               p.description,
+               p.created_at AS createdAt,
+               p.updated_at AS updatedAt,
+               p.isdel
+        FROM auth_permission p
+        INNER JOIN auth_role_permission rp ON p.id = rp.permission_id
+        WHERE rp.role_id = #{roleId}
+          AND rp.isdel = 0
+          AND p.isdel = 0
+        ORDER BY p.module ASC, p.permission_code ASC
+    </select>
+
+</mapper>

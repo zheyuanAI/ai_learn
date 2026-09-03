@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="CoreApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <module name="platform-core" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.ailearn.platform.core.CoreApplication" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

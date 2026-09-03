@@ -1,19 +1,21 @@
 # Local Development Baseline Implementation Plan
 
+> **已废止（历史追溯）：** 本文仅记录 2026-08-19 的本地基线实施过程，不代表当前项目方案。当前 Java、Maven、数据库和运行入口以 `AGENTS.md`、`CLAUDE.md` 及 `docs/specs/00-project/` 正式规格为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 固化自研项目的 Node 20、PostgreSQL 5433、四服务端口，并在项目内部准备可手动启动的 Redis 3.0.504 与 Mosquitto 2.1.2。
 
 **Architecture:** 采用“版本化配置 + Git 忽略的本机运行包”模式：`deploy/local/` 保存可审查配置，`runtime/` 保存二进制、数据和日志。现有 Docker Compose 保留为未来可选入口，本次不启动服务、不安装前后端依赖、不执行构建。
 
-**Tech Stack:** Windows PowerShell 7、Java 21、Maven 3.9.1、Node.js 20、PostgreSQL 16、Redis for Windows 3.0.504、Eclipse Mosquitto 2.1.2 x64、Spring Boot 3.3.5。
+**Tech Stack:** Windows PowerShell 7、Java 21、Maven 3.9.1、Node.js 20、PostgreSQL 12.1、Redis for Windows 3.0.504、Eclipse Mosquitto 2.1.2 x64、Spring Boot 3.3.5。
 
 ## Global Constraints
 
 - Java 固定为 21，由 IntelliJ IDEA 使用 `D:\ruanjian\IntelliJ IDEA 2025.1\jbr`。
 - Maven 固定为 3.9.1，由 IntelliJ IDEA 使用 `D:\ruanjian\apache-maven-3.9.1`。
 - 自研项目前端固定使用 Node.js 20；参考工程的 Node 22 配置不得删除或改写。
-- PostgreSQL 固定为 `127.0.0.1:5433`，Redis 固定为 `127.0.0.1:6379`，Mosquitto 固定为 `127.0.0.1:1883`。
+- PostgreSQL 12.1 固定为 `127.0.0.1:5433`，Redis 固定为 `127.0.0.1:6379`，Mosquitto 固定为 `127.0.0.1:1883`。
 - Gateway、Auth、Core、IoT 分别固定为 10001、10002、10003、10004。
 - Redis 与 Mosquitto 仅监听 `127.0.0.1`，不注册 Windows 服务，不自动终止已有进程。
 - 不执行 `npm install`、`npm run build`、`mvn package` 或 `mvn compile`。

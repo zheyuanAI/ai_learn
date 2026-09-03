@@ -20,9 +20,9 @@
 
 ## 本地开发环境基线
 - 详细版本、端口与中间件边界以 `docs/specs/00-project/架构设计.md` 为准，以下为快速摘要。
-- 自研项目统一使用 Java 21、Maven 3.9.1、Node 20 与 PostgreSQL 16（端口 5433）。
-- Gateway、Auth、Core、IoT 分别使用 10001、10002、10003、10004；Redis 和 Mosquitto 的项目内手动启动位置见 `runtime/README.md`。
-- 参考工程可继续保留各自的 Node 22 与 PostgreSQL 16（端口 5323）配置。
+- 当前本机开发实例使用 Java 21、Maven 3.9.1、Node 20 与 PostgreSQL 12.1（`127.0.0.1:5433/ai_learn`）；SQL/Flyway 兼容性以下限 12.1 为准。
+- Gateway、Auth、Core、IoT 分别使用 20001、10002、10003、10004；Redis 和 Mosquitto 的项目内手动启动位置见 `runtime/README.md`。
+- 参考工程可继续保留各自的 Node 22 与 PostgreSQL 12.1 及以上兼容配置；其中出现的历史端口或高版本示例不代表当前项目事实。
 
 ## 文件结构
 

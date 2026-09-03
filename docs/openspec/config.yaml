@@ -2,7 +2,7 @@ schema: ai-learn-platform
 
 context: |
   项目名称：制造与仓储协同、设备数字孪生与 AI 助手平台
-  技术栈：Java 21；Maven 3.9.1；Vue 3 + Vite + TypeScript；Spring Boot 多模块；PostgreSQL 16（5433）；Redis（6379）；Mosquitto（1883）
+  技术栈：Java 21；Maven 3.9.1；Vue 3 + Vite + TypeScript；Spring Boot 多模块；当前开发 PostgreSQL 12.1（`127.0.0.1:5433/ai_learn`，SQL/Flyway 兼容性以下限 12.1 为准）；Redis（6379）；Mosquitto（1883）
   一期不启用：RabbitMQ、MinIO；二者属于二期候选能力，不作为本月本地启动条件
   包管理器：前端按 npm 使用；锁文件未在仓库中确认
   Node 版本要求：Node 20

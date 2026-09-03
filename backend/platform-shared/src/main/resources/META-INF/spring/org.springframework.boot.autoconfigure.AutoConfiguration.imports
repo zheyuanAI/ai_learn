@@ -1,0 +1,2 @@
+com.ailearn.platform.shared.config.SharedAutoConfiguration
+com.ailearn.platform.shared.config.WebMvcConfig

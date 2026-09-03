@@ -4,6 +4,13 @@
 
 运行包记录必须包含组件名称、准确版本、发布页、直接下载地址、SHA256、可执行文件绝对路径和手动启动命令。只有从本机下载文件计算出 SHA256 后才能写入对应记录，禁止预填或猜测哈希。
 
+## 当前工程工具链与数据库基线
+
+- Java 21：`D:\AI\ai_learn_wms_ai\ai_learn_developProject\runtime\jdk`
+- Maven 3.9.1：`D:\ruanjian\apache-maven-3.9.1`；依赖仓库：`D:\project\MavenRepository391`
+- 本机开发数据库：PostgreSQL 12.1，`127.0.0.1:5433/ai_learn`；SQL/Flyway 兼容性以下限 12.1 为准
+- 本目录不提供数据库运行包；真实迁移验证使用独立的 PostgreSQL 12.1 验证实例，禁止写入本机开发数据库
+
 手动启动前先确认 6379 和 1883 未被其他进程占用。
 
 6379 被占用时，不得直接复用既有 Redis；仅当用户先验证该实例只绑定 `127.0.0.1`/`::1`，且认证策略与项目配置一致时才可复用。当前观察到监听 `0.0.0.0/[::]:6379` 的 Redis 不符合该条件，不能直接复用；自动化不得停止既有进程。
@@ -44,3 +51,18 @@ Set-Location 'D:\AI\ai_learn_wms_ai\ai_learn_developProject\runtime\redis-3.0.50
 本任务仅完成下载、静默安装和只读检查，未启动 Mosquitto Broker。
 
 审计说明：未捕获安装程序退出码；已以官方 URL、SHA256、已安装的 `mosquitto.exe` 2.1.2、帮助命令退出码、忽略的 PATH 以及原服务 PID 未变化作为补偿验证，未重跑安装程序。
+
+## OpenJDK 21 (Eclipse Temurin)
+
+- 组件：Eclipse Temurin OpenJDK 21.0.12.1+1（HotSpot Windows x64 发布包）
+- 发布页：https://github.com/adoptium/temurin21-binaries/releases/tag/jdk-21.0.12.1%2B1
+- 直接下载地址：https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_windows_hotspot_21.0.12.1_1.zip
+- ZIP 文件大小：205073461 字节
+- SHA256：F9D6E191AB098C0D416E7D588A24420A8621CD2F4720DAB2459B8B7B2D2D8B4E
+- 可执行文件：`D:\AI\ai_learn_wms_ai\ai_learn_developProject\runtime\jdk\bin\java.exe`
+
+验证命令：
+
+```powershell
+& 'D:\AI\ai_learn_wms_ai\ai_learn_developProject\runtime\jdk\bin\java.exe' -version
+```

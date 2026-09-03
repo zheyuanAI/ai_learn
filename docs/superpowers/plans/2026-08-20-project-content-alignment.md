@@ -1,6 +1,8 @@
 # Project Content Alignment Implementation Plan
 
 > **历史实施计划（2026-08-20）：** 本文保留当时的实施背景与步骤记录；当前正式事实源路径已迁移至 `docs/specs/`，下列路径均已同步为现行中文文件名。
+>
+> **已废止：** 本文仅供变更追溯，不代表当前项目方案；当前数据库基线与架构以 `AGENTS.md`、`CLAUDE.md` 和 `docs/specs/00-project/` 正式规格为准。
 
 **Goal:** 以已批准的制造与仓储协同执行平台项目计划为准，清理自研项目中与项目定位、一期范围、领域语义、原型和运行基线不一致的内容。
 
@@ -20,7 +22,7 @@
 ## Global Constraints
 
 - 正式事实源：`docs/specs/00-project/正式项目计划.md` 与 `docs/词汇定义表.md`。
-- 一期中间件仅包含 PostgreSQL 16（5433）、Redis（6379）和 Mosquitto（1883）。
+- 一期中间件仅包含 PostgreSQL 12.1（5433）、Redis（6379）和 Mosquitto（1883）。
 - 后端保持 Gateway 10001、Auth 10002、Core 10003、IoT 10004 四服务。
 - 一期人工建立销售、生产、采购供需关联，不实现 MRP、APS 或自动排产。
 - 库存统一使用 `reserved_qty`，禁止与 `frozen_qty` 并存。

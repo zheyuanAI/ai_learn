@@ -1,0 +1,42 @@
+server:
+  port: 10002
+
+spring:
+  application:
+    name: platform-auth-test
+  flyway:
+    enabled: false
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:auth_test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password: ''
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema-h2.sql
+      data-locations: classpath:data-h2.sql
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+    serialization:
+      write-dates-as-timestamps: false
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.ailearn.platform.auth.domain.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    db-config:
+      id-type: input
+
+auth:
+  session-cache:
+    type: memory
+  jwt:
+    issuer: ai-learn-platform
+    audience: ai-learn-platform
+    access-token-expiration-seconds: 7200
+    rsa-key-id: ai-learn-auth-key-1

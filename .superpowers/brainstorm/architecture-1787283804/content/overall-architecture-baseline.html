@@ -101,7 +101,7 @@
     </div>
   </div>
 
-  <div class="flow"><span>独立 schema / MQTT QoS 1 / Redis 辅助能力 ↓</span></div>
+  <div class="flow"><span>统一 public schema / MQTT QoS 1 / Redis 辅助能力 ↓</span></div>
 
   <div class="layer">
     <div class="layer-label">基础设施层</div>
@@ -111,8 +111,8 @@
         <p>一期辅助能力；具体缓存、会话或幂等 Key 尚未冻结，不能先假定。</p>
       </div>
       <div class="box database">
-        <h3>PostgreSQL 16 · 5433</h3>
-        <p>目标为单实例、Auth/Core/IoT 独立 schema；跨模块禁止直接改表。</p>
+        <h3>PostgreSQL 12.1 · 5433</h3>
+        <p>目标为单实例、Auth/Core/IoT 共用 public schema；跨模块禁止直接改表。</p>
         <div class="status">当前：Compose 已配置，尚无迁移脚本、实体映射和真实连接配置。</div>
       </div>
       <div class="box device">

@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ailearn.platform.auth.mapper.RoleMapper">
+
+    <!-- 根据租户 ID 及条件动态查询角色列表 -->
+    <select id="selectRolesByCondition" resultType="com.ailearn.platform.auth.domain.entity.Role">
+        SELECT r.id,
+               r.tenant_id AS tenantId,
+               r.role_code AS roleCode,
+               r.role_name AS roleName,
+               r.description,
+               r.status,
+               r.created_by AS createdBy,
+               r.created_at AS createdAt,
+               r.updated_by AS updatedBy,
+               r.updated_at AS updatedAt,
+               r.isdel
+        FROM auth_role r
+        WHERE r.tenant_id = #{tenantId}
+          AND r.isdel = 0
+        <if test="roleCode != null and roleCode != ''">
+            AND r.role_code LIKE CONCAT('%', #{roleCode}, '%')
+        </if>
+        <if test="roleName != null and roleName != ''">
+            AND r.role_name LIKE CONCAT('%', #{roleName}, '%')
+        </if>
+        <if test="status != null and status != ''">
+            AND r.status = #{status}
+        </if>
+        ORDER BY r.created_at ASC
+    </select>
+
+    <!-- 一次性查询当前租户内未删除且启用的角色，用于用户授权前置完整校验 -->
+    <select id="findActiveRolesByIdsAndTenantId" resultType="com.ailearn.platform.auth.domain.entity.Role">
+        SELECT r.id,
+               r.tenant_id AS tenantId,
+               r.role_code AS roleCode,
+               r.role_name AS roleName,
+               r.description,
+               r.status,
+               r.created_by AS createdBy,
+               r.created_at AS createdAt,
+               r.updated_by AS updatedBy,
+               r.updated_at AS updatedAt,
+               r.isdel
+        FROM auth_role r
+        WHERE r.tenant_id = #{tenantId}
+          AND r.isdel = 0
+          AND r.status = 'ACTIVE'
+          AND r.id IN
+          <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">
+              #{roleId}
+          </foreach>
+    </select>
+
+    <!-- 统计已分配该角色的用户总数 -->
+    <select id="countAssignedUsers" resultType="int">
+        SELECT COUNT(DISTINCT ur.user_id)
+        FROM auth_user_role ur
+        INNER JOIN auth_user u ON ur.user_id = u.id AND u.isdel = 0
+        WHERE ur.tenant_id = #{tenantId}
+          AND ur.role_id = #{roleId}
+          AND ur.isdel = 0
+    </select>
+
+    <!-- 统计该角色关联的权限点数量 -->
+    <select id="countRolePermissions" resultType="int">
+        SELECT COUNT(DISTINCT rp.permission_id)
+        FROM auth_role_permission rp
+        INNER JOIN auth_permission p ON rp.permission_id = p.id AND p.isdel = 0
+        WHERE rp.role_id = #{roleId}
+          AND rp.isdel = 0
+    </select>
+
+</mapper>

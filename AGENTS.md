@@ -3,7 +3,7 @@
 ## 项目概览
 
 - 项目名称：制造与仓储协同执行平台
-- 当前工程基线：Java 21、Maven 3.9.1、Spring Boot 3.3.5、Node 20、Vue 3、Vite 5、TypeScript、PostgreSQL 16、Redis、Mosquitto
+- 当前工程基线：Java 21（D:\AI\ai_learn_wms_ai\ai_learn_developProject\runtime\jdk）、Maven 3.9.1（实际位置D:\ruanjian\apache-maven-3.9.1；仓库：D:\project\MavenRepository391）、Spring Boot 3.3.5、Node 20、Vue 3、Vite 5、TypeScript、PostgreSQL 12.1（本机开发实例 `127.0.0.1:5433/ai_learn`，SQL/Flyway 兼容性以下限 12.1 为准），Redis、Mosquitto
 - 项目目标：以销售需求、人工供需关联、采购、库存、制造执行、IoT 事实和销售交付组成可追溯黄金业务闭环
 - 一期边界：RabbitMQ、MinIO、pgvector、三维数字孪生、RAG、MRP、APS 和完整财务均不进入一期
 
@@ -16,10 +16,10 @@
 
 ## 本地开发环境基线
 
-- 自研项目在 IDEA 中使用 Java 21、Maven 3.9.1 和 Node 20；PostgreSQL 16 使用端口 5433。
-- Gateway、Auth、Core、IoT 分别使用 10001、10002、10003、10004。
+- 自研项目在 IDEA 中使用 Java 21、Maven 3.9.1 和 Node 20；当前本机 PostgreSQL 12.1 实例为 `127.0.0.1:5433/ai_learn`，SQL/Flyway 兼容性以下限 12.1 为准。
+- Gateway、Auth、Core、IoT 分别使用 20001、10002、10003、10004。
 - Redis 与 Mosquitto 的项目内位置和手动启动命令以 `runtime/README.md` 为准。
-- 参考工程可继续保留各自的 Node 22 与 PostgreSQL 16（端口 5323）配置。
+- 参考工程可继续保留各自的 Node 22 与 PostgreSQL 12.1 及以上兼容配置；其中出现的历史端口或高版本示例不代表当前项目事实。
 
 ## 任务路由与 OpenSpec
 

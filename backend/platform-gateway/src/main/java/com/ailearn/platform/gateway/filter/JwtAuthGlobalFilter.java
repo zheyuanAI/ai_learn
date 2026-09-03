@@ -42,6 +42,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
 /**
  * 网关全局 JWT 认证与会话有效性校验过滤器。
@@ -60,6 +61,9 @@ import reactor.core.publisher.Mono;
 public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
 
     private static final Logger log = LoggerFactory.getLogger(JwtAuthGlobalFilter.class);
+    /** Redis 会话刚写入时允许短暂空读，最多重试两次，避免登录并发请求被误判为已注销。 */
+    private static final int SESSION_CACHE_MISS_RETRIES = 2;
+    private static final Duration SESSION_CACHE_MISS_RETRY_DELAY = Duration.ofMillis(100);
 
     private final GatewaySecurityProperties properties;
     private final ReactiveStringRedisTemplate redisTemplate;
@@ -290,7 +294,8 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
         // 6. 校验 Redis 中的有效会话（单账号单有效会话控制，硬依赖 Redis）
         if (properties.isSessionCheckEnabled() && redisTemplate != null) {
             String sessionKey = properties.getSessionKeyPrefix() + (StringUtils.hasText(tenantId) ? tenantId : "default") + ":" + userId;
-            return redisTemplate.opsForValue().get(sessionKey)
+            // 先处理 Redis 读取结果再转发；下游 Mono<Void> 正常完成本身为空，不能再用空结果判断会话未命中。
+            return getSessionJtiWithMissRetry(sessionKey)
                     .timeout(Duration.ofMillis(2000))
                     .flatMap(cachedJti -> {
                         if (!jti.equals(cachedJti)) {
@@ -299,10 +304,10 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
                         }
                         return forwardToDownstream(exchange, chain, payload, finalRequestId);
                     })
-                    .switchIfEmpty(Mono.defer(() -> {
+                    .onErrorResume(SessionCacheMissException.class, ignored -> {
                         log.warn("Redis 中未找到有效会话: key={}", sessionKey);
                         return writeErrorResponse(exchange, HttpStatus.UNAUTHORIZED, 401, "登录会话已过期或已被注销", finalRequestId);
-                    }))
+                    })
                     .onErrorResume(ex -> {
                         log.error("校验 Redis 会话失败或超时: {}", ex.getMessage());
                         // Redis 异常时快速失败返回 503，禁止数据库回查与内存兜底
@@ -312,6 +317,29 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
 
         // 若未启用 Redis 会话校验，直接转发下游
         return forwardToDownstream(exchange, chain, payload, finalRequestId);
+    }
+
+    /**
+     * 读取 Redis 会话 JTI，并对会话写入窗口内的空结果做有限重试。
+     * 入参：完整会话 key；出参：当前 JTI，重试耗尽仍未命中时返回空 Mono；流程：将空读转换为内部哨兵异常重试，
+     * Redis 连接异常保持原样向上抛出，交由调用方返回 503。
+     *
+     * @param sessionKey 完整 Redis 会话 key
+     * @return 会话 JTI 或空结果
+     */
+    private Mono<String> getSessionJtiWithMissRetry(String sessionKey) {
+        return Mono.defer(() -> redisTemplate.opsForValue().get(sessionKey))
+                .switchIfEmpty(Mono.defer(() -> Mono.error(new SessionCacheMissException())))
+                .retryWhen(Retry.fixedDelay(SESSION_CACHE_MISS_RETRIES, SESSION_CACHE_MISS_RETRY_DELAY)
+                        .filter(SessionCacheMissException.class::isInstance)
+                        .onRetryExhaustedThrow((retrySpec, retrySignal) -> retrySignal.failure()));
+    }
+
+    /** 仅用于区分“会话尚未写入”的空读与 Redis 连接异常。 */
+    private static final class SessionCacheMissException extends RuntimeException {
+        private SessionCacheMissException() {
+            super("Redis session cache miss");
+        }
     }
 
     /**

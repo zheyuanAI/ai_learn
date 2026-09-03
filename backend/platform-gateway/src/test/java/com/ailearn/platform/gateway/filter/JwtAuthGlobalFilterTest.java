@@ -159,6 +159,7 @@ class JwtAuthGlobalFilterTest {
 
         String authHeader = forwardedRequest.getHeaders().getFirst(HeaderConstants.X_AUTHORITIES);
         assertNull(authHeader, "网关不再向请求头中注入 X-Authorities，由下游微服务业务鉴权独立判断");
+        assertNull(exchange.getResponse().getStatusCode(), "下游 Mono<Void> 正常完成不能被误判为 Redis 会话未命中");
     }
 
     @Test
@@ -194,6 +195,73 @@ class JwtAuthGlobalFilterTest {
         JsonNode jsonNode = objectMapper.readTree(responseBody);
         assertEquals(503, jsonNode.get("code").asInt());
         assertTrue(jsonNode.get("message").asText().contains("会话服务暂时不可用"));
+    }
+
+    @Test
+    @DisplayName("测试用例3-3：Redis 会话首次空读但随后写入有效 JTI 时应重试并放行")
+    void testTransientSessionMissRetriesBeforeRejecting() {
+        String tenantId = "tenant-test-101";
+        String userId = "user-test-202";
+        String username = "operator_a";
+        String jti = "session-uuid-001";
+
+        TokenPayload payload = new TokenPayload(userId, tenantId, username, jti, Set.of("ROLE_WAREHOUSE"));
+        String token = JwtUtils.generateToken(payload, keyPair.getPrivate(), Duration.ofHours(2));
+
+        String sessionKey = "auth:session:" + tenantId + ":" + userId;
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        // 模拟会话写入与网关校验请求交错：第一次读取为空，随后读取到本次 Token 的 JTI。
+        when(valueOperations.get(sessionKey)).thenReturn(Mono.empty(), Mono.just(jti));
+        when(filterChain.filter(any(ServerWebExchange.class))).thenReturn(Mono.empty());
+
+        MockServerHttpRequest request = MockServerHttpRequest
+                .get("/api/core/purchase-orders")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HeaderConstants.X_REQUEST_ID, "req-transient-session-1")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        StepVerifier.create(filter.filter(exchange, filterChain))
+                .verifyComplete();
+
+        verify(valueOperations, times(2)).get(sessionKey);
+        verify(filterChain, times(1)).filter(any(ServerWebExchange.class));
+        assertNull(exchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    @DisplayName("测试用例3-4：Redis 会话重试后仍未命中时返回 401")
+    void testMissingSessionReturns401AfterRetries() throws Exception {
+        String tenantId = "tenant-test-101";
+        String userId = "user-test-202";
+        String jti = "session-uuid-missing";
+
+        TokenPayload payload = new TokenPayload(userId, tenantId, "operator_a", jti, Set.of());
+        String token = JwtUtils.generateToken(payload, keyPair.getPrivate(), Duration.ofHours(2));
+
+        String sessionKey = "auth:session:" + tenantId + ":" + userId;
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(sessionKey)).thenReturn(Mono.empty());
+
+        MockServerHttpRequest request = MockServerHttpRequest
+                .get("/api/core/purchase-orders")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HeaderConstants.X_REQUEST_ID, "req-missing-session-1")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        StepVerifier.create(filter.filter(exchange, filterChain))
+                .verifyComplete();
+
+        assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode());
+        verify(filterChain, never()).filter(any());
+        verify(valueOperations, times(3)).get(sessionKey);
+
+        String responseBody = exchange.getResponse().getBodyAsString().block();
+        assertNotNull(responseBody);
+        JsonNode jsonNode = objectMapper.readTree(responseBody);
+        assertEquals(401, jsonNode.get("code").asInt());
+        assertTrue(jsonNode.get("message").asText().contains("登录会话已过期或已被注销"));
     }
 
     @Test

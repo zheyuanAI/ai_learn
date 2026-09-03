@@ -1,9 +1,0 @@
-<component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="[一键启动] 全部后端 (4个微服务)" type="CompoundRunConfigurationType">
-    <toRun name="GatewayApplication" type="SpringBootApplicationConfigurationType" />
-    <toRun name="AuthApplication" type="SpringBootApplicationConfigurationType" />
-    <toRun name="CoreApplication" type="SpringBootApplicationConfigurationType" />
-    <toRun name="IotApplication" type="SpringBootApplicationConfigurationType" />
-    <method v="2" />
-  </configuration>
-</component>

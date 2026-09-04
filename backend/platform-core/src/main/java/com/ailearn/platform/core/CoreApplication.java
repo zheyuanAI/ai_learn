@@ -1,7 +1,6 @@
 package com.ailearn.platform.core;
 
 import com.ailearn.platform.shared.security.SharedSecurityConfig;
-import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;

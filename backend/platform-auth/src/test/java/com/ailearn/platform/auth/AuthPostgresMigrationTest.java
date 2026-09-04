@@ -81,7 +81,7 @@ class AuthPostgresMigrationTest {
     }
 
     @Test
-    void freshDatabaseMigratesV1ThroughV5AndKeepsTenantIntegrity() throws Exception {
+    void freshDatabaseMigratesV1ThroughV6AndKeepsTenantIntegrity() throws Exception {
         String databaseName = createDatabase();
         try {
             String jdbcUrl = databaseJdbcUrl(databaseName);
@@ -95,7 +95,7 @@ class AuthPostgresMigrationTest {
 
             try (Connection connection = DriverManager.getConnection(jdbcUrl, adminUsername, adminPassword)) {
                 assertConnectedDatabase(connection, databaseName);
-                assertMigrationHistory(connection, "auth_flyway_schema_history", 5, "5");
+                assertMigrationHistory(connection, "auth_flyway_schema_history", 6, "6");
                 assertMenuSchemaAndTenantData(connection);
                 assertDefaultAdminStillHasMenus(connection);
             }
@@ -105,7 +105,7 @@ class AuthPostgresMigrationTest {
     }
 
     @Test
-    void v1ThroughV4DatabaseCanBeHandedOffWithoutTouchingSharedHistoryAndThenRunOnlyV5() throws Exception {
+    void v1ThroughV4DatabaseCanBeHandedOffWithoutTouchingSharedHistoryAndThenRunV5AndV6() throws Exception {
         String databaseName = createDatabase();
         try {
             String jdbcUrl = databaseJdbcUrl(databaseName);
@@ -140,14 +140,21 @@ class AuthPostgresMigrationTest {
             try (Connection connection = DriverManager.getConnection(jdbcUrl, adminUsername, adminPassword)) {
                 assertConnectedDatabase(connection, databaseName);
                 assertHistoryRowsEqual(sharedHistoryBefore, readHistoryRows(connection, "flyway_schema_history"));
-                assertMigrationHistory(connection, "auth_flyway_schema_history", 5, "5");
+                assertMigrationHistory(connection, "auth_flyway_schema_history", 6, "6");
                 assertEquals(1, scalarInt(connection,
                         "SELECT COUNT(*) FROM auth_flyway_schema_history "
                                 + "WHERE version = '5' AND script = 'V5__menu_tenant_isolation_and_visible_status.sql' "
                                 + "AND success = TRUE"));
+                assertEquals(1, scalarInt(connection,
+                        "SELECT COUNT(*) FROM auth_flyway_schema_history "
+                                + "WHERE version = '6' AND script = 'V6__complete_stage_2_7_permissions.sql' "
+                                + "AND success = TRUE"));
                 assertEquals(0, scalarInt(connection,
                         "SELECT COUNT(*) FROM flyway_schema_history "
                                 + "WHERE script = 'V5__menu_tenant_isolation_and_visible_status.sql'"));
+                assertEquals(0, scalarInt(connection,
+                        "SELECT COUNT(*) FROM flyway_schema_history "
+                                + "WHERE script = 'V6__complete_stage_2_7_permissions.sql'"));
                 assertMenuSchemaAndTenantData(connection);
                 assertDefaultAdminStillHasMenus(connection);
             }

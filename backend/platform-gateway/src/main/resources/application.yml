@@ -20,13 +20,13 @@ spring:
         - id: core-service
           uri: ${CORE_SERVICE_URI:http://localhost:10003}
           predicates:
-            - Path=/api/core/**,/api/purchasing/**,/api/sales/**,/api/inventory/**,/api/manufacturing/**,/api/quality/**,/api/traceability/**,/api/dashboard/**,/api/ai/**,/api/products/**,/api/warehouses/**,/api/locations/**,/api/purchase-orders/**,/api/purchase-receipts/**,/api/purchase-quality-dispositions/**,/api/putaway-tasks/**,/api/sales-orders/**,/api/pick-tasks/**,/api/sales-shipments/**,/api/transfers/**,/api/stocktakes/**,/api/work-orders/**,/api/dispatch-orders/**,/api/operation-executions/**,/api/work-reports/**,/api/quality-inspections/**,/api/material-issues/**,/api/material-returns/**,/api/finished-goods-receipts/**
+            - Path=/api/core/**,/api/purchasing/**,/api/sales/**,/api/inventory/**,/api/manufacturing/**,/api/quality/**,/api/traceability/**,/api/dashboard/**,/api/ai/**,/api/uoms/**,/api/products/**,/api/customers/**,/api/suppliers/**,/api/warehouses/**,/api/locations/**,/api/purchase-orders/**,/api/purchase-receipts/**,/api/purchase-quality-dispositions/**,/api/putaway-tasks/**,/api/sales-orders/**,/api/pick-tasks/**,/api/sales-shipments/**,/api/transfers/**,/api/stocktakes/**,/api/boms/**,/api/routings/**,/api/work-orders/**,/api/dispatch-orders/**,/api/operation-executions/**,/api/work-reports/**,/api/quality-inspections/**,/api/material-issues/**,/api/material-returns/**,/api/finished-goods-receipts/**,/api/site-maps/**,/api/site-map/**
 
         # IoT 物联网与设备告警服务路由 (10004)
         - id: iot-service
           uri: ${IOT_SERVICE_URI:http://localhost:10004}
           predicates:
-            - Path=/api/iot/**
+            - Path=/api/iot/**,/api/devices/**,/api/device-profiles/**,/api/device-alarm-rules/**,/api/device-alarms/**,/api/protocol-adapters/**
   data:
     redis:
       host: ${REDIS_HOST:127.0.0.1}

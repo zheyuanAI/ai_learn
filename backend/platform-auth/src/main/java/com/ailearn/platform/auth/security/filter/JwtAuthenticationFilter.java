@@ -1,7 +1,5 @@
 package com.ailearn.platform.auth.security.filter;
 
-import com.ailearn.platform.auth.mapper.PermissionMapper;
-import com.ailearn.platform.auth.mapper.UserMapper;
 import com.ailearn.platform.auth.security.jwt.JwtTokenService;
 import com.ailearn.platform.auth.service.SessionCacheService;
 import com.ailearn.platform.shared.api.ApiResponse;
@@ -15,10 +13,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -50,19 +46,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenService jwtTokenService;
     private final SessionCacheService sessionCacheService;
-    private final UserMapper userMapper;
-    private final PermissionMapper permissionMapper;
     private final ObjectMapper objectMapper;
 
     public JwtAuthenticationFilter(JwtTokenService jwtTokenService,
                                    SessionCacheService sessionCacheService,
-                                   UserMapper userMapper,
-                                   PermissionMapper permissionMapper,
                                    ObjectMapper objectMapper) {
         this.jwtTokenService = jwtTokenService;
         this.sessionCacheService = sessionCacheService;
-        this.userMapper = userMapper;
-        this.permissionMapper = permissionMapper;
         this.objectMapper = objectMapper;
     }
 
@@ -99,25 +89,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
 
-            // 3. 读取角色与权限点（优先查 Redis 缓存）
+            // 3. 只读取登录时预热的集中式权限快照；缺失时 Fail-Closed，不回源数据库。
             Set<String> perms = sessionCacheService.getCachedPermissions(tenantId, userId);
             if (perms == null) {
-                perms = permissionMapper.findPermissionCodesByUserIdAndTenantId(tenantId, userId);
-                sessionCacheService.cachePermissions(tenantId, userId, perms, Duration.ofMinutes(30));
+                throw new com.ailearn.platform.shared.exception.ServiceUnavailableException(
+                        "权限服务暂时不可用，请稍后重试");
             }
-            List<String> roles = userMapper.findRoleCodesByUserIdAndTenantId(tenantId, userId);
 
-            // 4. 组装 Spring Security 权限集
-            List<GrantedAuthority> authorities = new ArrayList<>();
-            if (roles != null) {
-                for (String role : roles) {
-                    authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
-                }
-            }
-            if (perms != null) {
-                for (String perm : perms) {
-                    authorities.add(new SimpleGrantedAuthority(perm));
-                }
+            // 4. 组装 Spring Security 权限集；角色不再作为认证来源，业务统一使用 hasAuthority。
+            ArrayList<GrantedAuthority> authorities = new ArrayList<>();
+            for (String perm : perms) {
+                authorities.add(new SimpleGrantedAuthority(perm));
             }
 
             // 5. 绑定平台请求上下文
@@ -126,8 +108,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             context.setUserId(userId);
             context.setUsername(username);
             context.setJti(jti);
-            context.setRoles(roles != null ? new HashSet<>(roles) : new HashSet<>());
-            context.setPermissions(perms != null ? new HashSet<>(perms) : new HashSet<>());
+            context.setRoles(new HashSet<>());
+            context.setPermissions(new HashSet<>(perms));
             context.setClientIp(request.getRemoteAddr());
 
             UsernamePasswordAuthenticationToken authentication =
@@ -143,6 +125,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             sendUnauthorizedError(response, "访问令牌无效或已过期: " + ex.getMessage());
         } finally {
             RequestContextHolder.clear();
+            SecurityContextHolder.clearContext();
         }
     }
 

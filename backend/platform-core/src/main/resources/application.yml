@@ -49,3 +49,14 @@ management:
     web:
       exposure:
         include: health,info
+
+# S7 跨服务 Facts 默认不启用；部署时由密钥管理系统同时注入 Core/IoT 两端的 HMAC 密钥。
+core:
+  facts:
+    iot:
+      enabled: ${CORE_FACTS_IOT_ENABLED:false}
+      base-url: ${CORE_FACTS_IOT_BASE_URL:http://127.0.0.1:10004}
+      hmac-secret: ${CORE_FACTS_IOT_HMAC_SECRET:}
+
+platform:
+  default-time-zone: ${PLATFORM_DEFAULT_TIME_ZONE:Asia/Shanghai}

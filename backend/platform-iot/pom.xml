@@ -33,6 +33,13 @@
       <artifactId>spring-boot-starter-data-redis</artifactId>
     </dependency>
 
+    <!-- 真实 MQTT 消费端；由 iot.mqtt.enabled 条件配置控制连接生命周期。 -->
+    <dependency>
+      <groupId>org.eclipse.paho</groupId>
+      <artifactId>org.eclipse.paho.client.mqttv3</artifactId>
+      <version>1.2.5</version>
+    </dependency>
+
     <!-- 持久层与数据库 -->
     <dependency>
       <groupId>com.baomidou</groupId>

@@ -30,19 +30,27 @@ import com.ailearn.platform.shared.exception.ValidationException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 角色后台管理业务服务实现类。
  */
 @Service
 public class RoleAdminServiceImpl implements RoleAdminService {
+
+    private record PermissionCacheRefreshPlan(String expectedJti) {
+    }
 
     private static final Logger log = LoggerFactory.getLogger(RoleAdminServiceImpl.class);
 
@@ -83,6 +91,7 @@ public class RoleAdminServiceImpl implements RoleAdminService {
      * @return 角色管理视图对象列表
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:role:view')")
     public List<RoleAdminVo> listRoles(RoleQueryRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
         List<Role> roles = roleMapper.selectRolesByCondition(
@@ -117,6 +126,7 @@ public class RoleAdminServiceImpl implements RoleAdminService {
      * @return 角色管理视图对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:role:view')")
     public RoleAdminVo getRoleDetail(UUID roleId) {
         UUID tenantId = TenantContextHolder.requireTenantId();
         Role role = roleMapper.selectById(roleId);
@@ -146,6 +156,7 @@ public class RoleAdminServiceImpl implements RoleAdminService {
      * @return 创建后的角色管理视图对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:role:manage')")
     @Transactional(rollbackFor = Exception.class)
     public RoleAdminVo createRole(RoleCreateRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -213,6 +224,7 @@ public class RoleAdminServiceImpl implements RoleAdminService {
      * @return 更新后的角色管理视图对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:role:manage')")
     @Transactional(rollbackFor = Exception.class)
     public RoleAdminVo updateRole(UUID roleId, RoleUpdateRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -230,6 +242,9 @@ public class RoleAdminServiceImpl implements RoleAdminService {
         if (request.getMenuIds() != null) {
             validateMenuIds(tenantId, request.getMenuIds());
         }
+
+        // 所有新授权校验完成后，紧邻数据库关系变更前失效旧权限快照。
+        Map<UUID, PermissionCacheRefreshPlan> cacheRefresh = prepareRolePermissionCacheRefresh(tenantId, roleId);
 
         role.setRoleName(request.getRoleName().trim());
         role.setDescription(request.getDescription());
@@ -253,8 +268,8 @@ public class RoleAdminServiceImpl implements RoleAdminService {
             }
         }
 
-        // 清理所有持有此角色的用户权限与菜单缓存
-        evictUsersCacheForRole(tenantId, roleId);
+        // 数据库关系变更完成后按原活跃会话 TTL 重建权限快照；失败则保持缺失并向上返回 503。
+        rebuildRolePermissionCaches(tenantId, cacheRefresh);
 
         log.info("[修改角色成功] roleId={}, roleCode={}, tenantId={}", roleId, role.getRoleCode(), tenantId);
         return getRoleDetail(roleId);
@@ -274,6 +289,7 @@ public class RoleAdminServiceImpl implements RoleAdminService {
      * @return 更新后的角色管理视图对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:role:manage')")
     @Transactional(rollbackFor = Exception.class)
     public RoleAdminVo updateRoleStatus(UUID roleId, RoleStatusUpdateRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -288,12 +304,15 @@ public class RoleAdminServiceImpl implements RoleAdminService {
             throw new BizException(CommonErrorCode.BAD_REQUEST, "禁止停用系统预置管理员角色");
         }
 
+        // 保护校验通过后再失效受影响用户的旧权限快照，避免拒绝请求产生缓存副作用。
+        Map<UUID, PermissionCacheRefreshPlan> cacheRefresh = prepareRolePermissionCacheRefresh(tenantId, roleId);
+
         role.setStatus(request.getStatus());
         role.setUpdatedBy(currentUsername != null ? currentUsername : "system");
         role.setUpdatedAt(LocalDateTime.now());
         roleMapper.updateById(role);
 
-        evictUsersCacheForRole(tenantId, roleId);
+        rebuildRolePermissionCaches(tenantId, cacheRefresh);
 
         log.info("[更新角色状态成功] roleId={}, status={}, tenantId={}", roleId, request.getStatus(), tenantId);
         return getRoleDetail(roleId);
@@ -313,6 +332,7 @@ public class RoleAdminServiceImpl implements RoleAdminService {
      * @return 更新后的角色管理视图对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:role:manage')")
     @Transactional(rollbackFor = Exception.class)
     public RoleAdminVo assignPermissions(UUID roleId, RolePermissionsAssignRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -326,6 +346,9 @@ public class RoleAdminServiceImpl implements RoleAdminService {
             validatePermissionIds(request.getPermissionIds());
         }
 
+        // 权限 ID 全量校验通过后再失效受影响用户的旧权限快照。
+        Map<UUID, PermissionCacheRefreshPlan> cacheRefresh = prepareRolePermissionCacheRefresh(tenantId, roleId);
+
         rolePermissionMapper.deleteByRoleId(roleId);
         if (request.getPermissionIds() != null) {
             for (UUID permId : request.getPermissionIds()) {
@@ -333,7 +356,7 @@ public class RoleAdminServiceImpl implements RoleAdminService {
             }
         }
 
-        evictUsersCacheForRole(tenantId, roleId);
+        rebuildRolePermissionCaches(tenantId, cacheRefresh);
         log.info("[分配角色权限成功] roleId={}, permCount={}, tenantId={}", roleId, request.getPermissionIds() != null ? request.getPermissionIds().size() : 0, tenantId);
         return getRoleDetail(roleId);
     }
@@ -352,6 +375,7 @@ public class RoleAdminServiceImpl implements RoleAdminService {
      * @return 更新后的角色管理视图对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:role:manage')")
     @Transactional(rollbackFor = Exception.class)
     public RoleAdminVo assignMenus(UUID roleId, RoleMenusAssignRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -365,6 +389,9 @@ public class RoleAdminServiceImpl implements RoleAdminService {
             validateMenuIds(tenantId, request.getMenuIds());
         }
 
+        // 菜单 ID 全量校验通过后再失效受影响用户的旧权限快照。
+        Map<UUID, PermissionCacheRefreshPlan> cacheRefresh = prepareRolePermissionCacheRefresh(tenantId, roleId);
+
         roleMenuMapper.deleteByRoleId(roleId);
         if (request.getMenuIds() != null) {
             for (UUID menuId : request.getMenuIds()) {
@@ -372,7 +399,7 @@ public class RoleAdminServiceImpl implements RoleAdminService {
             }
         }
 
-        evictUsersCacheForRole(tenantId, roleId);
+        rebuildRolePermissionCaches(tenantId, cacheRefresh);
         log.info("[分配角色菜单成功] roleId={}, menuCount={}, tenantId={}", roleId, request.getMenuIds() != null ? request.getMenuIds().size() : 0, tenantId);
         return getRoleDetail(roleId);
     }
@@ -389,6 +416,7 @@ public class RoleAdminServiceImpl implements RoleAdminService {
      * @param roleId 目标角色 ID
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:role:manage')")
     @Transactional(rollbackFor = Exception.class)
     public void deleteRole(UUID roleId) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -488,14 +516,81 @@ public class RoleAdminServiceImpl implements RoleAdminService {
     }
 
     /**
-     * 批量清理分配了指定角色的所有用户的权限与菜单缓存。
+     * 在角色授权变更前收集受影响用户的会话 TTL 并删除旧权限/菜单快照。
+     * 主要入参为租户与角色 ID；返回用户到剩余会话 TTL 的映射，供变更完成后重建权限快照。
+     *
+     * @param tenantId 租户 ID
+     * @param roleId 角色 ID
+     * @return 受影响用户及其变更前活跃会话 JTI；无活跃会话的用户值为 null
      */
-    private void evictUsersCacheForRole(UUID tenantId, UUID roleId) {
+    private Map<UUID, PermissionCacheRefreshPlan> prepareRolePermissionCacheRefresh(UUID tenantId, UUID roleId) {
         List<UUID> userIds = userRoleMapper.findUserIdsByRoleIdAndTenantId(tenantId, roleId);
-        if (userIds != null) {
-            for (UUID uId : userIds) {
-                sessionCacheService.evictUserAuthCache(tenantId, uId);
+        Map<UUID, PermissionCacheRefreshPlan> refreshPlan = new LinkedHashMap<>();
+        if (userIds == null) {
+            return refreshPlan;
+        }
+        for (UUID userId : userIds) {
+            String expectedJti = sessionCacheService.getActiveSessionJti(tenantId, userId);
+            sessionCacheService.evictUserAuthCache(tenantId, userId);
+            refreshPlan.put(userId, new PermissionCacheRefreshPlan(expectedJti));
+        }
+        return refreshPlan;
+    }
+
+    /**
+     * 注册角色授权变更的事务提交后权限快照重建任务。
+     * 主要入参为租户 ID 与变更前刷新计划；无活跃会话时只保留缓存缺失，避免制造脱离会话的授权状态。
+     * 简要流程：事务提交后逐用户确认 JTI 未被并发登录替换，再读取当前 TTL 与最新权限码写入缓存。
+     *
+     * @param tenantId 租户 ID
+     * @param refreshPlan 用户及其原活跃会话 JTI
+     */
+    private void rebuildRolePermissionCaches(UUID tenantId,
+                                             Map<UUID, PermissionCacheRefreshPlan> refreshPlan) {
+        if (refreshPlan == null || refreshPlan.isEmpty()) {
+            return;
+        }
+        Runnable refresh = () -> refreshRolePermissionCachesAfterCommit(tenantId, refreshPlan);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    refresh.run();
+                }
+            });
+        } else {
+            refresh.run();
+        }
+    }
+
+    /**
+     * 在角色授权事务提交后按最新数据库关系重建受影响用户权限缓存。
+     * 主要入参为租户 ID 与用户刷新计划；无返回值；流程为逐用户确认 JTI、读取 TTL、查询权限并写缓存。
+     * 并发登录已经替换 JTI 时跳过旧任务，防止旧快照覆盖新会话。
+     *
+     * @param tenantId 租户 ID
+     * @param refreshPlan 用户及预期 JTI 映射
+     */
+    private void refreshRolePermissionCachesAfterCommit(
+            UUID tenantId,
+            Map<UUID, PermissionCacheRefreshPlan> refreshPlan) {
+        for (Map.Entry<UUID, PermissionCacheRefreshPlan> entry : refreshPlan.entrySet()) {
+            PermissionCacheRefreshPlan plan = entry.getValue();
+            if (plan == null || plan.expectedJti() == null) {
+                continue;
             }
+            String currentJti = sessionCacheService.getActiveSessionJti(tenantId, entry.getKey());
+            if (!plan.expectedJti().equals(currentJti)) {
+                continue;
+            }
+            java.time.Duration ttl = sessionCacheService.getActiveSessionTtl(tenantId, entry.getKey());
+            if (ttl == null || ttl.isZero() || ttl.isNegative()) {
+                continue;
+            }
+            Set<String> permissions = permissionMapper.findPermissionCodesByUserIdAndTenantId(
+                    tenantId, entry.getKey());
+            sessionCacheService.cachePermissions(
+                    tenantId, entry.getKey(), permissions != null ? permissions : Set.of(), ttl);
         }
     }
 

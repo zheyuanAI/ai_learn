@@ -21,7 +21,7 @@
 ## 当前状态
 - **父工程与骨架**：已创建多模块父工程与各服务启动类，各服务均提供 `/internal/ping` 探活接口。
 - **platform-auth（阶段1基础能力与本轮修复中，阶段验收未完成）**：
-  - **数据库与 Flyway**：接入 PostgreSQL `public` schema，统一使用 `auth_` 表前缀与 `auth_flyway_schema_history` 独立版本表。Flyway V5 负责在同一 `public` schema 内完成菜单租户隔离、`visible`/`status` 字段和租户级编码唯一约束；V1-V4 已执行数据库须先按 `deploy/postgres/auth-flyway-history-handoff.sql` 安全接管历史表，当前开发数据库不得直接执行 V5。
+  - **数据库与 Flyway**：接入 PostgreSQL `public` schema，统一使用 `auth_` 表前缀与 `auth_flyway_schema_history` 独立版本表。Flyway V5 负责在同一 `public` schema 内完成菜单租户隔离、`visible`/`status` 字段和租户级编码唯一约束；V6 补齐阶段 2-7 使用的权限目录；V1-V4 已执行数据库须先按 `deploy/postgres/auth-flyway-history-handoff.sql` 安全接管历史表，当前开发数据库不得直接执行 V5/V6。
   - **基础认证与会话**：提供登录 (`POST /api/auth/login`)、登出 (`POST /api/auth/logout`)、个人画像 (`GET /api/me`)、个人菜单树 (`GET /api/me/menus`)，支持 JWT 签发与 Redis 单有效会话管理。
   - **后台管理核心接口（统一 `/api/auth/admin/**` 前缀）**：
     - **租户设置**：统一为 `GET/PUT /api/auth/admin/tenants/current`（查询与修改当前租户信息）
@@ -45,8 +45,8 @@
 ## 一期边界与数据库规范
 - 一期依赖与中间件范围以 `../docs/specs/00-project/架构设计.md` 为准；当前开发实例使用 PostgreSQL 12.1（`127.0.0.1:5433/ai_learn`，SQL/Flyway 兼容性以下限 12.1 为准）、Redis（端口 6379）、Mosquitto（端口 1883）；RabbitMQ、MinIO、pgvector 属于二期候选。
 - **数据库模块划分机制**：所有服务共用同一个 PostgreSQL 实例及 `public` schema，通过表前缀（`auth_` 认证权限、`md_` 主数据、`inv_` 仓储库存、`iot_` 物联网设备）和独立 Flyway 历史表（如 `auth_flyway_schema_history`、`core_flyway_schema_history`、`iot_flyway_schema_history`）划分模块与独立演进。
-- **Flyway V5 与多租户菜单物理隔离**：`auth_menu` 表包含 `tenant_id`、`visible`、`status`，各租户菜单物理隔离维护。
-- **Flyway 历史表接管**：旧共享 `public.flyway_schema_history` 只作为 V1-V4 的迁移历史来源，接管脚本复制 Auth 记录到 `public.auth_flyway_schema_history`，不删除旧表、不创建新 schema、不在接管脚本中执行 V5。
+- **Flyway V5/V6 与权限数据维护**：V5 使 `auth_menu` 表包含 `tenant_id`、`visible`、`status`，各租户菜单物理隔离维护；V6 以幂等方式补齐阶段 2-7 使用的权限目录。
+- **Flyway 历史表接管**：旧共享 `public.flyway_schema_history` 只作为 V1-V4 的迁移历史来源，接管脚本复制 Auth 记录到 `public.auth_flyway_schema_history`，不删除旧表、不创建新 schema、不在接管脚本中执行 V5/V6。
 - **统一逻辑软删除**：全库实体统一采用 `isdel = 1` 逻辑删除标记，禁止物理 `DELETE`。
 - `platform-core` 物理上保持单服务，内部按采购、销售、库存、制造、质量、追溯、看板和 AI 逻辑模块组织，跨模块调用必须通过应用服务，严禁直接读写其他模块底层表。
 - 租户隔离规则：所有核心业务表与认证表均包含 `tenant_id`，查询与写入严格按当前租户隔离。

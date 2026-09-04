@@ -2,6 +2,7 @@ package com.ailearn.platform.shared.context;
 
 import com.ailearn.platform.shared.idempotency.IdempotencyStorage;
 import com.ailearn.platform.shared.idempotency.IdempotentRecord;
+import com.ailearn.platform.shared.idempotency.IdempotencyClaim;
 import com.ailearn.platform.shared.idempotency.InMemoryIdempotencyStorage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -79,5 +80,39 @@ class ContextHolderAndIdempotencyTest {
         assertTrue(successOpt.isPresent());
         assertEquals(IdempotentRecord.Status.SUCCESS, successOpt.get().getStatus());
         assertEquals(responseBody, successOpt.get().getResponseBody());
+    }
+
+    @Test
+    @DisplayName("旧 claim 不能覆盖过期重入后的新 claim")
+    void staleClaimCannotCompleteOrFailNewClaim() throws InterruptedException {
+        InMemoryIdempotencyStorage storage = new InMemoryIdempotencyStorage();
+        UUID tenantId = UUID.randomUUID();
+        Optional<IdempotencyClaim> oldClaim = storage.tryAcquireClaim(
+                "inventory:increase", "same-key", tenantId, Duration.ofMillis(1), "hash-1");
+        assertTrue(oldClaim.isPresent());
+        Thread.sleep(5);
+
+        Optional<IdempotencyClaim> newClaim = storage.tryAcquireClaim(
+                "inventory:increase", "same-key", tenantId, Duration.ofMinutes(1), "hash-2");
+        assertTrue(newClaim.isPresent());
+        assertFalse(storage.complete("inventory:increase", "same-key", tenantId,
+                oldClaim.orElseThrow().token(), "old-response", Duration.ofMinutes(1)));
+        assertFalse(storage.fail("inventory:increase", "same-key", tenantId,
+                oldClaim.orElseThrow().token(), "old-error"));
+        assertEquals(IdempotentRecord.Status.PENDING,
+                storage.getRecord("inventory:increase", "same-key", tenantId).orElseThrow().getStatus());
+        assertTrue(storage.complete("inventory:increase", "same-key", tenantId,
+                newClaim.orElseThrow().token(), "new-response", Duration.ofMinutes(1)));
+    }
+
+    @Test
+    @DisplayName("不同 operation 使用同一原始 key 时彼此隔离")
+    void operationScopesDoNotCollide() {
+        InMemoryIdempotencyStorage storage = new InMemoryIdempotencyStorage();
+        UUID tenantId = UUID.randomUUID();
+        assertTrue(storage.tryAcquireClaim("inventory:increase", "same-key", tenantId,
+                Duration.ofMinutes(1), "hash-1").isPresent());
+        assertTrue(storage.tryAcquireClaim("inventory:decrease", "same-key", tenantId,
+                Duration.ofMinutes(1), "hash-2").isPresent());
     }
 }

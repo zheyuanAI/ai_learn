@@ -42,7 +42,7 @@ public class UserProfileVo implements Serializable {
     @Schema(description = "分配的角色编码列表", example = "[\"TENANT_ADMIN\"]")
     private List<String> roles;
 
-    @Schema(description = "分配的功能权限点列表", example = "[\"sales.order.create\", \"inventory.balance.view\"]")
+    @Schema(description = "分配的功能权限点列表", example = "[\"sales:order:create\", \"inv:balance:view\"]")
     private Set<String> perms;
 
     public UserProfileVo() {

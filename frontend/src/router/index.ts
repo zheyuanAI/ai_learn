@@ -33,6 +33,7 @@ const routes: RouteRecordRaw[] = [
           title: "一期总览",
         },
       },
+      // 占位域首页（保持向下兼容）
       {
         path: "erp-wms",
         name: "ErpWms",
@@ -43,10 +44,7 @@ const routes: RouteRecordRaw[] = [
           specPath: "docs/specs/10-erp-wms",
           prototypePath: "docs/prototype/pages/purchase-inbound.html / sales-outbound.html",
         },
-        meta: {
-          requiresAuth: true,
-          title: "供需与仓储",
-        },
+        meta: { requiresAuth: true, title: "供需与仓储" },
       },
       {
         path: "mes",
@@ -58,10 +56,7 @@ const routes: RouteRecordRaw[] = [
           specPath: "docs/specs/20-mes",
           prototypePath: "docs/prototype/pages/work-order.html",
         },
-        meta: {
-          requiresAuth: true,
-          title: "制造执行",
-        },
+        meta: { requiresAuth: true, title: "制造执行" },
       },
       {
         path: "iot",
@@ -73,10 +68,7 @@ const routes: RouteRecordRaw[] = [
           specPath: "docs/specs/30-iot-digital-twin",
           prototypePath: "docs/prototype/pages/device-alarm.html",
         },
-        meta: {
-          requiresAuth: true,
-          title: "IoT 设备事实",
-        },
+        meta: { requiresAuth: true, title: "IoT 设备事实" },
       },
       {
         path: "gis",
@@ -88,10 +80,7 @@ const routes: RouteRecordRaw[] = [
           specPath: "docs/specs/40-gis-dashboard",
           prototypePath: "docs/prototype/pages/site-map.html / dashboard.html",
         },
-        meta: {
-          requiresAuth: true,
-          title: "二维地图与看板",
-        },
+        meta: { requiresAuth: true, title: "二维地图与看板" },
       },
       {
         path: "ai",
@@ -103,10 +92,241 @@ const routes: RouteRecordRaw[] = [
           specPath: "docs/specs/50-ai-assistant",
           prototypePath: "docs/prototype/pages/ai-assistant.html / tool-audit.html",
         },
-        meta: {
-          requiresAuth: true,
-          title: "AI 只读助手",
-        },
+        meta: { requiresAuth: true, title: "AI 只读助手" },
+      },
+
+      // ====== 阶段 2：主数据与库存 (ERP/WMS) ======
+      {
+        path: "master-data",
+        name: "MasterData",
+        component: () => import("../views/masterdata/MasterDataView.vue"),
+        meta: { requiresAuth: true, title: "主数据中心" },
+      },
+      {
+        path: "inventory/balances",
+        name: "InventoryBalance",
+        component: () => import("../views/inventory/InventoryBalanceView.vue"),
+        meta: { requiresAuth: true, title: "实时库存余额" },
+      },
+      {
+        path: "inventory/transactions",
+        name: "InventoryTransaction",
+        component: () => import("../views/inventory/InventoryTransactionView.vue"),
+        meta: { requiresAuth: true, title: "库存审计流水" },
+      },
+      {
+        path: "inventory/reservations",
+        name: "InventoryReservation",
+        component: () => import("../views/inventory/ReservationView.vue"),
+        meta: { requiresAuth: true, title: "库存预留明细" },
+      },
+      {
+        path: "inventory/transfers",
+        name: "InventoryTransferList",
+        component: () => import("../views/inventory/TransferListView.vue"),
+        meta: { requiresAuth: true, title: "库位调拨管理" },
+      },
+      {
+        path: "inventory/transfers/:id",
+        name: "InventoryTransferDetail",
+        component: () => import("../views/inventory/TransferDetailView.vue"),
+        meta: { requiresAuth: true, title: "调拨单执行详情" },
+      },
+      {
+        path: "inventory/stocktakes",
+        name: "InventoryStocktakeList",
+        component: () => import("../views/inventory/StocktakeListView.vue"),
+        meta: { requiresAuth: true, title: "差异盘点管理" },
+      },
+      {
+        path: "inventory/stocktakes/:id",
+        name: "InventoryStocktakeDetail",
+        component: () => import("../views/inventory/StocktakeDetailView.vue"),
+        meta: { requiresAuth: true, title: "盘点录入与调整" },
+      },
+
+      // ====== 阶段 3：采购进货与质检上架 ======
+      {
+        path: "purchasing/orders",
+        name: "PurchaseOrderList",
+        component: () => import("../views/purchasing/PurchaseOrderListView.vue"),
+        meta: { requiresAuth: true, title: "采购订单管理" },
+      },
+      {
+        path: "purchasing/orders/:id",
+        name: "PurchaseOrderDetail",
+        component: () => import("../views/purchasing/PurchaseOrderDetailView.vue"),
+        meta: { requiresAuth: true, title: "采购单执行详情" },
+      },
+      {
+        path: "purchasing/receipts",
+        name: "PurchaseReceiptConfirm",
+        component: () => import("../views/purchasing/ReceiptConfirmView.vue"),
+        meta: { requiresAuth: true, title: "采购到货验收" },
+      },
+      {
+        path: "purchasing/quality",
+        name: "PurchaseQualityDisposition",
+        component: () => import("../views/purchasing/QualityDispositionView.vue"),
+        meta: { requiresAuth: true, title: "采购质检处置" },
+      },
+      {
+        path: "purchasing/putaway",
+        name: "PurchasePutawayTask",
+        component: () => import("../views/purchasing/PutawayTaskView.vue"),
+        meta: { requiresAuth: true, title: "入库上架任务" },
+      },
+
+      // ====== 阶段 4：销售履约与直接拣发 ======
+      {
+        path: "sales/orders",
+        name: "SalesOrderList",
+        component: () => import("../views/sales/SalesOrderListView.vue"),
+        meta: { requiresAuth: true, title: "销售订单管理" },
+      },
+      {
+        path: "sales/orders/:id",
+        name: "SalesOrderDetail",
+        component: () => import("../views/sales/SalesOrderDetailView.vue"),
+        meta: { requiresAuth: true, title: "销售单履约详情" },
+      },
+      {
+        path: "sales/reservations",
+        name: "SalesReservationDetail",
+        component: () => import("../views/sales/ReservationDetailView.vue"),
+        meta: { requiresAuth: true, title: "销售预留分配" },
+      },
+      {
+        path: "sales/picks",
+        name: "SalesPickTask",
+        component: () => import("../views/sales/PickTaskView.vue"),
+        meta: { requiresAuth: true, title: "直接拣货工作台" },
+      },
+      {
+        path: "sales/shipments",
+        name: "SalesShipmentConfirm",
+        component: () => import("../views/sales/ShipmentConfirmView.vue"),
+        meta: { requiresAuth: true, title: "发货出库确认" },
+      },
+
+      // ====== 阶段 5：MES 制造执行 ======
+      {
+        path: "mes/boms",
+        name: "MesBomList",
+        component: () => import("../views/manufacturing/BomListView.vue"),
+        meta: { requiresAuth: true, title: "BOM 物料清单" },
+      },
+      {
+        path: "mes/routings",
+        name: "MesRoutingList",
+        component: () => import("../views/manufacturing/RoutingListView.vue"),
+        meta: { requiresAuth: true, title: "工艺路线管理" },
+      },
+      {
+        path: "mes/work-orders",
+        name: "MesWorkOrderList",
+        component: () => import("../views/manufacturing/WorkOrderListView.vue"),
+        meta: { requiresAuth: true, title: "生产工单管理" },
+      },
+      {
+        path: "mes/work-orders/:id",
+        name: "MesWorkOrderDetail",
+        component: () => import("../views/manufacturing/WorkOrderDetailView.vue"),
+        meta: { requiresAuth: true, title: "工单全生命周期详情" },
+      },
+      {
+        path: "mes/dispatch",
+        name: "MesDispatch",
+        component: () => import("../views/manufacturing/DispatchView.vue"),
+        meta: { requiresAuth: true, title: "车间派工看板" },
+      },
+      {
+        path: "mes/executions",
+        name: "MesExecution",
+        component: () => import("../views/manufacturing/OperationExecutionView.vue"),
+        meta: { requiresAuth: true, title: "工序报工与质检" },
+      },
+      {
+        path: "mes/materials",
+        name: "MesMaterialMovement",
+        component: () => import("../views/manufacturing/MaterialMovementView.vue"),
+        meta: { requiresAuth: true, title: "生产领料与退料" },
+      },
+      {
+        path: "mes/receipts",
+        name: "MesFinishedGoodsReceipt",
+        component: () => import("../views/manufacturing/FinishedGoodsReceiptView.vue"),
+        meta: { requiresAuth: true, title: "成品完工入库" },
+      },
+
+      // ====== 阶段 6：IoT 设备与告警 ======
+      {
+        path: "iot/profiles",
+        name: "IotProfileList",
+        component: () => import("../views/iot/DeviceProfileView.vue"),
+        meta: { requiresAuth: true, title: "设备配置文件" },
+      },
+      {
+        path: "iot/devices",
+        name: "IotDeviceList",
+        component: () => import("../views/iot/DeviceListView.vue"),
+        meta: { requiresAuth: true, title: "设备台账管理" },
+      },
+      {
+        path: "iot/devices/:id",
+        name: "IotDeviceDetail",
+        component: () => import("../views/iot/DeviceDetailView.vue"),
+        meta: { requiresAuth: true, title: "设备运行状态详情" },
+      },
+      {
+        path: "iot/telemetry",
+        name: "IotTelemetry",
+        component: () => import("../views/iot/TelemetryView.vue"),
+        meta: { requiresAuth: true, title: "时序遥测实时监控" },
+      },
+      {
+        path: "iot/alarms",
+        name: "IotAlarmList",
+        component: () => import("../views/iot/AlarmListView.vue"),
+        meta: { requiresAuth: true, title: "设备告警中心" },
+      },
+      {
+        path: "iot/alarms/:id",
+        name: "IotAlarmDetail",
+        component: () => import("../views/iot/AlarmDetailView.vue"),
+        meta: { requiresAuth: true, title: "告警处理详情" },
+      },
+
+      // ====== 阶段 7：追溯、二维 GIS 与综合看板 ======
+      {
+        path: "traceability",
+        name: "Traceability",
+        component: () => import("../views/insights/TraceabilityView.vue"),
+        meta: { requiresAuth: true, title: "全链路全闭环追溯" },
+      },
+      {
+        path: "gis/site-maps",
+        name: "SiteMapList",
+        component: () => import("../views/insights/SiteMapListView.vue"),
+        meta: { requiresAuth: true, title: "二维 GIS 站点地图" },
+      },
+      {
+        path: "gis/site-maps/:id",
+        name: "SiteMapView",
+        component: () => import("../views/insights/SiteMapView.vue"),
+        meta: { requiresAuth: true, title: "空间点位画布" },
+      },
+      {
+        path: "gis/site-maps/:id/edit",
+        name: "SiteMapEditor",
+        component: () => import("../views/insights/SiteMapEditorView.vue"),
+        meta: { requiresAuth: true, title: "站点地图点位配置" },
+      },
+      {
+        path: "dashboard",
+        name: "InsightsDashboard",
+        component: () => import("../views/insights/DashboardView.vue"),
+        meta: { requiresAuth: true, title: "七类综合监控看板" },
       },
       {
         path: "system/tenant",

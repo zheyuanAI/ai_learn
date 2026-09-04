@@ -32,9 +32,20 @@ public final class HeaderConstants {
     public static final String X_SESSION_ID = "X-Session-Id";
 
     /**
-     * 当前用户拥有的权限与角色集合（逗号分隔）请求头
+     * 历史权限请求头名称，仅用于网关清理和旧调用方编译兼容，禁止作为可信身份输入。
      */
+    @Deprecated
     public static final String X_AUTHORITIES = "X-Authorities";
+
+    /**
+     * 历史权限请求头名称，仅用于网关清理，禁止作为可信身份输入。
+     */
+    public static final String X_PERMISSIONS = "X-Permissions";
+
+    /**
+     * 历史角色请求头名称，仅用于网关清理，禁止作为可信身份输入。
+     */
+    public static final String X_ROLES = "X-Roles";
 
     /**
      * 全局请求链路追踪唯一 ID 请求头

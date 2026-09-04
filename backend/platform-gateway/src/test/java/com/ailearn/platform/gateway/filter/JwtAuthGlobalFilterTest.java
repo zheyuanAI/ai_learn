@@ -30,6 +30,7 @@ import org.springframework.mock.web.server.MockServerWebExchange;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import io.jsonwebtoken.Claims;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -131,6 +132,10 @@ class JwtAuthGlobalFilterTest {
 
         TokenPayload payload = new TokenPayload(userId, tenantId, username, jti, authorities);
         String token = JwtUtils.generateToken(payload, keyPair.getPrivate(), Duration.ofHours(2));
+        Claims tokenClaims = JwtUtils.parseAndVerify(token, keyPair.getPublic());
+        assertNull(tokenClaims.get("authorities"), "JWT 不得携带可变 authorities 集合");
+        assertNull(tokenClaims.get("roles"), "JWT 不得携带可变角色集合");
+        assertNull(tokenClaims.get("permissions"), "JWT 不得携带可变权限集合");
 
         String sessionKey = "auth:session:" + tenantId + ":" + userId;
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
@@ -141,6 +146,9 @@ class JwtAuthGlobalFilterTest {
                 .get("/api/core/purchase-orders")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .header(HeaderConstants.X_REQUEST_ID, "req-valid-1")
+                .header(HeaderConstants.X_AUTHORITIES, "ROLE_ADMIN,inventory:stock:move")
+                .header("X-Permissions", "inventory:stock:move")
+                .header("X-Roles", "ADMIN")
                 .build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
 
@@ -159,6 +167,8 @@ class JwtAuthGlobalFilterTest {
 
         String authHeader = forwardedRequest.getHeaders().getFirst(HeaderConstants.X_AUTHORITIES);
         assertNull(authHeader, "网关不再向请求头中注入 X-Authorities，由下游微服务业务鉴权独立判断");
+        assertNull(forwardedRequest.getHeaders().getFirst("X-Permissions"), "网关必须清除客户端伪造的 X-Permissions");
+        assertNull(forwardedRequest.getHeaders().getFirst("X-Roles"), "网关必须清除客户端伪造的 X-Roles");
         assertNull(exchange.getResponse().getStatusCode(), "下游 Mono<Void> 正常完成不能被误判为 Redis 会话未命中");
     }
 

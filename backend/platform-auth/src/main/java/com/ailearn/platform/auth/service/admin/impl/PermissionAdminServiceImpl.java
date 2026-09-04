@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
 /**
@@ -45,6 +46,7 @@ public class PermissionAdminServiceImpl implements PermissionAdminService {
      * @return 权限点视图对象列表
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:role:view')")
     public List<PermissionAdminVo> listPermissions(PermissionQueryRequest request) {
         String module = request != null ? request.getModule() : null;
         String permissionCode = request != null ? request.getPermissionCode() : null;
@@ -71,6 +73,7 @@ public class PermissionAdminServiceImpl implements PermissionAdminService {
      * @return 权限点视图对象列表
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:role:view')")
     public List<PermissionAdminVo> getRolePermissions(UUID roleId) {
         verifyRoleBelongsToCurrentTenant(roleId);
         List<Permission> permissions = permissionMapper.findPermissionsByRoleId(roleId);
@@ -94,6 +97,7 @@ public class PermissionAdminServiceImpl implements PermissionAdminService {
      * @return 权限点 ID 列表
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:role:view')")
     public List<UUID> getRolePermissionIds(UUID roleId) {
         verifyRoleBelongsToCurrentTenant(roleId);
         return permissionMapper.findPermissionIdsByRoleId(roleId);

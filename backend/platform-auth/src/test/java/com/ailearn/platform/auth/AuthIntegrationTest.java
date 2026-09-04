@@ -1,6 +1,10 @@
 package com.ailearn.platform.auth;
 
 import com.ailearn.platform.auth.domain.dto.LoginRequest;
+import com.ailearn.platform.auth.domain.dto.admin.MenuStatusUpdateRequest;
+import com.ailearn.platform.auth.domain.dto.admin.TenantUpdateRequest;
+import com.ailearn.platform.auth.domain.entity.Menu;
+import com.ailearn.platform.auth.domain.entity.Tenant;
 import com.ailearn.platform.auth.domain.vo.LoginResponse;
 import com.ailearn.platform.auth.domain.vo.MenuNodeVo;
 import com.ailearn.platform.auth.domain.vo.UserProfileVo;
@@ -11,6 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jwt.JWTClaimsSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,6 +68,12 @@ public class AuthIntegrationTest {
 
     @Autowired
     private com.ailearn.platform.auth.mapper.UserMapper userMapper;
+
+    @Autowired
+    private com.ailearn.platform.auth.mapper.MenuMapper menuMapper;
+
+    @Autowired
+    private com.ailearn.platform.auth.mapper.TenantMapper tenantMapper;
 
     @Autowired
     private com.ailearn.platform.auth.service.SessionCacheService sessionCacheService;
@@ -127,6 +138,98 @@ public class AuthIntegrationTest {
         assertNotNull(claims.getExpirationTime());
         assertNull(claims.getClaim("permissions"), "JWT 中严禁存放可变权限列表");
         assertNull(claims.getClaim("roles"), "JWT 中严禁存放可变角色列表");
+    }
+
+    @Test
+    @DisplayName("测试登录成功必须预热当前会话权限缓存")
+    void testLoginWarmsPermissionCacheBeforeReturningToken() throws Exception {
+        LoginResponse loginResponse = doLogin("DEFAULT", "buyer.chen", "123456");
+
+        // 登录完成后，权限缓存应已写入，后续下游请求不能依赖权限 Header 或数据库回源。
+        Set<String> cachedPermissions = sessionCacheService.getCachedPermissions(
+                loginResponse.getUser().getTenantId(), loginResponse.getUser().getUserId());
+        assertNotNull(cachedPermissions, "登录成功返回 Token 前必须完成权限缓存预热");
+        assertTrue(cachedPermissions.contains("pur:order:create"));
+    }
+
+    /**
+     * 验证权限快照缺失时 JWT 过滤器返回 503，且不会回源数据库继续放行请求。
+     */
+    @Test
+    @DisplayName("权限缓存未命中必须返回 503")
+    void testPermissionCacheMissFailsClosed() throws Exception {
+        LoginResponse loginResponse = doLogin("DEFAULT", "buyer.chen", "123456");
+        sessionCacheService.evictUserAuthCache(
+                loginResponse.getUser().getTenantId(), loginResponse.getUser().getUserId());
+
+        mockMvc.perform(get("/api/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + loginResponse.getToken()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value(503));
+    }
+
+    /**
+     * 验证租户停用会立即撤销该租户现有会话，防止旧 Token 在原 TTL 内继续访问。
+     */
+    @Test
+    @DisplayName("租户停用必须立即撤销现有会话")
+    void testTenantDisableRevokesExistingSession() throws Exception {
+        LoginResponse loginResponse = doLogin("DEFAULT", "admin.zhang", "123456");
+        Tenant tenant = tenantMapper.findByTenantCode("DEFAULT");
+        String originalStatus = tenant.getStatus();
+        try {
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(
+                            "/api/auth/admin/tenants/current")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + loginResponse.getToken())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    new TenantUpdateRequest(tenant.getTenantName(), "DISABLED"))))
+                    .andExpect(status().isOk());
+
+            mockMvc.perform(get("/api/me")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + loginResponse.getToken()))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value(401));
+        } finally {
+            tenant.setStatus(originalStatus);
+            tenantMapper.updateById(tenant);
+            sessionCacheService.clearAll();
+        }
+    }
+
+    /**
+     * 验证菜单状态变更会清除所有租户用户的菜单快照，而不依赖固定的菜单缓存 TTL。
+     */
+    @Test
+    @DisplayName("菜单状态变更必须失效租户菜单缓存")
+    void testMenuStatusChangeEvictsTenantMenuCache() throws Exception {
+        LoginResponse warehouseLogin = doLogin("DEFAULT", "wh.operator", "123456");
+        mockMvc.perform(get("/api/me/menus")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + warehouseLogin.getToken()))
+                .andExpect(status().isOk());
+        assertNotNull(sessionCacheService.getCachedMenus(
+                warehouseLogin.getUser().getTenantId(), warehouseLogin.getUser().getUserId()));
+
+        LoginResponse adminLogin = doLogin("DEFAULT", "admin.zhang", "123456");
+        java.util.UUID menuId = java.util.UUID.fromString("60000000-0000-0000-0000-000000000001");
+        Menu menu = menuMapper.selectById(menuId);
+        String originalStatus = menu.getStatus();
+        try {
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(
+                            "/api/auth/admin/menus/" + menuId + "/status")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminLogin.getToken())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    new MenuStatusUpdateRequest("DISABLED"))))
+                    .andExpect(status().isOk());
+
+            assertNull(sessionCacheService.getCachedMenus(
+                    warehouseLogin.getUser().getTenantId(), warehouseLogin.getUser().getUserId()));
+        } finally {
+            menu.setStatus(originalStatus);
+            menuMapper.updateById(menu);
+            sessionCacheService.clearAll();
+        }
     }
 
     @Test
@@ -207,10 +310,10 @@ public class AuthIntegrationTest {
         UserProfileVo profile = resp.getData();
         assertNotNull(profile);
         assertTrue(profile.getRoles().contains("PURCHASING"));
-        assertTrue(profile.getPerms().contains("purchase.order.create"));
-        assertTrue(profile.getPerms().contains("purchase.order.submit"));
-        assertTrue(profile.getPerms().contains("purchase.order.approve"));
-        assertTrue(profile.getPerms().contains("quality.purchase-disposition.return"));
+        assertTrue(profile.getPerms().contains("pur:order:create"));
+        assertTrue(profile.getPerms().contains("pur:order:submit"));
+        assertTrue(profile.getPerms().contains("pur:order:approve"));
+        assertTrue(profile.getPerms().contains("pur:quality:return"));
     }
 
     @Test
@@ -296,6 +399,8 @@ public class AuthIntegrationTest {
 
         // 在 Redis 中写入跨租户会话以通过网关/过滤器会话校验
         sessionCacheService.saveActiveSession(foreignTenantId, actualUserId, fakeJti, java.time.Duration.ofHours(1));
+        // 新的认证链路对权限缓存缺失 Fail-Closed；写入空快照后继续验证控制器层的跨租户 404。
+        sessionCacheService.cachePermissions(foreignTenantId, actualUserId, Set.of(), java.time.Duration.ofHours(1));
 
         String crossTenantToken = jwtTokenService.generateToken(actualUserId, foreignTenantId, "sales.liu", fakeJti);
 

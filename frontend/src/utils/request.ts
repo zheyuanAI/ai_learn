@@ -44,15 +44,31 @@ const service: AxiosInstance = axios.create({
 });
 
 /**
+ * 生成唯一的幂等键 (Idempotency-Key)
+ * 防止网络抖动或用户重复点击导致同一业务命令重复执行
+ */
+export function generateIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `idemp-${crypto.randomUUID()}`;
+  }
+  const timestamp = Date.now().toString(36);
+  const randomStr = Math.random().toString(36).substring(2, 10);
+  return `idemp-${timestamp}-${randomStr}`;
+}
+
+/**
  * 请求拦截器：
  * 1. 自动注入 Authorization: Bearer <token>
- * 2. 自动生成并携带 X-Request-Id
+ * 2. 自动生成并携带 X-Request-Id (若未显式指定)
  * 3. 携带当前生效租户标识 X-Tenant-Id
+ * 4. 为 POST / PUT / PATCH / DELETE 写操作注入 Idempotency-Key (若未显式指定)
  */
 service.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     // 注入链路追踪 Request ID
-    config.headers.set("X-Request-Id", generateRequestId());
+    if (!config.headers.has("X-Request-Id")) {
+      config.headers.set("X-Request-Id", generateRequestId());
+    }
 
     // 注入持久化的 Token
     const token = localStorage.getItem(TOKEN_KEY);
@@ -64,6 +80,12 @@ service.interceptors.request.use(
     const tenant = localStorage.getItem(TENANT_KEY);
     if (tenant) {
       config.headers.set("X-Tenant-Id", tenant);
+    }
+
+    // 为修改类请求自动携带幂等键，防止重复提交
+    const method = (config.method || "get").toUpperCase();
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && !config.headers.has("Idempotency-Key")) {
+      config.headers.set("Idempotency-Key", generateIdempotencyKey());
     }
 
     return config;

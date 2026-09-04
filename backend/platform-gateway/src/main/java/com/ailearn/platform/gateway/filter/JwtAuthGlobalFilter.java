@@ -22,6 +22,7 @@ import java.security.spec.RSAPublicKeySpec;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,7 +54,7 @@ import reactor.util.retry.Retry;
  *   <li>提取 Authorization Bearer Token；</li>
  *   <li>使用 RSA 公钥验证 JWT 签名与有效期；</li>
  *   <li>校验 Token 中的 JTI 与 Redis 中的有效会话是否一致（单账号单会话控制）；</li>
- *   <li>将受信任的身份上下文注入下游请求头（X-User-Id, X-Tenant-Id, X-Username, X-Session-Id, X-Authorities, X-Request-Id）。</li>
+ *   <li>先清理客户端上下文 Header，再将受信任的身份上下文注入下游请求头（X-User-Id, X-Tenant-Id, X-Username, X-Session-Id, X-Request-Id）。</li>
  * </ol>
  * </p>
  */
@@ -64,6 +65,17 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
     /** Redis 会话刚写入时允许短暂空读，最多重试两次，避免登录并发请求被误判为已注销。 */
     private static final int SESSION_CACHE_MISS_RETRIES = 2;
     private static final Duration SESSION_CACHE_MISS_RETRY_DELAY = Duration.ofMillis(100);
+    /** 网关接收请求时必须清理的客户端上下文 Header，防止伪造身份或权限进入下游。 */
+    private static final Set<String> CLIENT_CONTEXT_HEADERS = Set.of(
+            HeaderConstants.X_USER_ID,
+            HeaderConstants.X_TENANT_ID,
+            HeaderConstants.X_USERNAME,
+            HeaderConstants.X_SESSION_ID,
+            HeaderConstants.X_AUTHORITIES,
+            HeaderConstants.X_PERMISSIONS,
+            HeaderConstants.X_ROLES,
+            "X-Jti"
+    );
 
     private final GatewaySecurityProperties properties;
     private final ReactiveStringRedisTemplate redisTemplate;
@@ -128,9 +140,8 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
 
         // 3. 检查白名单放行
         if (isWhitelisted(path)) {
-            ServerHttpRequest mutatedRequest = request.mutate()
-                    .header(HeaderConstants.X_REQUEST_ID, finalRequestId)
-                    .build();
+            // 白名单同样不能把客户端伪造的身份/权限头带入内部链路，只保留请求追踪 ID。
+            ServerHttpRequest mutatedRequest = sanitizeClientContextHeaders(request, finalRequestId);
             return chain.filter(exchange.mutate().request(mutatedRequest).build());
         }
 
@@ -361,7 +372,9 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
             TokenPayload payload,
             String finalRequestId) {
 
-        ServerHttpRequest.Builder requestBuilder = exchange.getRequest().mutate()
+        ServerHttpRequest.Builder requestBuilder = exchange.getRequest().mutate();
+        requestBuilder.headers(headers -> CLIENT_CONTEXT_HEADERS.forEach(headers::remove));
+        requestBuilder
                 .header(HeaderConstants.X_REQUEST_ID, finalRequestId)
                 .header(HeaderConstants.X_USER_ID, payload.getUserId() != null ? payload.getUserId() : "")
                 .header(HeaderConstants.X_SESSION_ID, payload.getJti() != null ? payload.getJti() : "");
@@ -376,6 +389,22 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
         // 阶段 0/1 规范：Gateway 不再注入 X-Authorities，由下游业务模块独立处理方法级权限与数据隔离
 
         return chain.filter(exchange.mutate().request(requestBuilder.build()).build());
+    }
+
+    /**
+     * 清理客户端可控的身份与权限 Header，并保留网关生成的请求追踪 ID。
+     *
+     * @param request 原始客户端请求
+     * @param requestId 当前链路请求 ID
+     * @return 已清理上下文 Header 的请求
+     */
+    private ServerHttpRequest sanitizeClientContextHeaders(ServerHttpRequest request, String requestId) {
+        return request.mutate()
+                .headers(headers -> {
+                    CLIENT_CONTEXT_HEADERS.forEach(headers::remove);
+                    headers.set(HeaderConstants.X_REQUEST_ID, requestId);
+                })
+                .build();
     }
 
     /**

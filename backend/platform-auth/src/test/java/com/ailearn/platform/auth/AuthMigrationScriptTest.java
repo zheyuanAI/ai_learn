@@ -3,6 +3,7 @@ package com.ailearn.platform.auth;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -97,6 +99,40 @@ class AuthMigrationScriptTest {
             }
 
             assertTrue(literalCount > 0, "V5 迁移脚本至少应包含一个 UUID 字面量");
+        }
+    }
+
+    /**
+     * 校验阶段 2-7 所需的新增冒号权限码均由 V6 幂等补齐。
+     * 入参：无；出参：无；流程：读取 V6 资源，逐项确认权限码、幂等冲突条件与 UUID 字面量存在。
+     *
+     * @throws IOException 读取迁移资源失败时抛出
+     */
+    @Test
+    @DisplayName("V6 必须补齐阶段 2-7 所需权限码并保持幂等")
+    void shouldContainRequiredStagePermissionsInV6() throws IOException {
+        try (InputStream input = getClass().getResourceAsStream(
+                "/db/migration/auth/V6__complete_stage_2_7_permissions.sql")) {
+            assertNotNull(input, "V6 迁移脚本必须存在");
+            String sql = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            List<String> requiredPermissions = List.of(
+                    "inv:uom:view", "inv:uom:manage",
+                    "inv:customer:view", "inv:customer:manage",
+                    "inv:supplier:view", "inv:supplier:manage",
+                    "inv:location:view", "inv:location:manage",
+                    "inv:transfer:view", "inv:transfer:create", "inv:transfer:confirm",
+                    "inv:stocktake:view", "inv:stocktake:create", "inv:stocktake:start", "inv:stocktake:confirm",
+                    "sales:order:update", "mes:bom:manage", "mes:routing:manage",
+                    "iot:device:simulate", "gis:map:manage", "trace:chain:view");
+
+            for (String permission : requiredPermissions) {
+                String literal = "'" + permission + "'";
+                int occurrenceCount = sql.split(Pattern.quote(literal), -1).length - 1;
+                assertEquals(1, occurrenceCount, "V6 权限码必须恰好声明一次: " + permission);
+            }
+            assertTrue(sql.contains("ON CONFLICT (permission_code) WHERE isdel = 0 DO NOTHING"),
+                    "V6 必须按有效权限码冲突保持幂等");
+            assertTrue(sql.contains("::uuid"), "V6 权限 ID 必须使用 PostgreSQL UUID 字面量");
         }
     }
 

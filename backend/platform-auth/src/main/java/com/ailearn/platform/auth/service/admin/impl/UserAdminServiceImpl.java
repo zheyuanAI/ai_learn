@@ -12,6 +12,7 @@ import com.ailearn.platform.auth.domain.entity.UserRole;
 import com.ailearn.platform.auth.domain.vo.admin.PageResult;
 import com.ailearn.platform.auth.domain.vo.admin.UserAdminVo;
 import com.ailearn.platform.auth.mapper.RoleMapper;
+import com.ailearn.platform.auth.mapper.PermissionMapper;
 import com.ailearn.platform.auth.mapper.UserMapper;
 import com.ailearn.platform.auth.mapper.UserRoleMapper;
 import com.ailearn.platform.auth.service.SessionCacheService;
@@ -33,9 +34,12 @@ import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 用户后台管理业务服务实现类。
@@ -43,20 +47,26 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class UserAdminServiceImpl implements UserAdminService {
 
+    private record PermissionCacheRefreshPlan(String expectedJti) {
+    }
+
     private static final Logger log = LoggerFactory.getLogger(UserAdminServiceImpl.class);
 
     private final UserMapper userMapper;
+    private final PermissionMapper permissionMapper;
     private final RoleMapper roleMapper;
     private final UserRoleMapper userRoleMapper;
     private final PasswordEncoder passwordEncoder;
     private final SessionCacheService sessionCacheService;
 
     public UserAdminServiceImpl(UserMapper userMapper,
+                                PermissionMapper permissionMapper,
                                 RoleMapper roleMapper,
                                 UserRoleMapper userRoleMapper,
                                 PasswordEncoder passwordEncoder,
                                 SessionCacheService sessionCacheService) {
         this.userMapper = userMapper;
+        this.permissionMapper = permissionMapper;
         this.roleMapper = roleMapper;
         this.userRoleMapper = userRoleMapper;
         this.passwordEncoder = passwordEncoder;
@@ -76,6 +86,7 @@ public class UserAdminServiceImpl implements UserAdminService {
      * @return 分页结果包装对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:user:view')")
     public PageResult<UserAdminVo> pageUsers(UserPageQueryRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
         Page<User> page = new Page<>(request.getPage(), request.getSize());
@@ -103,6 +114,7 @@ public class UserAdminServiceImpl implements UserAdminService {
      * @return 用户管理视图对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:user:view')")
     public UserAdminVo getUserDetail(UUID userId) {
         UUID tenantId = TenantContextHolder.requireTenantId();
         User user = userMapper.findAnyStatusUserByIdAndTenantId(userId, tenantId);
@@ -128,6 +140,7 @@ public class UserAdminServiceImpl implements UserAdminService {
      * @return 创建后的用户管理视图对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:user:manage')")
     @Transactional(rollbackFor = Exception.class)
     public UserAdminVo createUser(UserCreateRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -197,6 +210,7 @@ public class UserAdminServiceImpl implements UserAdminService {
      * @return 更新后的用户管理视图对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:user:manage')")
     @Transactional(rollbackFor = Exception.class)
     public UserAdminVo updateUser(UUID userId, UserUpdateRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -223,6 +237,11 @@ public class UserAdminServiceImpl implements UserAdminService {
             user.setUserNo(request.getUserNo().trim());
         }
 
+        // 所有请求校验完成后，紧邻角色关系变更前失效旧授权快照；失败请求不会无谓清空缓存。
+        PermissionCacheRefreshPlan permissionCacheRefreshPlan = request.getRoleIds() != null
+                ? preparePermissionCacheRefresh(tenantId, userId)
+                : null;
+
         user.setRealName(request.getRealName().trim());
         user.setEmail(request.getEmail());
         user.setPhone(request.getPhone());
@@ -238,8 +257,8 @@ public class UserAdminServiceImpl implements UserAdminService {
                 UserRole userRole = new UserRole(UUID.randomUUID(), tenantId, userId, roleId);
                 userRoleMapper.insert(userRole);
             }
-            // 清理该用户的权限与菜单缓存
-            sessionCacheService.evictUserAuthCache(tenantId, userId);
+            // 角色关系提交后按原会话剩余 TTL 重建权限快照；缓存失败保持 Fail-Closed。
+            rebuildPermissionCache(tenantId, userId, permissionCacheRefreshPlan);
         }
 
         log.info("[修改用户成功] userId={}, username={}, tenantId={}", userId, user.getUsername(), tenantId);
@@ -260,6 +279,7 @@ public class UserAdminServiceImpl implements UserAdminService {
      * @return 更新后的用户管理视图对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:user:manage')")
     @Transactional(rollbackFor = Exception.class)
     public UserAdminVo updateUserStatus(UUID userId, UserStatusUpdateRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -286,17 +306,18 @@ public class UserAdminServiceImpl implements UserAdminService {
             }
         }
 
+        // 停用前先撤销会话与授权快照，避免状态变更窗口继续接受旧授权。
+        if (!"ACTIVE".equalsIgnoreCase(request.getStatus())) {
+            sessionCacheService.removeActiveSession(tenantId, userId);
+            sessionCacheService.evictUserAuthCache(tenantId, userId);
+        }
+
         user.setStatus(request.getStatus());
         user.setUpdatedBy(currentUsername != null ? currentUsername : "system");
         user.setUpdatedAt(LocalDateTime.now());
         userMapper.updateById(user);
 
         // 3. 状态非正常时强制下线并清理缓存
-        if (!"ACTIVE".equalsIgnoreCase(request.getStatus())) {
-            sessionCacheService.removeActiveSession(tenantId, userId);
-            sessionCacheService.evictUserAuthCache(tenantId, userId);
-        }
-
         log.info("[更新用户状态成功] userId={}, status={}, tenantId={}", userId, request.getStatus(), tenantId);
         return getUserDetail(userId);
     }
@@ -314,6 +335,7 @@ public class UserAdminServiceImpl implements UserAdminService {
      * @param request 重置密码请求参数
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:user:manage')")
     @Transactional(rollbackFor = Exception.class)
     public void resetPassword(UUID userId, UserResetPasswordRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -324,14 +346,14 @@ public class UserAdminServiceImpl implements UserAdminService {
             throw new NotFoundException("用户不存在或不属于当前租户");
         }
 
+        // 密码变更会强制下线，先删除在线会话和授权快照，再落库新密码。
+        sessionCacheService.removeActiveSession(tenantId, userId);
+        sessionCacheService.evictUserAuthCache(tenantId, userId);
+
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword().trim()));
         user.setUpdatedBy(currentUsername != null ? currentUsername : "system");
         user.setUpdatedAt(LocalDateTime.now());
         userMapper.updateById(user);
-
-        // 废除活跃会话与权限缓存
-        sessionCacheService.removeActiveSession(tenantId, userId);
-        sessionCacheService.evictUserAuthCache(tenantId, userId);
 
         log.info("[重置密码成功] userId={}, tenantId={}", userId, tenantId);
     }
@@ -350,6 +372,7 @@ public class UserAdminServiceImpl implements UserAdminService {
      * @return 更新后的用户管理视图对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:user:manage')")
     @Transactional(rollbackFor = Exception.class)
     public UserAdminVo assignRoles(UUID userId, UserRoleAssignRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -364,6 +387,7 @@ public class UserAdminServiceImpl implements UserAdminService {
                 ? validateRoleIds(tenantId, request.getRoleIds())
                 : List.of();
         checkLastAdminRoleRemoval(tenantId, userId, validatedRoles);
+        PermissionCacheRefreshPlan permissionCacheRefreshPlan = preparePermissionCacheRefresh(tenantId, userId);
 
         userRoleMapper.deleteByUserIdAndTenantId(tenantId, userId);
         if (request.getRoleIds() != null) {
@@ -374,7 +398,7 @@ public class UserAdminServiceImpl implements UserAdminService {
             }
         }
 
-        sessionCacheService.evictUserAuthCache(tenantId, userId);
+        rebuildPermissionCache(tenantId, userId, permissionCacheRefreshPlan);
         log.info("[分配角色成功] userId={}, roleCount={}, tenantId={}", userId, request.getRoleIds() != null ? request.getRoleIds().size() : 0, tenantId);
         return getUserDetail(userId);
     }
@@ -391,6 +415,7 @@ public class UserAdminServiceImpl implements UserAdminService {
      * @param userId 目标用户 ID
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:user:manage')")
     @Transactional(rollbackFor = Exception.class)
     public void deleteUser(UUID userId) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -414,12 +439,13 @@ public class UserAdminServiceImpl implements UserAdminService {
             }
         }
 
-        // 3. 软删除用户并清理角色关系与会话缓存
-        userMapper.deleteById(userId);
-        userRoleMapper.deleteByUserIdAndTenantId(tenantId, userId);
+        // 所有删除保护通过后再撤销在线会话和权限快照，避免被拒绝的删除请求产生副作用。
         sessionCacheService.removeActiveSession(tenantId, userId);
         sessionCacheService.evictUserAuthCache(tenantId, userId);
 
+        // 3. 软删除用户并清理角色关系与会话缓存
+        userMapper.deleteById(userId);
+        userRoleMapper.deleteByUserIdAndTenantId(tenantId, userId);
         log.info("[删除用户成功] userId={}, username={}, tenantId={}", userId, user.getUsername(), tenantId);
     }
 
@@ -493,6 +519,73 @@ public class UserAdminServiceImpl implements UserAdminService {
                 }
             }
         }
+    }
+
+    /**
+     * 在用户角色授权变更前保存当前活跃会话剩余 TTL，并清除旧权限菜单快照。
+     * 主要入参为租户 ID 与用户 ID；返回该会话可复用的剩余 TTL；无活跃会话时返回 null。
+     * 简要流程：先读取会话 TTL，再失效旧授权缓存，确保后续重建不会丢失会话生命周期。
+     *
+     * @param tenantId 租户 ID
+     * @param userId 用户 ID
+     * @return 权限缓存刷新计划；无活跃会话时返回空计划
+     */
+    private PermissionCacheRefreshPlan preparePermissionCacheRefresh(UUID tenantId, UUID userId) {
+        String expectedJti = sessionCacheService.getActiveSessionJti(tenantId, userId);
+        sessionCacheService.evictUserAuthCache(tenantId, userId);
+        return new PermissionCacheRefreshPlan(expectedJti);
+    }
+
+    /**
+     * 注册用户权限快照的事务提交后重建任务。
+     * 主要入参为租户 ID、用户 ID 与变更前的 JTI；无活跃会话时不注册任务。
+     * 简要流程：事务提交后再次确认 JTI 未被并发登录替换，读取当前 TTL 与最新权限码并写入缓存；
+     * 缓存故障直接抛出，保持 Fail-Closed。
+     *
+     * @param tenantId 租户 ID
+     * @param userId 用户 ID
+     * @param refreshPlan 变更前活跃会话刷新计划
+     */
+    private void rebuildPermissionCache(UUID tenantId,
+                                        UUID userId,
+                                        PermissionCacheRefreshPlan refreshPlan) {
+        if (refreshPlan == null || refreshPlan.expectedJti() == null) {
+            return;
+        }
+        Runnable refresh = () -> refreshPermissionCacheAfterCommit(tenantId, userId, refreshPlan.expectedJti());
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    refresh.run();
+                }
+            });
+        } else {
+            // 无事务调用仅用于离线测试或特殊宿主，仍沿用同一 JTI/TTL 校验。
+            refresh.run();
+        }
+    }
+
+    /**
+     * 在数据库事务提交后刷新用户权限快照。
+     * 主要入参为租户、用户和预期 JTI；无返回值；流程为确认当前 JTI、读取剩余 TTL、查询最新权限并写入缓存。
+     * 并发登录已替换 JTI 时放弃旧刷新任务，避免覆盖新会话的授权快照。
+     *
+     * @param tenantId 租户 ID
+     * @param userId 用户 ID
+     * @param expectedJti 变更前活跃会话 JTI
+     */
+    private void refreshPermissionCacheAfterCommit(UUID tenantId, UUID userId, String expectedJti) {
+        String currentJti = sessionCacheService.getActiveSessionJti(tenantId, userId);
+        if (!expectedJti.equals(currentJti)) {
+            return;
+        }
+        java.time.Duration ttl = sessionCacheService.getActiveSessionTtl(tenantId, userId);
+        if (ttl == null || ttl.isZero() || ttl.isNegative()) {
+            return;
+        }
+        Set<String> permissions = permissionMapper.findPermissionCodesByUserIdAndTenantId(tenantId, userId);
+        sessionCacheService.cachePermissions(tenantId, userId, permissions != null ? permissions : Set.of(), ttl);
     }
 
     /**

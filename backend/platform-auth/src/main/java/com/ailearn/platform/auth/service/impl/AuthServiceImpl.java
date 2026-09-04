@@ -20,6 +20,7 @@ import com.ailearn.platform.auth.service.AuthService;
 import com.ailearn.platform.auth.service.SessionCacheService;
 import com.ailearn.platform.shared.exception.AuthException;
 import com.ailearn.platform.shared.exception.NotFoundException;
+import com.ailearn.platform.shared.exception.ServiceUnavailableException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -111,15 +112,24 @@ public class AuthServiceImpl implements AuthService {
             throw new AuthException("登录账号或密码错误");
         }
 
+        // 3. 登录时必须先从数据库计算完整权限快照，后续请求不允许因缓存未命中回源数据库。
+        Set<String> permissions = permissionMapper.findPermissionCodesByUserIdAndTenantId(tenant.getId(), user.getId());
+        if (permissions == null) {
+            permissions = Set.of();
+        }
+
         LocalDateTime now = LocalDateTime.now();
         Duration tokenTtl = Duration.ofSeconds(jwtProperties.getAccessTokenExpirationSeconds());
         LocalDateTime expireTime = now.plus(tokenTtl);
 
-        // 3. 单账号单有效会话控制：废弃该用户历史活跃会话（后登顶前）
+        // 4. 先生成不可变 JTI/JWT，JWT 只携带身份，不携带可变权限。
+        String newJti = UUID.randomUUID().toString();
+        String token = jwtTokenService.generateToken(user.getId(), tenant.getId(), user.getUsername(), newJti);
+
+        // 5. 单账号单有效会话控制：废弃该用户历史活跃会话（后登顶前）
         userSessionMapper.revokeActiveSessions(tenant.getId(), user.getId(), now, "REPLACED_BY_NEW_LOGIN");
 
-        // 4. 生成新 JTI 并写入 DB 会话事实记录
-        String newJti = UUID.randomUUID().toString();
+        // 6. 写入数据库会话事实记录；后续 Redis 权限写失败会抛异常并触发事务回滚。
         UserSession userSession = new UserSession(
                 UUID.randomUUID(),
                 tenant.getId(),
@@ -133,14 +143,17 @@ public class AuthServiceImpl implements AuthService {
         );
         userSessionMapper.insert(userSession);
 
-        // 5. 更新 Redis 活跃会话状态与主动清理旧权限缓存（若写入失败抛出异常触发数据库事务回滚）
-        sessionCacheService.saveActiveSession(tenant.getId(), user.getId(), newJti, tokenTtl);
-        sessionCacheService.evictUserAuthCache(tenant.getId(), user.getId());
+        // 7. 严格写权限快照后再发布当前 JTI；任一缓存写入异常均不得返回 Token。
+        try {
+            sessionCacheService.cachePermissions(tenant.getId(), user.getId(), permissions, tokenTtl);
+            sessionCacheService.saveActiveSession(tenant.getId(), user.getId(), newJti, tokenTtl);
+        } catch (RuntimeException cacheWriteFailure) {
+            // 修改：补偿清除可能已经写入的权限/JTI，避免“接口失败但半套授权状态仍可用”。
+            cleanupFailedLoginCache(tenant.getId(), user.getId(), cacheWriteFailure);
+            throw cacheWriteFailure;
+        }
 
-        // 6. 签发仅携带最小不可变身份载荷的 RSA JWT
-        String token = jwtTokenService.generateToken(user.getId(), tenant.getId(), user.getUsername(), newJti);
-
-        // 7. 组装用户信息响应
+        // 8. 组装用户信息响应
         UserInfoVo userInfoVo = new UserInfoVo(
                 user.getId(),
                 tenant.getId(),
@@ -153,6 +166,28 @@ public class AuthServiceImpl implements AuthService {
 
         log.info("[登录成功] userId={}, username={}, jti={}", user.getId(), user.getUsername(), newJti);
         return new LoginResponse(token, newJti, jwtProperties.getAccessTokenExpirationSeconds(), userInfoVo);
+    }
+
+    /**
+     * 清理登录缓存双写失败产生的半成品状态。
+     * 主要入参为租户、用户和原始缓存异常；无业务返回值；流程为尽力删除活跃 JTI、权限及菜单快照，
+     * 清理失败作为 suppressed 异常挂到原异常上，最终仍由统一异常处理返回 503。
+     *
+     * @param tenantId 租户 ID
+     * @param userId 用户 ID
+     * @param originalFailure 原始缓存写入异常
+     */
+    private void cleanupFailedLoginCache(UUID tenantId, UUID userId, RuntimeException originalFailure) {
+        try {
+            sessionCacheService.removeActiveSession(tenantId, userId);
+        } catch (RuntimeException cleanupFailure) {
+            originalFailure.addSuppressed(cleanupFailure);
+        }
+        try {
+            sessionCacheService.evictUserAuthCache(tenantId, userId);
+        } catch (RuntimeException cleanupFailure) {
+            originalFailure.addSuppressed(cleanupFailure);
+        }
     }
 
     @Override
@@ -190,8 +225,8 @@ public class AuthServiceImpl implements AuthService {
         // 3. 查询功能权限点集合（优先读 Redis 缓存）
         Set<String> perms = sessionCacheService.getCachedPermissions(tenantId, userId);
         if (perms == null) {
-            perms = permissionMapper.findPermissionCodesByUserIdAndTenantId(tenantId, userId);
-            sessionCacheService.cachePermissions(tenantId, userId, perms, Duration.ofMinutes(30));
+            // 用户画像与授权链共享同一权限快照；缺失时 Fail-Closed，不再回源数据库临时放行。
+            throw new ServiceUnavailableException("权限服务暂时不可用，请稍后重试");
         }
 
         return new UserProfileVo(

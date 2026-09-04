@@ -50,12 +50,13 @@ public class SharedSecurityConfig {
     public class InnerSecurityConfiguration {
 
         @Bean
-        public DownstreamSecurityFilter downstreamSecurityFilter() {
-            return new DownstreamSecurityFilter();
+        public DownstreamSecurityFilter downstreamSecurityFilter(PermissionContextReader permissionContextReader) {
+            return new DownstreamSecurityFilter(permissionContextReader, objectMapper);
         }
 
         @Bean
-        public SecurityFilterChain downstreamSecurityFilterChain(HttpSecurity http) throws Exception {
+        public SecurityFilterChain downstreamSecurityFilterChain(
+                HttpSecurity http, DownstreamSecurityFilter downstreamSecurityFilter) throws Exception {
             http
                     .csrf(AbstractHttpConfigurer::disable)
                     .formLogin(AbstractHttpConfigurer::disable)
@@ -72,13 +73,14 @@ public class SharedSecurityConfig {
                                     "/doc.html",
                                     "/error"
                             ).permitAll()
-                            .anyRequest().permitAll()
+                            // 除健康、文档和内部白名单外，所有业务请求必须先通过下游身份认证。
+                            .anyRequest().authenticated()
                     )
                     .exceptionHandling(exceptions -> exceptions
                             .authenticationEntryPoint(customAuthenticationEntryPoint())
                             .accessDeniedHandler(customAccessDeniedHandler())
                     )
-                    .addFilterBefore(downstreamSecurityFilter(), UsernamePasswordAuthenticationFilter.class);
+                    .addFilterBefore(downstreamSecurityFilter, UsernamePasswordAuthenticationFilter.class);
 
             return http.build();
         }

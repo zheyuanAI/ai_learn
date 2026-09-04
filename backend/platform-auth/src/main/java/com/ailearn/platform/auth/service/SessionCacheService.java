@@ -44,6 +44,16 @@ public interface SessionCacheService {
     String getActiveSessionJti(UUID tenantId, UUID userId);
 
     /**
+     * 读取当前活跃会话剩余 TTL，用于权限快照刷新时保持会话生命周期一致。
+     *
+     * @param tenantId 租户 ID
+     * @param userId 用户 ID
+     * @return 剩余 TTL；没有活跃会话时返回 null
+     * @throws com.ailearn.platform.shared.exception.ServiceUnavailableException 缓存中心不可用或 TTL 状态非法
+     */
+    Duration getActiveSessionTtl(UUID tenantId, UUID userId);
+
+    /**
      * 删除用户的活跃会话记录（主动注销）。
      *
      * @param tenantId 租户 ID
@@ -96,6 +106,14 @@ public interface SessionCacheService {
      * @param userId   用户 ID
      */
     void evictUserAuthCache(UUID tenantId, UUID userId);
+
+    /**
+     * 单独清除用户动态菜单缓存，不影响权限快照与活跃会话。
+     *
+     * @param tenantId 租户 ID
+     * @param userId   用户 ID
+     */
+    void evictUserMenuCache(UUID tenantId, UUID userId);
 
     /**
      * 清理所有缓存（开发与测试环境辅助）。

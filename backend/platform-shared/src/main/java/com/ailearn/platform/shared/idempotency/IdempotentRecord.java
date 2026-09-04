@@ -39,6 +39,11 @@ public class IdempotentRecord implements Serializable {
     private String idempotencyKey;
 
     /**
+     * 当前 PENDING 执行者的所有权凭证；SUCCESS/FAILED 记录可为空。
+     */
+    private UUID claimToken;
+
+    /**
      * 所属租户 ID
      */
     private UUID tenantId;
@@ -81,12 +86,30 @@ public class IdempotentRecord implements Serializable {
         this.expireAt = expireAt;
     }
 
+    /**
+     * 创建带 claim token 的幂等记录。
+     */
+    public IdempotentRecord(String idempotencyKey, UUID tenantId, Status status, String requestHash,
+                            String responseBody, OffsetDateTime createdAt, OffsetDateTime expireAt,
+                            UUID claimToken) {
+        this(idempotencyKey, tenantId, status, requestHash, responseBody, createdAt, expireAt);
+        this.claimToken = claimToken;
+    }
+
     public String getIdempotencyKey() {
         return idempotencyKey;
     }
 
     public void setIdempotencyKey(String idempotencyKey) {
         this.idempotencyKey = idempotencyKey;
+    }
+
+    public UUID getClaimToken() {
+        return claimToken;
+    }
+
+    public void setClaimToken(UUID claimToken) {
+        this.claimToken = claimToken;
     }
 
     public UUID getTenantId() {

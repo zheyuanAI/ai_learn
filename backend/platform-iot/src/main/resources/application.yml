@@ -49,3 +49,23 @@ management:
     web:
       exposure:
         include: health,info
+
+# 真实 MQTT 消费默认关闭。启用时必须显式提供 Broker 地址和只读订阅账号；连接失败由监听器重试，
+# 不会因为未配置 Broker 阻断 IoT HTTP 服务启动。发布设备凭证由 Mosquitto 外部 password_file 校验。
+iot:
+  internal:
+    # Core S7 只读 Facts 的服务间 HMAC 密钥；留空时内部接口拒绝所有调用。
+    s7-hmac-secret: ${IOT_INTERNAL_S7_HMAC_SECRET:}
+  mqtt:
+    enabled: ${IOT_MQTT_ENABLED:false}
+    server-uri: ${IOT_MQTT_SERVER_URI:}
+    topic-filter: ${IOT_MQTT_TOPIC_FILTER:devices/+/telemetry}
+    client-id: ${IOT_MQTT_CLIENT_ID:platform-iot-telemetry-consumer}
+    username: ${IOT_MQTT_USERNAME:}
+    password: ${IOT_MQTT_PASSWORD:}
+    qos: ${IOT_MQTT_QOS:1}
+    connection-timeout-seconds: ${IOT_MQTT_CONNECTION_TIMEOUT_SECONDS:10}
+    keep-alive-seconds: ${IOT_MQTT_KEEP_ALIVE_SECONDS:30}
+    reconnect-delay-seconds: ${IOT_MQTT_RECONNECT_DELAY_SECONDS:5}
+    clean-session: ${IOT_MQTT_CLEAN_SESSION:false}
+    persistence-directory: ${IOT_MQTT_PERSISTENCE_DIRECTORY:}

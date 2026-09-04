@@ -7,7 +7,6 @@ import io.jsonwebtoken.Jwts;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.time.Duration;
-import java.util.Collection;
 import java.util.Date;
 import java.util.UUID;
 import org.springframework.util.StringUtils;
@@ -20,8 +19,14 @@ public final class JwtUtils {
     public static final String CLAIM_TENANT_ID = "tenantId";
     public static final String CLAIM_TENANT_ID_SNAKE = "tenant_id";
     public static final String CLAIM_USERNAME = "username";
+    /** 旧权限声明名称，仅保留常量以兼容编译，不再生成或解析。 */
+    @Deprecated
     public static final String CLAIM_AUTHORITIES = "authorities";
+    /** 旧角色声明名称，仅保留常量以兼容编译，不再生成或解析。 */
+    @Deprecated
     public static final String CLAIM_ROLES = "roles";
+    /** 旧权限声明名称，仅保留常量以兼容编译，不再生成或解析。 */
+    @Deprecated
     public static final String CLAIM_PERMISSIONS = "permissions";
 
     private JwtUtils() {
@@ -49,7 +54,6 @@ public final class JwtUtils {
                 .expiration(exp)
                 .claim(CLAIM_TENANT_ID, payload.getTenantId())
                 .claim(CLAIM_USERNAME, payload.getUsername())
-                .claim(CLAIM_AUTHORITIES, payload.getAuthorities())
                 .signWith(privateKey, Jwts.SIG.RS256)
                 .compact();
     }
@@ -72,12 +76,11 @@ public final class JwtUtils {
     }
 
     /**
-     * 从 Claims 中提取 TokenPayload 对象，兼容 authorities、roles、permissions 与 tenant_id / tenantId。
+     * 从 Claims 中提取最小身份 TokenPayload 对象，兼容 tenant_id / tenantId。
      *
      * @param claims JWT Claims 载荷
      * @return 转换后的 TokenPayload
      */
-    @SuppressWarnings("unchecked")
     public static TokenPayload extractPayload(Claims claims) {
         String userId = claims.getSubject();
         String jti = claims.getId();
@@ -97,37 +100,8 @@ public final class JwtUtils {
         payload.setJti(jti);
         payload.setTenantId(tenantId);
         payload.setUsername(username);
-
-        // 解析 authorities
-        Object authoritiesObj = claims.get(CLAIM_AUTHORITIES);
-        if (authoritiesObj instanceof Collection<?> collection) {
-            for (Object item : collection) {
-                if (item != null) {
-                    payload.getAuthorities().add(item.toString());
-                }
-            }
-        }
-
-        // 兼容 roles
-        Object rolesObj = claims.get(CLAIM_ROLES);
-        if (rolesObj instanceof Collection<?> collection) {
-            for (Object item : collection) {
-                if (item != null) {
-                    String role = item.toString();
-                    payload.getAuthorities().add(role.startsWith("ROLE_") ? role : "ROLE_" + role);
-                }
-            }
-        }
-
-        // 兼容 permissions
-        Object permsObj = claims.get(CLAIM_PERMISSIONS);
-        if (permsObj instanceof Collection<?> collection) {
-            for (Object item : collection) {
-                if (item != null) {
-                    payload.getAuthorities().add(item.toString());
-                }
-            }
-        }
+        payload.setIssuedAt(claims.getIssuedAt());
+        payload.setExpiresAt(claims.getExpiration());
 
         return payload;
     }

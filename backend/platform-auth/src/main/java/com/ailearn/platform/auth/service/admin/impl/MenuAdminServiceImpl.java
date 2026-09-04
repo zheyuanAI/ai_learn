@@ -5,15 +5,19 @@ import com.ailearn.platform.auth.domain.dto.admin.MenuStatusUpdateRequest;
 import com.ailearn.platform.auth.domain.dto.admin.MenuUpdateRequest;
 import com.ailearn.platform.auth.domain.entity.Menu;
 import com.ailearn.platform.auth.domain.entity.Role;
+import com.ailearn.platform.auth.domain.entity.User;
 import com.ailearn.platform.auth.domain.vo.admin.MenuAdminNodeVo;
 import com.ailearn.platform.auth.mapper.MenuMapper;
 import com.ailearn.platform.auth.mapper.RoleMapper;
+import com.ailearn.platform.auth.mapper.UserMapper;
+import com.ailearn.platform.auth.service.SessionCacheService;
 import com.ailearn.platform.auth.service.admin.MenuAdminService;
 import com.ailearn.platform.shared.api.CommonErrorCode;
 import com.ailearn.platform.shared.context.TenantContextHolder;
 import com.ailearn.platform.shared.exception.BizException;
 import com.ailearn.platform.shared.exception.ConflictException;
 import com.ailearn.platform.shared.exception.NotFoundException;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -25,6 +29,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,10 +43,17 @@ public class MenuAdminServiceImpl implements MenuAdminService {
 
     private final MenuMapper menuMapper;
     private final RoleMapper roleMapper;
+    private final UserMapper userMapper;
+    private final SessionCacheService sessionCacheService;
 
-    public MenuAdminServiceImpl(MenuMapper menuMapper, RoleMapper roleMapper) {
+    public MenuAdminServiceImpl(MenuMapper menuMapper,
+                                RoleMapper roleMapper,
+                                UserMapper userMapper,
+                                SessionCacheService sessionCacheService) {
         this.menuMapper = menuMapper;
         this.roleMapper = roleMapper;
+        this.userMapper = userMapper;
+        this.sessionCacheService = sessionCacheService;
     }
 
     /**
@@ -56,6 +68,7 @@ public class MenuAdminServiceImpl implements MenuAdminService {
      * @return 动态菜单树根节点列表
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:menu:view')")
     public List<MenuAdminNodeVo> getMenuTree() {
         UUID tenantId = TenantContextHolder.requireTenantId();
         List<Menu> allMenus = menuMapper.findAllMenusForAdmin(tenantId);
@@ -100,6 +113,7 @@ public class MenuAdminServiceImpl implements MenuAdminService {
      * @return 菜单节点详情视图对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:menu:view')")
     public MenuAdminNodeVo getMenuDetail(UUID menuId) {
         UUID tenantId = TenantContextHolder.requireTenantId();
         Menu menu = menuMapper.selectById(menuId);
@@ -123,6 +137,7 @@ public class MenuAdminServiceImpl implements MenuAdminService {
      * @return 创建后的菜单视图对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:menu:manage')")
     @Transactional(rollbackFor = Exception.class)
     public MenuAdminNodeVo createMenu(MenuCreateRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -160,6 +175,7 @@ public class MenuAdminServiceImpl implements MenuAdminService {
         menu.setIsdel(0);
 
         menuMapper.insert(menu);
+        evictTenantMenuCaches(tenantId);
         log.info("[创建菜单成功] tenantId={}, menuId={}, menuCode={}", tenantId, menuId, menu.getMenuCode());
 
         return getMenuDetail(menuId);
@@ -179,6 +195,7 @@ public class MenuAdminServiceImpl implements MenuAdminService {
      * @return 更新后的菜单视图对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:menu:manage')")
     @Transactional(rollbackFor = Exception.class)
     public MenuAdminNodeVo updateMenu(UUID menuId, MenuUpdateRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -222,6 +239,7 @@ public class MenuAdminServiceImpl implements MenuAdminService {
         menu.setUpdatedAt(LocalDateTime.now());
 
         menuMapper.updateById(menu);
+        evictTenantMenuCaches(tenantId);
         log.info("[修改菜单成功] tenantId={}, menuId={}, menuCode={}", tenantId, menuId, menu.getMenuCode());
 
         return getMenuDetail(menuId);
@@ -241,6 +259,7 @@ public class MenuAdminServiceImpl implements MenuAdminService {
      * @return 更新后的菜单视图对象
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:menu:manage')")
     @Transactional(rollbackFor = Exception.class)
     public MenuAdminNodeVo updateMenuStatus(UUID menuId, MenuStatusUpdateRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -252,6 +271,7 @@ public class MenuAdminServiceImpl implements MenuAdminService {
         menu.setStatus(request.getStatus());
         menu.setUpdatedAt(LocalDateTime.now());
         menuMapper.updateById(menu);
+        evictTenantMenuCaches(tenantId);
 
         log.info("[更新菜单启用状态成功] tenantId={}, menuId={}, status={}", tenantId, menuId, request.getStatus());
         return getMenuDetail(menuId);
@@ -269,6 +289,7 @@ public class MenuAdminServiceImpl implements MenuAdminService {
      * @param menuId 目标菜单 ID
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:menu:manage')")
     @Transactional(rollbackFor = Exception.class)
     public void deleteMenu(UUID menuId) {
         UUID tenantId = TenantContextHolder.requireTenantId();
@@ -291,6 +312,7 @@ public class MenuAdminServiceImpl implements MenuAdminService {
 
         // 3. 软删除菜单
         menuMapper.deleteById(menuId);
+        evictTenantMenuCaches(tenantId);
         log.info("[删除菜单成功] tenantId={}, menuId={}, menuCode={}", tenantId, menuId, menu.getMenuCode());
     }
 
@@ -307,6 +329,7 @@ public class MenuAdminServiceImpl implements MenuAdminService {
      * @return 菜单 ID 列表
      */
     @Override
+    @PreAuthorize("hasAuthority('auth:menu:view')")
     public List<UUID> getRoleMenuIds(UUID roleId) {
         UUID tenantId = TenantContextHolder.requireTenantId();
         Role role = roleMapper.selectById(roleId);
@@ -367,6 +390,23 @@ public class MenuAdminServiceImpl implements MenuAdminService {
                     collectDescendants(childId, parentToChildrenMap, descendants);
                 }
             }
+        }
+    }
+
+    /**
+     * 清除当前租户所有用户的菜单快照。
+     * 主要入参为租户 ID；无返回值；流程为查询未删除用户并逐一删除菜单缓存，避免菜单停用、隐藏或层级变更
+     * 在缓存 TTL 内继续展示；缓存故障直接抛出 503，禁止继续使用旧快照。
+     *
+     * @param tenantId 租户 ID
+     */
+    private void evictTenantMenuCaches(UUID tenantId) {
+        List<User> users = userMapper.selectList(new LambdaQueryWrapper<User>()
+                .select(User::getId)
+                .eq(User::getTenantId, tenantId)
+                .eq(User::getIsdel, 0));
+        for (User user : users) {
+            sessionCacheService.evictUserMenuCache(tenantId, user.getId());
         }
     }
 

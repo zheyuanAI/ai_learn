@@ -1,15 +1,13 @@
 package com.ailearn.platform.shared.interceptor;
 
+import com.ailearn.platform.shared.constants.HeaderConstants;
 import com.ailearn.platform.shared.context.RequestContext;
 import com.ailearn.platform.shared.context.RequestContextHolder;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import org.springframework.lang.Nullable;
 import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -17,15 +15,14 @@ import org.springframework.web.servlet.HandlerInterceptor;
 /**
  * 请求头上下文拦截器。
  * <p>
- * 从网关（Gateway）转发的内部受信请求头中提取用户、租户、会话和权限元数据，并注入到 {@link RequestContextHolder}。
+ * 从网关（Gateway）转发的内部受信请求头中提取用户、租户、会话元数据，并注入到 {@link RequestContextHolder}。
  * 支持的请求头包括：
  * <ul>
  *   <li>{@code X-Tenant-Id}：租户唯一 UUID</li>
  *   <li>{@code X-User-Id}：用户唯一 UUID</li>
  *   <li>{@code X-Username}：登录用户名（支持 URL 编码字符串）</li>
- *   <li>{@code X-Jti}：JWT 会话标识 JTI</li>
- *   <li>{@code X-Roles}：英文逗号分隔的角色编码列表</li>
- *   <li>{@code X-Permissions}：英文逗号分隔的权限点列表</li>
+ *   <li>{@code X-Session-Id}：JWT 会话标识 JTI</li>
+ *   <li>权限不从请求头读取，由共享安全过滤器从集中式权限缓存读取</li>
  * </ul>
  * </p>
  */
@@ -34,9 +31,16 @@ public class HeaderContextInterceptor implements HandlerInterceptor {
     public static final String HEADER_TENANT_ID = "X-Tenant-Id";
     public static final String HEADER_USER_ID = "X-User-Id";
     public static final String HEADER_USERNAME = "X-Username";
+    public static final String HEADER_SESSION_ID = HeaderConstants.X_SESSION_ID;
+    /** 历史 Header 常量仅为编译兼容，拦截器不再读取。 */
+    @Deprecated
     public static final String HEADER_JTI = "X-Jti";
-    public static final String HEADER_ROLES = "X-Roles";
-    public static final String HEADER_PERMISSIONS = "X-Permissions";
+    /** 历史权限 Header 常量仅为编译兼容，拦截器不再读取。 */
+    @Deprecated
+    public static final String HEADER_ROLES = HeaderConstants.X_ROLES;
+    /** 历史权限 Header 常量仅为编译兼容，拦截器不再读取。 */
+    @Deprecated
+    public static final String HEADER_PERMISSIONS = HeaderConstants.X_PERMISSIONS;
 
     /**
      * 前置处理：从请求头解析上下文信息并注入当前线程安全上下文。
@@ -80,30 +84,10 @@ public class HeaderContextInterceptor implements HandlerInterceptor {
             }
         }
 
-        // 提取 JTI
-        String jtiStr = request.getHeader(HEADER_JTI);
+        // 只读取 Gateway 注入的当前会话 Header，不兼容旧 X-Jti 权限旁路。
+        String jtiStr = request.getHeader(HEADER_SESSION_ID);
         if (StringUtils.hasText(jtiStr)) {
             context.setJti(jtiStr.trim());
-        }
-
-        // 提取角色列表
-        String rolesStr = request.getHeader(HEADER_ROLES);
-        if (StringUtils.hasText(rolesStr)) {
-            Set<String> roles = Arrays.stream(rolesStr.split(","))
-                    .map(String::trim)
-                    .filter(StringUtils::hasText)
-                    .collect(Collectors.toSet());
-            context.setRoles(roles);
-        }
-
-        // 提取权限列表
-        String permissionsStr = request.getHeader(HEADER_PERMISSIONS);
-        if (StringUtils.hasText(permissionsStr)) {
-            Set<String> permissions = Arrays.stream(permissionsStr.split(","))
-                    .map(String::trim)
-                    .filter(StringUtils::hasText)
-                    .collect(Collectors.toSet());
-            context.setPermissions(permissions);
         }
 
         // 记录客户端 IP

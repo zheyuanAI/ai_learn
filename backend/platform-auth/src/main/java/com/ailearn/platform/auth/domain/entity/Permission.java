@@ -14,7 +14,7 @@ import java.util.UUID;
 /**
  * 功能权限点实体（auth_permission）。
  * <p>
- * 定义系统中的功能权限标识（例如 sales.order.create, inventory.receipt.confirm 等）。
+ * 定义系统中的功能权限标识（例如 sales:order:create, pur:receipt:confirm 等）。
  * </p>
  */
 @TableName("auth_permission")
@@ -29,7 +29,7 @@ public class Permission implements Serializable {
     private UUID id;
 
     /**
-     * 权限点唯一字符串标识（例如 sales.order.create, inventory.receipt.confirm）
+     * 权限点唯一字符串标识（例如 sales:order:create, pur:receipt:confirm）
      */
     @TableField("permission_code")
     private String permissionCode;

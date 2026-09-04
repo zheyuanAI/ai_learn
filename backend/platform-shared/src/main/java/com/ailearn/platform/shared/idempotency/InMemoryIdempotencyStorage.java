@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -25,28 +26,43 @@ public class InMemoryIdempotencyStorage implements IdempotencyStorage {
     public boolean tryAcquire(String key, UUID tenantId, Duration ttl, String requestHash) {
         String fullKey = buildStorageKey(key, tenantId);
         OffsetDateTime now = OffsetDateTime.now();
-
-        IdempotentRecord existing = storage.get(fullKey);
-        if (existing != null) {
-            // 检查是否已过期
-            if (existing.getExpireAt() != null && existing.getExpireAt().isBefore(now)) {
-                storage.remove(fullKey);
-            } else {
-                return false;
+        Duration actualTtl = ttl == null ? Duration.ofSeconds(1) : ttl;
+        UUID token = UUID.randomUUID();
+        AtomicReference<Boolean> acquired = new AtomicReference<>(false);
+        storage.compute(fullKey, (ignored, existing) -> {
+            if (existing != null && existing.getExpireAt() != null
+                    && !existing.getExpireAt().isBefore(now)) {
+                return existing;
             }
-        }
+            acquired.set(true);
+            return new IdempotentRecord(key, tenantId, IdempotentRecord.Status.PENDING,
+                    requestHash, null, now, now.plus(actualTtl), token);
+        });
+        return acquired.get();
+    }
 
-        IdempotentRecord record = new IdempotentRecord(
-                key,
-                tenantId,
-                IdempotentRecord.Status.PENDING,
-                requestHash,
-                null,
-                now,
-                now.plus(ttl)
-        );
-
-        return storage.putIfAbsent(fullKey, record) == null;
+    /**
+     * 原子创建带 token 的 PENDING 记录；过期记录仅在同一次 Map 原子计算中被替换。
+     */
+    @Override
+    public Optional<IdempotencyClaim> tryAcquireClaim(String operation, String key, UUID tenantId,
+                                                       Duration ttl, String requestHash) {
+        String scopedKey = IdempotencyStorage.scopedKey(operation, key);
+        String fullKey = buildStorageKey(scopedKey, tenantId);
+        OffsetDateTime now = OffsetDateTime.now();
+        Duration actualTtl = ttl == null ? Duration.ofSeconds(1) : ttl;
+        UUID token = UUID.randomUUID();
+        AtomicReference<IdempotencyClaim> acquired = new AtomicReference<>();
+        storage.compute(fullKey, (ignored, existing) -> {
+            if (existing != null && existing.getExpireAt() != null
+                    && !existing.getExpireAt().isBefore(now)) {
+                return existing;
+            }
+            acquired.set(new IdempotencyClaim(operation, key, tenantId, token));
+            return new IdempotentRecord(scopedKey, tenantId, IdempotentRecord.Status.PENDING,
+                    requestHash, null, now, now.plus(actualTtl), token);
+        });
+        return Optional.ofNullable(acquired.get());
     }
 
     @Override
@@ -60,10 +76,52 @@ public class InMemoryIdempotencyStorage implements IdempotencyStorage {
         }
     }
 
+    /**
+     * 仅允许当前 PENDING claim 完成，拒绝过期重入后的旧执行者覆盖新结果。
+     */
+    @Override
+    public boolean complete(String operation, String key, UUID tenantId, UUID claimToken,
+                            String responseBody, Duration ttl) {
+        String fullKey = buildStorageKey(IdempotencyStorage.scopedKey(operation, key), tenantId);
+        AtomicReference<Boolean> completed = new AtomicReference<>(false);
+        storage.computeIfPresent(fullKey, (ignored, record) -> {
+            if (record.getStatus() == IdempotentRecord.Status.PENDING
+                    && claimToken != null && claimToken.equals(record.getClaimToken())
+                    && (record.getExpireAt() == null || record.getExpireAt().isAfter(OffsetDateTime.now()))) {
+                record.setStatus(IdempotentRecord.Status.SUCCESS);
+                record.setResponseBody(responseBody);
+                record.setClaimToken(null);
+                record.setExpireAt(OffsetDateTime.now().plus(ttl == null ? Duration.ofSeconds(1) : ttl));
+                completed.set(true);
+            }
+            return record;
+        });
+        return completed.get();
+    }
+
     @Override
     public void fail(String key, UUID tenantId, String errorMessage) {
         String fullKey = buildStorageKey(key, tenantId);
         storage.remove(fullKey);
+    }
+
+    /**
+     * 仅允许当前 PENDING claim 释放；旧 claim 失败不会删除新请求的记录。
+     */
+    @Override
+    public boolean fail(String operation, String key, UUID tenantId, UUID claimToken,
+                        String errorMessage) {
+        String fullKey = buildStorageKey(IdempotencyStorage.scopedKey(operation, key), tenantId);
+        AtomicReference<Boolean> failed = new AtomicReference<>(false);
+        storage.computeIfPresent(fullKey, (ignored, record) -> {
+            if (record.getStatus() == IdempotentRecord.Status.PENDING
+                    && claimToken != null && claimToken.equals(record.getClaimToken())) {
+                failed.set(true);
+                return null;
+            }
+            return record;
+        });
+        return failed.get();
     }
 
     @Override

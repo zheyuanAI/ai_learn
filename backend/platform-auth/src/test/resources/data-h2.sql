@@ -47,11 +47,10 @@ VALUES
 INSERT INTO auth_permission (id, permission_code, permission_name, module, description, created_at, updated_at, isdel)
 VALUES
 ('50000000-0000-0000-0000-000000000001', 'dashboard:view', '查看综合看板', 'auth', '查看全域综合只读看板', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000002', 'site-map:view', '查看二维地图', 'auth', '查看厂区空间地图与点位状态', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000003', 'master-data:manage', '管理主数据', 'auth', '物料商品与库位主数据维护', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000004', 'ai:chat', 'AI智能问答', 'auth', '受控只读业务智能问答', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000002', 'gis:map:view', '查看二维地图', 'gis', '查看厂区空间地图与点位状态', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000003', 'inv:product:manage', '管理主数据', 'master', '物料商品与库位主数据维护', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000004', 'ai:chat:query', 'AI智能问答', 'ai', '受控只读业务智能问答', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 ('50000000-0000-0000-0000-000000000005', 'ai:audit:view', '查看AI调用审计', 'auth', '查看AI工具调用全量审计日志', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000006', 'system:tenant:manage', '租户与权限管理', 'auth', '租户、用户及权限分配管理', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 ('50000000-0000-0000-0000-000000000101', 'auth:tenant:view', '租户查询', 'auth', '查询租户信息与列表', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 ('50000000-0000-0000-0000-000000000102', 'auth:tenant:manage', '租户管理', 'auth', '创建与维护租户信息', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 ('50000000-0000-0000-0000-000000000103', 'auth:user:view', '用户查询', 'auth', '查询用户列表与账号详情', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
@@ -63,46 +62,48 @@ VALUES
 ('50000000-0000-0000-0000-000000000109', 'auth:session:view', '会话查询', 'auth', '查询在线用户会话与Token状态', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 ('50000000-0000-0000-0000-000000000110', 'auth:session:revoke', '会话注销', 'auth', '强制踢除或注销在线会话', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 
-('50000000-0000-0000-0000-000000000010', 'sales.order.create', '创建销售订单', 'sales', '录入销售订单草稿', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000011', 'sales.order.submit', '提交销售订单', 'sales', '提交销售订单进入待审核', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000012', 'sales.order.approve', '审核销售订单', 'sales', '审核通过销售订单', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000013', 'sales.order.track', '跟踪销售履约', 'sales', '查看销售订单履约状态', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000014', 'inventory.balance.view', '查看库存余额', 'inventory', '查询可用与实物库存', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000010', 'sales:order:create', '创建销售订单', 'sales', '录入销售订单草稿', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000011', 'sales:order:submit', '提交销售订单', 'sales', '提交销售订单进入待审核', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000012', 'sales:order:approve', '审核销售订单', 'sales', '审核通过销售订单', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000013', 'sales:order:view', '跟踪销售履约', 'sales', '查看销售订单履约状态', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000014', 'inv:balance:view', '查看库存余额', 'inventory', '查询可用与实物库存', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 
-('50000000-0000-0000-0000-000000000020', 'purchase.order.create', '创建采购订单', 'purchasing', '录入采购订单草稿', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000021', 'purchase.order.submit', '提交采购订单', 'purchasing', '提交采购订单进入待审核', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000022', 'purchase.order.approve', '审核采购订单', 'purchasing', '审核通过采购订单', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000023', 'purchase.order.complete', '人工完成采购单', 'purchasing', '终止采购订单剩余履约', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000024', 'quality.purchase-disposition.return', '决定退回供应方', 'quality', '针对不合格品决定退供', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000020', 'pur:order:create', '创建采购订单', 'purchasing', '录入采购订单草稿', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000021', 'pur:order:submit', '提交采购订单', 'purchasing', '提交采购订单进入待审核', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000022', 'pur:order:approve', '审核采购订单', 'purchasing', '审核通过采购订单', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000023', 'pur:order:complete', '人工完成采购单', 'purchasing', '终止采购订单剩余履约', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000024', 'pur:quality:return', '决定退回供应方', 'purchasing', '针对不合格品决定退供', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 
-('50000000-0000-0000-0000-000000000030', 'inventory.receipt.confirm', '采购外观验收与实收', 'inventory', '外观拒收与实收进隔离位', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000031', 'inventory.quality-disposition.confirm', '质量处置执行', 'inventory', '放行移位与报废扣减实物', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000032', 'inventory.putaway.confirm', '确认上架', 'inventory', '暂存位移入存储位', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000033', 'inventory.pick.confirm', '销售直接拣货', 'inventory', '自动预留并移至发货暂存位', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000034', 'inventory.shipment.confirm', '销售发货确认', 'inventory', '扣减总库存并释放预留', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000035', 'inventory.issue.confirm', '生产领料确认', 'inventory', '确认原料出库', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000036', 'inventory.transfer.confirm', '库位调拨', 'inventory', '普通库位间调拨移位', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000030', 'pur:receipt:confirm', '采购外观验收与实收', 'purchasing', '外观拒收与实收进隔离位', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000031', 'pur:disposition:confirm', '质量处置执行', 'purchasing', '放行移位与报废扣减实物', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000032', 'pur:putaway:confirm', '确认上架', 'purchasing', '暂存位移入存储位', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000033', 'sales:pick:confirm', '销售直接拣货', 'sales', '自动预留并移至发货暂存位', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000034', 'sales:shipment:confirm', '销售发货确认', 'sales', '扣减总库存并释放预留', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000035', 'mes:material:confirm', '生产领料确认', 'mes', '确认原料出库', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000036', 'inv:transfer:confirm', '库位调拨', 'inventory', '普通库位间调拨移位', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 
-('50000000-0000-0000-0000-000000000040', 'quality.purchase-inspection.submit', '采购到货质检', 'quality', '录入合格与不合格数量', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000041', 'quality.purchase-disposition.decide', '质量放行/报废决定', 'quality', '下达放行或报废决定', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000042', 'manufacturing.work-order.approve', '工单审核与下达', 'mes', '审核工单并锁定BOM', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000043', 'manufacturing.execution.manage', '工序执行管控', 'mes', '开始、暂停与完成工序', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000044', 'manufacturing.work-report.submit', '工序报工申报', 'mes', '申报工序合格与不良数量', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000045', 'quality.inspection.submit', '成品质检判定', 'quality', '完工成品质检判定', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000040', 'pur:quality:inspect', '采购到货质检', 'purchasing', '录入合格与不合格数量', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000041', 'pur:quality:release', '质量放行/报废决定', 'purchasing', '下达放行或报废决定', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000042', 'mes:workorder:approve', '工单审核与下达', 'mes', '审核工单并锁定BOM', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000043', 'mes:execution:manage', '工序执行管控', 'mes', '开始、暂停与完成工序', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000044', 'mes:report:manage', '工序报工申报', 'mes', '申报工序合格与不良数量', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000045', 'mes:quality:inspect', '成品质检判定', 'mes', '完工成品质检判定', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 
-('50000000-0000-0000-0000-000000000050', 'iot.telemetry.view', '遥测与状态监控', 'iot', '查看设备遥测与在线状态', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000051', 'iot.alarm.ack', '告警确认与消警', 'iot', '人工确认与清除告警', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000052', 'iot.device.manage', '设备台账管理', 'iot', '维护设备与凭证', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('50000000-0000-0000-0000-000000000053', 'iot.digital-twin.view', '数字孪生查看', 'iot', '查看设备数字孪生拓扑', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0);
+('50000000-0000-0000-0000-000000000050', 'iot:telemetry:view', '遥测与状态监控', 'iot', '查看设备遥测与在线状态', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000051', 'iot:alarm:ack', '告警确认与消警', 'iot', '人工确认与清除告警', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000052', 'iot:device:manage', '设备台账管理', 'iot', '维护设备与凭证', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('50000000-0000-0000-0000-000000000053', 'iot:device:view', '数字孪生查看', 'iot', '查看设备数字孪生拓扑', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0);
 
 -- 6. 角色与权限关联 (TENANT_ADMIN: 全部管理权限)
 INSERT INTO auth_role_permission (id, role_id, permission_id, created_at, isdel) VALUES
-('41000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001', CURRENT_TIMESTAMP, 0),
-('41000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000002', CURRENT_TIMESTAMP, 0),
-('41000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000003', CURRENT_TIMESTAMP, 0),
-('41000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000004', CURRENT_TIMESTAMP, 0),
-('41000000-0000-0000-0000-000000000005', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000005', CURRENT_TIMESTAMP, 0),
-('41000000-0000-0000-0000-000000000006', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000006', CURRENT_TIMESTAMP, 0);
+('41000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000101', CURRENT_TIMESTAMP, 0),
+('41000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000102', CURRENT_TIMESTAMP, 0),
+('41000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000103', CURRENT_TIMESTAMP, 0),
+('41000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000104', CURRENT_TIMESTAMP, 0),
+('41000000-0000-0000-0000-000000000005', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000105', CURRENT_TIMESTAMP, 0),
+('41000000-0000-0000-0000-000000000006', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000106', CURRENT_TIMESTAMP, 0),
+('41000000-0000-0000-0000-000000000007', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000107', CURRENT_TIMESTAMP, 0),
+('41000000-0000-0000-0000-000000000008', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000108', CURRENT_TIMESTAMP, 0);
 
 -- SALES
 INSERT INTO auth_role_permission (id, role_id, permission_id, created_at, isdel) VALUES
@@ -151,13 +152,13 @@ INSERT INTO auth_menu (id, parent_id, tenant_id, menu_code, menu_name, route_pat
 VALUES
 -- 租户1 菜单
 ('60000000-0000-0000-0000-000000000001', NULL, 'a0000000-0000-0000-0000-000000000001', 'dashboard', '首页看板', '/dashboard', 'views/Dashboard.vue', 'icon-dashboard', 10, 'dashboard:view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('60000000-0000-0000-0000-000000000002', NULL, 'a0000000-0000-0000-0000-000000000001', 'master-data', '主数据', '/master-data', 'views/MasterData.vue', 'icon-database', 20, 'master-data:manage', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('60000000-0000-0000-0000-000000000003', NULL, 'a0000000-0000-0000-0000-000000000001', 'purchase-inbound', '采购收货', '/purchase-inbound', 'views/PurchaseInbound.vue', 'icon-truck', 30, 'inventory.receipt.confirm', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('60000000-0000-0000-0000-000000000004', NULL, 'a0000000-0000-0000-0000-000000000001', 'sales-outbound', '销售交付', '/sales-outbound', 'views/SalesOutbound.vue', 'icon-shopping-bag', 40, 'sales.order.track', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('60000000-0000-0000-0000-000000000005', NULL, 'a0000000-0000-0000-0000-000000000001', 'work-order', '制造执行', '/work-order', 'views/WorkOrder.vue', 'icon-cpu', 50, 'manufacturing.work-order.approve', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('60000000-0000-0000-0000-000000000006', NULL, 'a0000000-0000-0000-0000-000000000001', 'device-alarm', '设备事实', '/device-alarm', 'views/DeviceAlarm.vue', 'icon-activity', 60, 'iot.telemetry.view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('60000000-0000-0000-0000-000000000007', NULL, 'a0000000-0000-0000-0000-000000000001', 'site-map', '厂区地图', '/site-map', 'views/SiteMap.vue', 'icon-map-pin', 70, 'site-map:view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('60000000-0000-0000-0000-000000000008', NULL, 'a0000000-0000-0000-0000-000000000001', 'ai-assistant', 'AI只读助手', '/ai-assistant', 'views/AiAssistant.vue', 'icon-cpu', 80, 'ai:chat', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('60000000-0000-0000-0000-000000000002', NULL, 'a0000000-0000-0000-0000-000000000001', 'master-data', '主数据', '/master-data', 'views/MasterData.vue', 'icon-database', 20, 'inv:product:manage', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('60000000-0000-0000-0000-000000000003', NULL, 'a0000000-0000-0000-0000-000000000001', 'purchase-inbound', '采购收货', '/purchase-inbound', 'views/PurchaseInbound.vue', 'icon-truck', 30, 'pur:receipt:confirm', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('60000000-0000-0000-0000-000000000004', NULL, 'a0000000-0000-0000-0000-000000000001', 'sales-outbound', '销售交付', '/sales-outbound', 'views/SalesOutbound.vue', 'icon-shopping-bag', 40, 'sales:order:view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('60000000-0000-0000-0000-000000000005', NULL, 'a0000000-0000-0000-0000-000000000001', 'work-order', '制造执行', '/work-order', 'views/WorkOrder.vue', 'icon-cpu', 50, 'mes:workorder:approve', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('60000000-0000-0000-0000-000000000006', NULL, 'a0000000-0000-0000-0000-000000000001', 'device-alarm', '设备事实', '/device-alarm', 'views/DeviceAlarm.vue', 'icon-activity', 60, 'iot:telemetry:view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('60000000-0000-0000-0000-000000000007', NULL, 'a0000000-0000-0000-0000-000000000001', 'site-map', '厂区地图', '/site-map', 'views/SiteMap.vue', 'icon-map-pin', 70, 'gis:map:view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('60000000-0000-0000-0000-000000000008', NULL, 'a0000000-0000-0000-0000-000000000001', 'ai-assistant', 'AI只读助手', '/ai-assistant', 'views/AiAssistant.vue', 'icon-cpu', 80, 'ai:chat:query', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 ('60000000-0000-0000-0000-000000000009', NULL, 'a0000000-0000-0000-0000-000000000001', 'tool-audit', '调用审计', '/tool-audit', 'views/ToolAudit.vue', 'icon-file-text', 90, 'ai:audit:view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 ('60000000-0000-0000-0000-000000000010', NULL, 'a0000000-0000-0000-0000-000000000001', 'system', '系统管理', '/system', 'views/System.vue', 'SettingOutlined', 100, NULL, TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 ('60000000-0000-0000-0000-000000000090', '60000000-0000-0000-0000-000000000010', 'a0000000-0000-0000-0000-000000000001', 'sys_tenant', '租户信息', '/system/tenant', 'views/system/TenantSetting.vue', 'ApartmentOutlined', 1, 'auth:tenant:view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
@@ -168,13 +169,13 @@ VALUES
 
 -- 租户2 菜单副本
 ('70000000-0000-0000-0000-000000000001', NULL, 'a0000000-0000-0000-0000-000000000002', 'dashboard', '首页看板', '/dashboard', 'views/Dashboard.vue', 'icon-dashboard', 10, 'dashboard:view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('70000000-0000-0000-0000-000000000002', NULL, 'a0000000-0000-0000-0000-000000000002', 'master-data', '主数据', '/master-data', 'views/MasterData.vue', 'icon-database', 20, 'master-data:manage', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('70000000-0000-0000-0000-000000000003', NULL, 'a0000000-0000-0000-0000-000000000002', 'purchase-inbound', '采购收货', '/purchase-inbound', 'views/PurchaseInbound.vue', 'icon-truck', 30, 'inventory.receipt.confirm', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('70000000-0000-0000-0000-000000000004', NULL, 'a0000000-0000-0000-0000-000000000002', 'sales-outbound', '销售交付', '/sales-outbound', 'views/SalesOutbound.vue', 'icon-shopping-bag', 40, 'sales.order.track', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('70000000-0000-0000-0000-000000000005', NULL, 'a0000000-0000-0000-0000-000000000002', 'work-order', '制造执行', '/work-order', 'views/WorkOrder.vue', 'icon-cpu', 50, 'manufacturing.work-order.approve', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('70000000-0000-0000-0000-000000000006', NULL, 'a0000000-0000-0000-0000-000000000002', 'device-alarm', '设备事实', '/device-alarm', 'views/DeviceAlarm.vue', 'icon-activity', 60, 'iot.telemetry.view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('70000000-0000-0000-0000-000000000007', NULL, 'a0000000-0000-0000-0000-000000000002', 'site-map', '厂区地图', '/site-map', 'views/SiteMap.vue', 'icon-map-pin', 70, 'site-map:view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-('70000000-0000-0000-0000-000000000008', NULL, 'a0000000-0000-0000-0000-000000000002', 'ai-assistant', 'AI只读助手', '/ai-assistant', 'views/AiAssistant.vue', 'icon-cpu', 80, 'ai:chat', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('70000000-0000-0000-0000-000000000002', NULL, 'a0000000-0000-0000-0000-000000000002', 'master-data', '主数据', '/master-data', 'views/MasterData.vue', 'icon-database', 20, 'inv:product:manage', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('70000000-0000-0000-0000-000000000003', NULL, 'a0000000-0000-0000-0000-000000000002', 'purchase-inbound', '采购收货', '/purchase-inbound', 'views/PurchaseInbound.vue', 'icon-truck', 30, 'pur:receipt:confirm', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('70000000-0000-0000-0000-000000000004', NULL, 'a0000000-0000-0000-0000-000000000002', 'sales-outbound', '销售交付', '/sales-outbound', 'views/SalesOutbound.vue', 'icon-shopping-bag', 40, 'sales:order:view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('70000000-0000-0000-0000-000000000005', NULL, 'a0000000-0000-0000-0000-000000000002', 'work-order', '制造执行', '/work-order', 'views/WorkOrder.vue', 'icon-cpu', 50, 'mes:workorder:approve', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('70000000-0000-0000-0000-000000000006', NULL, 'a0000000-0000-0000-0000-000000000002', 'device-alarm', '设备事实', '/device-alarm', 'views/DeviceAlarm.vue', 'icon-activity', 60, 'iot:telemetry:view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('70000000-0000-0000-0000-000000000007', NULL, 'a0000000-0000-0000-0000-000000000002', 'site-map', '厂区地图', '/site-map', 'views/SiteMap.vue', 'icon-map-pin', 70, 'gis:map:view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+('70000000-0000-0000-0000-000000000008', NULL, 'a0000000-0000-0000-0000-000000000002', 'ai-assistant', 'AI只读助手', '/ai-assistant', 'views/AiAssistant.vue', 'icon-cpu', 80, 'ai:chat:query', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 ('70000000-0000-0000-0000-000000000009', NULL, 'a0000000-0000-0000-0000-000000000002', 'tool-audit', '调用审计', '/tool-audit', 'views/ToolAudit.vue', 'icon-file-text', 90, 'ai:audit:view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 ('70000000-0000-0000-0000-000000000010', NULL, 'a0000000-0000-0000-0000-000000000002', 'system', '系统管理', '/system', 'views/System.vue', 'SettingOutlined', 100, NULL, TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
 ('70000000-0000-0000-0000-000000000090', '70000000-0000-0000-0000-000000000010', 'a0000000-0000-0000-0000-000000000002', 'sys_tenant', '租户信息', '/system/tenant', 'views/system/TenantSetting.vue', 'ApartmentOutlined', 1, 'auth:tenant:view', TRUE, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
@@ -247,5 +248,3 @@ INSERT INTO auth_role_menu (id, role_id, menu_id, created_at, isdel) VALUES
 ('42000000-0000-0000-0000-000000000050', '20000000-0000-0000-0000-000000000006', '60000000-0000-0000-0000-000000000001', CURRENT_TIMESTAMP, 0),
 ('42000000-0000-0000-0000-000000000051', '20000000-0000-0000-0000-000000000006', '60000000-0000-0000-0000-000000000006', CURRENT_TIMESTAMP, 0),
 ('42000000-0000-0000-0000-000000000052', '20000000-0000-0000-0000-000000000006', '60000000-0000-0000-0000-000000000007', CURRENT_TIMESTAMP, 0);
-
-

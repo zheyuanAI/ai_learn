@@ -16,12 +16,14 @@ import com.ailearn.platform.shared.api.ApiResponse;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -34,7 +36,8 @@ import org.springframework.web.bind.annotation.RestController;
  * </p>
  */
 @RestController
-@ConditionalOnBean(GisApplicationService.class)
+// S7 控制器由同一开关统一启用，避免组件扫描早于条件 Bean 注册造成启动顺序依赖。
+@ConditionalOnProperty(prefix = "core.facts.iot", name = "enabled", havingValue = "true")
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class GisController {
 
@@ -60,11 +63,13 @@ public class GisController {
         return ApiResponse.success(applicationService.listMaps(contextFactory.current()));
     }
 
-    /** 创建当前租户地图，只保存 GIS 自有配置。 */
+    /** 创建当前租户地图，只保存 GIS 自有配置；重复请求按 Idempotency-Key 重放。 */
     @PostMapping("/api/site-maps")
     @PreAuthorize("hasAuthority('gis:map:manage')")
-    public ApiResponse<SiteMapConfiguration> createMap(@RequestBody CreateSiteMapCommand command) {
-        return ApiResponse.success(applicationService.createMap(contextFactory.current(), command));
+    public ApiResponse<SiteMapConfiguration> createMap(
+            @RequestBody CreateSiteMapCommand command,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        return ApiResponse.success(applicationService.createMap(contextFactory.current(), command, idempotencyKey));
     }
 
     /** 查询指定地图投影；site_map_id 只能标识当前租户内资源。 */
@@ -72,18 +77,17 @@ public class GisController {
     @PreAuthorize("hasAuthority('gis:map:view')")
     public ApiResponse<SiteMapProjection> projection(
             @RequestParam(name = "site_map_id", required = false) UUID siteMapId,
-            @RequestParam(name = "siteMapId", required = false) UUID siteMapIdAlias,
             @RequestParam(name = "entity_type", required = false) MapEntityType entityType,
             @RequestParam(name = "status", required = false) String status) {
         return ApiResponse.success(applicationService.getSiteMap(contextFactory.current(),
-                requireSiteMapId(siteMapId, siteMapIdAlias), entityType, parseStatus(status)));
+                requireSiteMapId(siteMapId), entityType, parseStatus(status)));
     }
 
     /** 与前端地图编辑器约定的指定地图投影路径。 */
     @GetMapping("/api/site-maps/{siteMapId}/projection")
     @PreAuthorize("hasAuthority('gis:map:view')")
     public ApiResponse<SiteMapProjection> projectionByMap(
-            @PathVariable UUID siteMapId,
+            @PathVariable("siteMapId") UUID siteMapId,
             @RequestParam(name = "entity_type", required = false) MapEntityType entityType,
             @RequestParam(name = "status", required = false) String status) {
         return ApiResponse.success(applicationService.getSiteMap(contextFactory.current(), siteMapId,
@@ -93,7 +97,7 @@ public class GisController {
     /** 查询当前用户可见的单个点位。 */
     @GetMapping("/api/site-map/points/{pointId}")
     @PreAuthorize("hasAuthority('gis:map:view')")
-    public ApiResponse<MapPointProjection> point(@PathVariable UUID pointId) {
+    public ApiResponse<MapPointProjection> point(@PathVariable("pointId") UUID pointId) {
         return ApiResponse.success(applicationService.getPoint(contextFactory.current(), pointId));
     }
 
@@ -107,12 +111,31 @@ public class GisController {
                 idempotencyKey));
     }
 
-    private static UUID requireSiteMapId(UUID siteMapId, UUID siteMapIdAlias) {
-        UUID value = siteMapId != null ? siteMapId : siteMapIdAlias;
-        if (value == null) {
+    /** 更新当前租户点位配置；点位标识来自路径，不能由请求体替换。 */
+    @PutMapping("/api/site-map/points/{pointId}")
+    @PreAuthorize("hasAuthority('gis:map:manage')")
+    public ApiResponse<MapPointConfiguration> updatePoint(
+            @PathVariable("pointId") UUID pointId,
+            @RequestBody SaveMapPointCommand command,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        return ApiResponse.success(applicationService.updatePoint(contextFactory.current(), pointId, command,
+                idempotencyKey));
+    }
+
+    /** 软删除当前租户点位配置；删除只影响 GIS 自有配置。 */
+    @DeleteMapping("/api/site-map/points/{pointId}")
+    @PreAuthorize("hasAuthority('gis:map:manage')")
+    public ApiResponse<Boolean> deletePoint(@PathVariable("pointId") UUID pointId,
+                                            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        return ApiResponse.success(applicationService.deletePoint(contextFactory.current(), pointId,
+                idempotencyKey));
+    }
+
+    private static UUID requireSiteMapId(UUID siteMapId) {
+        if (siteMapId == null) {
             throw new GisException(GisErrorCode.GIS_QUERY_001, "site_map_id 不能为空");
         }
-        return value;
+        return siteMapId;
     }
 
     private static DisplayStatus parseStatus(String value) {

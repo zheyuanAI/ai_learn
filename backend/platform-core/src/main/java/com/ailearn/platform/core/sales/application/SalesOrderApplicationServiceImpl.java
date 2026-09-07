@@ -339,6 +339,10 @@ public class SalesOrderApplicationServiceImpl implements SalesOrderApplicationSe
             case Approved -> List.of(action("directPick", order.lines().stream()
                             .anyMatch(line -> line.unshippedQty().signum() > 0)),
                     action("ship", order.lines().stream().anyMatch(line -> line.shippingStagedQty().signum() > 0)),
+                    action("returnPick", order.lines().stream()
+                            .anyMatch(line -> line.shippingStagedQty().signum() > 0)),
+                    action("releaseReservation", order.lines().stream()
+                            .anyMatch(line -> line.unpickedQty().signum() > 0)),
                     action("manualComplete", order.lines().stream()
                             .noneMatch(line -> line.shippingStagedQty().signum() > 0)));
             case Completed -> List.of();

@@ -209,7 +209,7 @@
               v-model="issueForm.workOrderId"
               type="text"
               class="form-input font-mono"
-              placeholder="例如 wo-001 或 WO-20260901-001"
+              placeholder="真实工单 UUID"
               required
             />
           </div>
@@ -221,7 +221,7 @@
                 v-model="issueForm.productId"
                 type="text"
                 class="form-input"
-                placeholder="原料物料 ID (如 raw-01)"
+                placeholder="真实产品 UUID"
                 required
               />
               <input
@@ -235,14 +235,14 @@
                 v-model="issueForm.warehouseId"
                 type="text"
                 class="form-input"
-                placeholder="来源仓库 ID (wh-raw)"
+                placeholder="真实仓库 UUID"
                 required
               />
               <input
                 v-model="issueForm.locationId"
                 type="text"
                 class="form-input font-mono"
-                placeholder="库位 ID (loc-a-01)"
+                placeholder="真实库位 UUID"
                 required
               />
             </div>
@@ -270,7 +270,7 @@
               v-model="returnForm.workOrderId"
               type="text"
               class="form-input font-mono"
-              placeholder="例如 wo-001"
+              placeholder="真实工单 UUID"
               required
             />
           </div>
@@ -282,7 +282,7 @@
                 v-model="returnForm.productId"
                 type="text"
                 class="form-input"
-                placeholder="退回物料 ID (如 raw-01)"
+                placeholder="真实产品 UUID"
                 required
               />
               <input
@@ -296,14 +296,14 @@
                 v-model="returnForm.warehouseId"
                 type="text"
                 class="form-input"
-                placeholder="退回仓库 ID (wh-raw)"
+                placeholder="真实仓库 UUID"
                 required
               />
               <input
                 v-model="returnForm.locationId"
                 type="text"
                 class="form-input font-mono"
-                placeholder="目标库位 ID (loc-a-01)"
+                placeholder="真实库位 UUID"
                 required
               />
             </div>
@@ -346,10 +346,8 @@ import type {
   MaterialReturnItem,
 } from "../../types/manufacturing";
 import {
-  getMaterialIssues,
   createMaterialIssue,
   confirmMaterialIssue,
-  getMaterialReturns,
   createMaterialReturn,
   confirmMaterialReturn,
 } from "../../api/manufacturing";
@@ -416,20 +414,20 @@ const filteredReturnList = computed(() => {
 
 const createIssueModalVisible = ref(false);
 const issueForm = reactive({
-  workOrderId: "wo-001",
-  productId: "raw-01",
-  issueQty: "50.00",
-  warehouseId: "wh-raw",
-  locationId: "loc-a-01",
+  workOrderId: "",
+  productId: "",
+  issueQty: "",
+  warehouseId: "",
+  locationId: "",
 });
 
 const createReturnModalVisible = ref(false);
 const returnForm = reactive({
-  workOrderId: "wo-001",
-  productId: "raw-01",
-  returnQty: "2.00",
-  warehouseId: "wh-raw",
-  locationId: "loc-a-01",
+  workOrderId: "",
+  productId: "",
+  returnQty: "",
+  warehouseId: "",
+  locationId: "",
 });
 
 const isSubmitting = ref(false);
@@ -455,20 +453,10 @@ function getActionDisabledReason(item: any, action: string): string | undefined 
 }
 
 async function loadData() {
-  viewState.value = "loading";
-  errorMessage.value = "";
-  try {
-    const [iRes, rRes] = await Promise.all([
-      getMaterialIssues(),
-      getMaterialReturns(),
-    ]);
-    issueList.value = iRes.data?.records || [];
-    returnList.value = rRes.data?.records || [];
-    viewState.value = "ready";
-  } catch (err: any) {
-    errorMessage.value = err.message || "请求领退料单据失败";
-    viewState.value = "error";
-  }
+  // 后端只有领退料写命令，没有列表读取接口；禁止前端拼装或臆造单据事实。
+  issueList.value = [];
+  returnList.value = [];
+  viewState.value = "ready";
 }
 
 function switchTab(tab: "issue" | "return") {
@@ -485,16 +473,16 @@ function handleReset() {
 }
 
 function openCreateIssueModal() {
-  issueForm.workOrderId = "wo-001";
-  issueForm.productId = "raw-01";
-  issueForm.issueQty = "50.00";
-  issueForm.warehouseId = "wh-raw";
-  issueForm.locationId = "loc-a-01";
+  issueForm.workOrderId = "";
+  issueForm.productId = "";
+  issueForm.issueQty = "";
+  issueForm.warehouseId = "";
+  issueForm.locationId = "";
   createIssueModalVisible.value = true;
 }
 
 async function submitCreateIssue() {
-  if (!issueForm.workOrderId || !issueForm.issueQty) return;
+  if (!issueForm.workOrderId || !issueForm.productId || !issueForm.issueQty || !issueForm.warehouseId || !issueForm.locationId) return;
   isSubmitting.value = true;
   try {
     await createMaterialIssue({
@@ -518,16 +506,16 @@ async function submitCreateIssue() {
 }
 
 function openCreateReturnModal() {
-  returnForm.workOrderId = "wo-001";
-  returnForm.productId = "raw-01";
-  returnForm.returnQty = "2.00";
-  returnForm.warehouseId = "wh-raw";
-  returnForm.locationId = "loc-a-01";
+  returnForm.workOrderId = "";
+  returnForm.productId = "";
+  returnForm.returnQty = "";
+  returnForm.warehouseId = "";
+  returnForm.locationId = "";
   createReturnModalVisible.value = true;
 }
 
 async function submitCreateReturn() {
-  if (!returnForm.workOrderId || !returnForm.returnQty) return;
+  if (!returnForm.workOrderId || !returnForm.productId || !returnForm.returnQty || !returnForm.warehouseId || !returnForm.locationId) return;
   isSubmitting.value = true;
   try {
     await createMaterialReturn({

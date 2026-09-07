@@ -9,6 +9,8 @@ import com.ailearn.platform.core.manufacturing.operation.domain.OperationExecuti
 import com.ailearn.platform.core.manufacturing.operation.domain.OperationExecutionRepository;
 import com.ailearn.platform.core.manufacturing.operation.domain.OperationExecutionStatus;
 import com.ailearn.platform.core.manufacturing.operation.dto.OperationExecutionCreateRequest;
+import com.ailearn.platform.core.manufacturing.operation.dto.OperationExecutionPageQuery;
+import com.ailearn.platform.core.manufacturing.operation.domain.OperationExecutionPage;
 import com.ailearn.platform.core.manufacturing.operation.exception.OperationExecutionErrorCode;
 import com.ailearn.platform.core.manufacturing.operation.exception.OperationExecutionException;
 import com.ailearn.platform.core.manufacturing.execution.application.WorkOrderExecutionService;
@@ -27,6 +29,7 @@ import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.HexFormat;
 import java.util.Optional;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.HashSet;
@@ -133,6 +136,11 @@ public class OperationExecutionApplicationServiceImpl implements OperationExecut
         return transition(executionId, occurredAt, null, idempotencyKey, "start",
                 (current, user, at) -> {
                     requireReleased(actor.tenantId(), current.workOrderId());
+                    if (!workOrderReleasePort.arePredecessorsCompleted(actor.tenantId(),
+                            current.workOrderId(), current.operationId())) {
+                        throw new OperationExecutionException(OperationExecutionErrorCode.MES_OPERATION_007,
+                                "工序前置工序尚未全部完成");
+                    }
                     ensureDeviceHasNoOtherActive(current);
                     if (workOrderExecutionService != null) {
                         workOrderExecutionService.startProduction(current.workOrderId(),
@@ -182,6 +190,28 @@ public class OperationExecutionApplicationServiceImpl implements OperationExecut
     @PreAuthorize("hasAuthority('mes:execution:manage')")
     public Optional<OperationExecution> find(UUID executionId) {
         return repository.find(TenantContextHolder.requireTenantId(), executionId);
+    }
+
+    @Override
+    @PreAuthorize("hasAuthority('mes:execution:manage')")
+    public OperationExecutionPage page(OperationExecutionPageQuery query) {
+        Actor actor = actor();
+        OperationExecutionPageQuery normalized = query == null
+                ? new OperationExecutionPageQuery() : query.normalized();
+        List<OperationExecution> filtered = repository.findAll(actor.tenantId()).stream()
+                .filter(value -> normalized.getWorkOrderId() == null
+                        || normalized.getWorkOrderId().equals(value.workOrderId()))
+                .filter(value -> normalized.getOperationId() == null
+                        || normalized.getOperationId().equals(value.operationId()))
+                .filter(value -> normalized.getDeviceId() == null
+                        || normalized.getDeviceId().equals(value.deviceId()))
+                .filter(value -> normalized.getStatus() == null
+                        || normalized.getStatus().equalsIgnoreCase(value.status().name()))
+                .toList();
+        int from = (int) Math.min((long) (normalized.getPage() - 1) * normalized.getSize(), filtered.size());
+        int to = Math.min(from + normalized.getSize(), filtered.size());
+        return new OperationExecutionPage(filtered.subList(from, to), filtered.size(),
+                normalized.getPage(), normalized.getSize());
     }
 
     /**

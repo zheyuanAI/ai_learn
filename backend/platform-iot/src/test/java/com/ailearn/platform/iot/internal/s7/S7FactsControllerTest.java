@@ -16,6 +16,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.lang.reflect.Constructor;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -25,6 +26,7 @@ import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -34,6 +36,20 @@ class S7FactsControllerTest {
     private static final UUID DEVICE_ID = UUID.fromString("d0000000-0000-0000-0000-000000000001");
     private static final Instant NOW = Instant.parse("2026-09-04T02:00:00Z");
     private static final String SECRET = "s7-test-secret";
+
+    @Test
+    void productionConstructorIsMarkedForSpringInjection() {
+        boolean hasSpringConstructor = false;
+        for (Constructor<?> constructor : S7FactsController.class.getDeclaredConstructors()) {
+            if (constructor.getParameterCount() == 4 && constructor.isAnnotationPresent(Autowired.class)) {
+                hasSpringConstructor = true;
+                break;
+            }
+        }
+
+        org.junit.jupiter.api.Assertions.assertTrue(hasSpringConstructor,
+                "生产构造器必须显式标记 @Autowired，避免固定时钟测试构造器被 Spring 误选");
+    }
 
     @Test
     void acceptsFreshSignatureAndKeepsTenantFilter() {

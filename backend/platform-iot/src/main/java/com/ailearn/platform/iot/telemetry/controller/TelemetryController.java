@@ -31,17 +31,17 @@ public class TelemetryController {
     /** 查询当前租户设备的原始遥测事实。 */
     @GetMapping("/devices/{id}/telemetry")
     public ApiResponse<List<TelemetryFact>> telemetry(
-            @PathVariable UUID id,
+            @PathVariable("id") UUID id,
             @RequestParam(name = "metric_code", required = false) String metricCode,
             @RequestParam(name = "date_from", required = false) OffsetDateTime from,
             @RequestParam(name = "date_to", required = false) OffsetDateTime to,
-            @RequestParam(defaultValue = "100") int limit) {
+            @RequestParam(name = "limit", defaultValue = "100") int limit) {
         return ApiResponse.success(service.telemetry(id, metricCode, from, to, limit));
     }
 
     /** 查询当前租户设备状态快照。 */
     @GetMapping("/devices/{id}/status")
-    public ApiResponse<DeviceStatus> status(@PathVariable UUID id) {
+    public ApiResponse<DeviceStatus> status(@PathVariable("id") UUID id) {
         return ApiResponse.success(service.status(id));
     }
 

@@ -210,49 +210,57 @@ export async function completeWorkOrder(
 export const manualCompleteWorkOrder = completeWorkOrder;
 
 /**
- * 分页查询派工记录
- * 接口路径：GET /api/dispatches
+ * 分页查询派工单列表
+ * 接口路径：GET /api/dispatch-orders
  */
-export async function getDispatches(query: DispatchQuery = {}): Promise<ApiResponse<PageResult<DispatchRecord>>> {
+export async function getDispatchOrders(query: DispatchQuery = {}): Promise<ApiResponse<PageResult<DispatchRecord>>> {
   return await request<PageResult<DispatchRecord>>({
-    url: "/api/dispatches",
+    url: "/api/dispatch-orders",
     method: "GET",
     params: query,
   });
 }
-export const getDispatchOrders = getDispatches;
+export const getDispatches = getDispatchOrders;
 
 /**
  * 下达派工安排
- * 接口路径：POST /api/dispatches
+ * 接口路径：POST /api/dispatch-orders
+ * 正式字段：work_order_id, operation_id, operator_id, dispatch_qty, device_id
  */
-export async function createDispatch(payload: DispatchCreatePayload): Promise<ApiResponse<DispatchRecord>> {
+export async function createDispatchOrder(payload: any): Promise<ApiResponse<DispatchRecord>> {
+  const requestBody = {
+    work_order_id: payload.work_order_id || payload.workOrderId,
+    operation_id: payload.operation_id || payload.operationId,
+    operator_id: payload.operator_id || payload.operatorId,
+    dispatch_qty: String(payload.dispatch_qty || payload.dispatchQty || "0"),
+    device_id: payload.device_id || payload.deviceId,
+  };
   return await request<DispatchRecord>({
-    url: "/api/dispatches",
+    url: "/api/dispatch-orders",
     method: "POST",
-    data: payload,
+    data: requestBody,
   });
 }
-export const createDispatchOrder = createDispatch;
+export const createDispatch = createDispatchOrder;
 
 /**
  * 发布派工单
- * 接口路径：POST /api/dispatches/{id}/release
+ * 接口路径：POST /api/dispatch-orders/{id}/release
  */
 export async function releaseDispatchOrder(id: string | number): Promise<ApiResponse<DispatchRecord>> {
   return await request<DispatchRecord>({
-    url: `/api/dispatches/${id}/release`,
+    url: `/api/dispatch-orders/${id}/release`,
     method: "POST",
   });
 }
 
 /**
  * 分页查询工序执行列表
- * 接口路径：GET /api/executions
+ * 接口路径：GET /api/operation-executions
  */
 export async function getOperationExecutions(query: OperationExecutionQuery = {}): Promise<ApiResponse<PageResult<OperationExecution>>> {
   return await request<PageResult<OperationExecution>>({
-    url: "/api/executions",
+    url: "/api/operation-executions",
     method: "GET",
     params: query,
   });
@@ -260,34 +268,41 @@ export async function getOperationExecutions(query: OperationExecutionQuery = {}
 
 /**
  * 创建工序执行记录
- * 接口路径：POST /api/executions
+ * 接口路径：POST /api/operation-executions
+ * 正式字段：dispatch_order_id, work_order_id, operation_id, device_id
  */
 export async function createOperationExecution(payload: any): Promise<ApiResponse<OperationExecution>> {
+  const requestBody = {
+    dispatch_order_id: payload.dispatch_order_id || payload.dispatchOrderId,
+    work_order_id: payload.work_order_id || payload.workOrderId,
+    operation_id: payload.operation_id || payload.operationId,
+    device_id: payload.device_id || payload.deviceId,
+  };
   return await request<OperationExecution>({
-    url: "/api/executions",
+    url: "/api/operation-executions",
     method: "POST",
-    data: payload,
+    data: requestBody,
   });
 }
 
 /**
  * 开始工序执行
- * 接口路径：POST /api/executions/{id}/start
+ * 接口路径：POST /api/operation-executions/{id}/start
  */
 export async function startOperationExecution(id: string | number): Promise<ApiResponse<OperationExecution>> {
   return await request<OperationExecution>({
-    url: `/api/executions/${id}/start`,
+    url: `/api/operation-executions/${id}/start`,
     method: "POST",
   });
 }
 
 /**
  * 暂停工序执行
- * 接口路径：POST /api/executions/{id}/pause
+ * 接口路径：POST /api/operation-executions/{id}/pause
  */
 export async function pauseOperationExecution(id: string | number, reason?: string): Promise<ApiResponse<OperationExecution>> {
   return await request<OperationExecution>({
-    url: `/api/executions/${id}/pause`,
+    url: `/api/operation-executions/${id}/pause`,
     method: "POST",
     data: { reason: reason || "" },
   });
@@ -295,149 +310,237 @@ export async function pauseOperationExecution(id: string | number, reason?: stri
 
 /**
  * 恢复工序执行
- * 接口路径：POST /api/executions/{id}/resume
+ * 接口路径：POST /api/operation-executions/{id}/resume
  */
 export async function resumeOperationExecution(id: string | number): Promise<ApiResponse<OperationExecution>> {
   return await request<OperationExecution>({
-    url: `/api/executions/${id}/resume`,
+    url: `/api/operation-executions/${id}/resume`,
     method: "POST",
   });
 }
 
 /**
  * 完工工序执行
- * 接口路径：POST /api/executions/{id}/complete
+ * 接口路径：POST /api/operation-executions/{id}/complete
  */
 export async function completeOperationExecution(id: string | number): Promise<ApiResponse<OperationExecution>> {
   return await request<OperationExecution>({
-    url: `/api/executions/${id}/complete`,
+    url: `/api/operation-executions/${id}/complete`,
     method: "POST",
   });
 }
 
 /**
- * 提交工序报工与质检判定
- * 接口路径：POST /api/executions/{id}/report
+ * 提交工序报工记录
+ * 接口路径：POST /api/work-reports
+ * 正式字段：reportNo, operationExecutionId, workOrderId, operationId, reportTime, qualifiedQty, defectQty, remark
  */
-export async function submitWorkReport(idOrPayload: any, payload?: WorkReportPayload): Promise<ApiResponse<OperationExecution>> {
-  const actualPayload = payload || idOrPayload;
-  const targetId = payload ? idOrPayload : (actualPayload.operationExecutionId || actualPayload.executionId || "");
-  const url = targetId ? `/api/executions/${targetId}/report` : "/api/executions/report";
-  return await request<OperationExecution>({
-    url,
+export async function createWorkReport(payload: any): Promise<ApiResponse<any>> {
+  const requestBody = {
+    reportNo: payload.reportNo,
+    operationExecutionId: payload.operationExecutionId,
+    workOrderId: payload.workOrderId,
+    operationId: payload.operationId,
+    reportTime: payload.reportTime,
+    qualifiedQty: String(payload.qualifiedQty),
+    defectQty: String(payload.defectQty),
+    remark: payload.remark,
+  };
+  return await request<any>({
+    url: "/api/work-reports",
     method: "POST",
-    data: actualPayload,
+    data: requestBody,
   });
 }
-export const createWorkReport = submitWorkReport;
+export const submitWorkReport = createWorkReport;
 
 /**
- * 分页查询生产领退料记录
- * 接口路径：GET /api/material-movements
+ * 查询指定工单的报工集合
+ * 接口路径：GET /api/work-reports?work_order_id={workOrderId}
  */
-export async function getMaterialMovements(query: MaterialMovementQuery = {}): Promise<ApiResponse<PageResult<MaterialMovement>>> {
-  return await request<PageResult<MaterialMovement>>({
-    url: "/api/material-movements",
+export async function getWorkReports(workOrderId: string | number): Promise<ApiResponse<any[]>> {
+  return await request<any[]>({
+    url: "/api/work-reports",
     method: "GET",
-    params: query,
+    params: { work_order_id: workOrderId },
   });
 }
 
 /**
- * 查询生产领料记录
- * 接口路径：GET /api/material-movements?type=ISSUE
+ * 创建生产领料单 Draft
+ * 接口路径：POST /api/material-issues
+ * 正式字段：issueNo, workOrderId, items[{productId, warehouseId, locationId, quantity}], overageReason
  */
-export async function getMaterialIssues(query: any = {}): Promise<ApiResponse<PageResult<MaterialMovement>>> {
-  return await request<PageResult<MaterialMovement>>({
-    url: "/api/material-movements",
-    method: "GET",
-    params: { ...query, movementType: "ISSUE" },
-  });
-}
-
-/**
- * 创建生产领料单
- * 接口路径：POST /api/material-movements/issue
- */
-export async function createMaterialIssue(payload: MaterialMovementPayload): Promise<ApiResponse<MaterialMovement>> {
+export async function createMaterialIssue(payload: any): Promise<ApiResponse<MaterialMovement>> {
+  const items = (payload.items || []).map((item: any) => ({
+    productId: item.productId,
+    warehouseId: item.warehouseId,
+    locationId: item.locationId,
+    quantity: String(item.quantity || item.issueQty || "0"),
+  }));
+  const requestBody = {
+    issueNo: payload.issueNo,
+    workOrderId: payload.workOrderId,
+    items,
+    overageReason: payload.overageReason,
+  };
   return await request<MaterialMovement>({
-    url: "/api/material-movements/issue",
+    url: "/api/material-issues",
     method: "POST",
-    data: payload,
-  });
-}
-
-/**
- * 确认生产领料出库
- * 接口路径：POST /api/material-movements/{id}/confirm
- */
-export async function confirmMaterialIssue(id: string | number, payload?: any): Promise<ApiResponse<MaterialMovement>> {
-  return await request<MaterialMovement>({
-    url: `/api/material-movements/${id}/confirm`,
-    method: "POST",
-    data: payload,
+    data: requestBody,
   });
 }
 export const issueMaterials = createMaterialIssue;
 
 /**
- * 查询生产退料记录
- * 接口路径：GET /api/material-movements?type=RETURN
+ * 确认生产领料出库
+ * 接口路径：POST /api/material-issues/{id}/confirm
  */
-export async function getMaterialReturns(query: any = {}): Promise<ApiResponse<PageResult<MaterialReturnItem>>> {
-  return await request<PageResult<MaterialReturnItem>>({
-    url: "/api/material-movements",
-    method: "GET",
-    params: { ...query, movementType: "RETURN" },
+export async function confirmMaterialIssue(id: string | number): Promise<ApiResponse<any>> {
+  return await request<any>({
+    url: `/api/material-issues/${id}/confirm`,
+    method: "POST",
   });
 }
 
 /**
- * 创建生产退料单
- * 接口路径：POST /api/material-movements/return
+ * 创建生产退料单 Draft
+ * 接口路径：POST /api/material-returns
+ * 正式字段：returnNo, workOrderId, items[{productId, warehouseId, locationId, quantity}], reason
  */
-export async function createMaterialReturn(payload: MaterialMovementPayload): Promise<ApiResponse<MaterialMovement>> {
+export async function createMaterialReturn(payload: any): Promise<ApiResponse<MaterialMovement>> {
+  const items = (payload.items || []).map((item: any) => ({
+    productId: item.productId,
+    warehouseId: item.warehouseId,
+    locationId: item.locationId,
+    quantity: String(item.quantity || item.returnQty || "0"),
+  }));
+  const requestBody = {
+    returnNo: payload.returnNo,
+    workOrderId: payload.workOrderId,
+    items,
+    reason: payload.reason,
+  };
   return await request<MaterialMovement>({
-    url: "/api/material-movements/return",
+    url: "/api/material-returns",
     method: "POST",
-    data: payload,
-  });
-}
-
-/**
- * 确认生产退料入库
- * 接口路径：POST /api/material-movements/{id}/confirm
- */
-export async function confirmMaterialReturn(id: string | number, payload?: any): Promise<ApiResponse<MaterialMovement>> {
-  return await request<MaterialMovement>({
-    url: `/api/material-movements/${id}/confirm`,
-    method: "POST",
-    data: payload,
+    data: requestBody,
   });
 }
 export const returnMaterials = createMaterialReturn;
 
 /**
- * 分页查询成品入库记录
+ * 确认生产退料入库
+ * 接口路径：POST /api/material-returns/{id}/confirm
+ */
+export async function confirmMaterialReturn(id: string | number): Promise<ApiResponse<any>> {
+  return await request<any>({
+    url: `/api/material-returns/${id}/confirm`,
+    method: "POST",
+  });
+}
+
+/**
+ * 创建生产报工质检 Draft
+ * 接口路径：POST /api/quality-inspections
+ * 正式字段：inspectionNo, workReportId, inspectionType, sampleQty
+ */
+export async function createQualityInspection(payload: any): Promise<ApiResponse<any>> {
+  const requestBody = {
+    inspectionNo: payload.inspectionNo || `INS-${Date.now().toString().slice(-6)}`,
+    workReportId: payload.workReportId,
+    inspectionType: payload.inspectionType || "FIRST_ARTICLE",
+    sampleQty: String(payload.sampleQty || "1"),
+  };
+  return await request<any>({
+    url: "/api/quality-inspections",
+    method: "POST",
+    data: requestBody,
+  });
+}
+
+/**
+ * 提交质检结果 (Draft -> Passed / Failed)
+ * 接口路径：POST /api/quality-inspections/{id}/submit
+ * 正式字段：qualifiedQty, defectQty, result
+ */
+export async function submitQualityInspection(id: string | number, payload: any): Promise<ApiResponse<any>> {
+  const requestBody = {
+    qualifiedQty: String(payload.qualifiedQty || "0"),
+    defectQty: String(payload.defectQty || "0"),
+    result: payload.result || "Passed",
+  };
+  return await request<any>({
+    url: `/api/quality-inspections/${id}/submit`,
+    method: "POST",
+    data: requestBody,
+  });
+}
+
+/**
+ * 关闭 Failed 质检处置结果
+ * 接口路径：POST /api/quality-inspections/{id}/close
+ * 正式字段：disposition ("ISOLATE" | "SCRAP" | "CLOSE")
+ */
+export async function closeQualityInspection(id: string | number, disposition: "ISOLATE" | "SCRAP" | "CLOSE"): Promise<ApiResponse<any>> {
+  return await request<any>({
+    url: `/api/quality-inspections/${id}/close`,
+    method: "POST",
+    data: { disposition },
+  });
+}
+
+/**
+ * 查询指定工单的质检记录集合
+ * 接口路径：GET /api/quality-inspections?work_order_id={workOrderId}
+ */
+export async function getQualityInspections(workOrderId: string | number): Promise<ApiResponse<any[]>> {
+  return await request<any[]>({
+    url: "/api/quality-inspections",
+    method: "GET",
+    params: { work_order_id: workOrderId },
+  });
+}
+
+/**
+ * 分页或按工单查询成品入库记录
  * 接口路径：GET /api/finished-goods-receipts
  */
-export async function getFinishedGoodsReceipts(query: FinishedGoodsReceiptQuery = {}): Promise<ApiResponse<PageResult<FinishedGoodsReceipt>>> {
-  return await request<PageResult<FinishedGoodsReceipt>>({
+export async function getFinishedGoodsReceipts(workOrderId: string): Promise<ApiResponse<FinishedGoodsReceipt[]>> {
+  return await request<FinishedGoodsReceipt[]>({
     url: "/api/finished-goods-receipts",
     method: "GET",
-    params: query,
+    params: { work_order_id: workOrderId },
+  });
+}
+
+/**
+ * 创建成品入库单 Draft
+ * 接口路径：POST /api/finished-goods-receipts
+ * 正式字段：receiptNo, workOrderId, receiptQty, warehouseId, locationId
+ */
+export async function createFinishedGoodsReceipt(payload: FinishedGoodsReceiptPayload): Promise<ApiResponse<FinishedGoodsReceipt>> {
+  const requestBody = {
+    receiptNo: payload.receiptNo,
+    workOrderId: payload.workOrderId,
+    receiptQty: String(payload.receiptQty || "0"),
+    warehouseId: payload.warehouseId,
+    locationId: payload.locationId,
+  };
+  return await request<FinishedGoodsReceipt>({
+    url: "/api/finished-goods-receipts",
+    method: "POST",
+    data: requestBody,
   });
 }
 
 /**
  * 确认成品完工入库
- * 接口路径：POST /api/finished-goods-receipts
+ * 接口路径：POST /api/finished-goods-receipts/{id}/confirm
  */
-export async function confirmFinishedGoodsReceipt(payload: FinishedGoodsReceiptPayload): Promise<ApiResponse<FinishedGoodsReceipt>> {
-  return await request<FinishedGoodsReceipt>({
-    url: "/api/finished-goods-receipts",
+export async function confirmFinishedGoodsReceipt(id: string | number): Promise<ApiResponse<any>> {
+  return await request<any>({
+    url: `/api/finished-goods-receipts/${id}/confirm`,
     method: "POST",
-    data: payload,
   });
 }
-export const createFinishedGoodsReceipt = confirmFinishedGoodsReceipt;

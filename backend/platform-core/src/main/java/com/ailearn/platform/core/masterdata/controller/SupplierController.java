@@ -51,7 +51,7 @@ public class SupplierController {
      * @return 统一详情响应
      */
     @GetMapping("/{id}")
-    public ApiResponse<SupplierView> detail(@PathVariable UUID id) {
+    public ApiResponse<SupplierView> detail(@PathVariable("id") UUID id) {
         return ApiResponse.success(applicationService.detail(id));
     }
 
@@ -75,7 +75,7 @@ public class SupplierController {
      * @return 修改后的详情
      */
     @PutMapping("/{id}")
-    public ApiResponse<SupplierView> update(@PathVariable UUID id, @RequestBody SupplierSaveRequest request,
+    public ApiResponse<SupplierView> update(@PathVariable("id") UUID id, @RequestBody SupplierSaveRequest request,
                                             @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(applicationService.update(id, request, idempotencyKey));
     }
@@ -88,7 +88,7 @@ public class SupplierController {
      * @return 状态变更后的详情
      */
     @PatchMapping("/{id}/status")
-    public ApiResponse<SupplierView> changeStatus(@PathVariable UUID id, @RequestBody StatusChangeRequest request,
+    public ApiResponse<SupplierView> changeStatus(@PathVariable("id") UUID id, @RequestBody StatusChangeRequest request,
                                                   @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(applicationService.changeStatus(id, request, idempotencyKey));
     }
@@ -100,7 +100,7 @@ public class SupplierController {
      * @return 空数据成功响应
      */
     @DeleteMapping("/{id}")
-    public ApiResponse<Void> delete(@PathVariable UUID id, @RequestHeader("Idempotency-Key") String idempotencyKey) {
+    public ApiResponse<Void> delete(@PathVariable("id") UUID id, @RequestHeader("Idempotency-Key") String idempotencyKey) {
         applicationService.delete(id, idempotencyKey);
         return ApiResponse.success();
     }

@@ -74,4 +74,30 @@ public class InMemoryGisConfigurationStore implements GisConfigurationStore {
     public Optional<MapPointConfiguration> findPoint(UUID tenantId, UUID pointId) {
         return Optional.ofNullable(points.get(pointId)).filter(point -> point.tenantId().equals(tenantId));
     }
+
+    /** 在租户范围内替换点位配置；不存在或跨租户时保持不可见。 */
+    @Override
+    public MapPointConfiguration updatePoint(UUID tenantId, UUID pointId, MapPointConfiguration point) {
+        if (!tenantId.equals(point.tenantId()) || !pointId.equals(point.id())) {
+            throw new GisException(GisErrorCode.GIS_TENANT_001, "点位不存在或不属于当前租户");
+        }
+        MapPointConfiguration current = points.get(pointId);
+        if (current == null || !tenantId.equals(current.tenantId())) {
+            throw new GisException(GisErrorCode.GIS_POINT_001, null);
+        }
+        points.put(pointId, point);
+        return point;
+    }
+
+    /** 在租户范围内软删除点位并清理当前进程的幂等创建索引。 */
+    @Override
+    public boolean deletePoint(UUID tenantId, UUID pointId) {
+        MapPointConfiguration current = points.get(pointId);
+        if (current == null || !tenantId.equals(current.tenantId())) {
+            return false;
+        }
+        points.remove(pointId);
+        idempotentPoints.entrySet().removeIf(entry -> entry.getValue().point().id().equals(pointId));
+        return true;
+    }
 }

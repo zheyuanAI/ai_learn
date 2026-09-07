@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.ailearn.platform.iot.contextlink.dto.ProductionContextQueryResponse;
 import java.net.URI;
+import java.lang.reflect.Constructor;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -18,10 +19,13 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HttpProductionContextQueryAdapterTest {
     private static final UUID TENANT_ID = UUID.fromString("a0000000-0000-0000-0000-000000000001");
@@ -30,6 +34,19 @@ class HttpProductionContextQueryAdapterTest {
     private static final UUID EXECUTION_ID = UUID.fromString("f0000000-0000-0000-0000-000000000002");
     private static final UUID OPERATION_ID = UUID.fromString("f0000000-0000-0000-0000-000000000003");
     private static final OffsetDateTime ALARM_TIME = OffsetDateTime.parse("2026-09-04T10:00:00Z");
+
+    @Test
+    void productionConstructorIsMarkedForSpringInjection() {
+        boolean hasSpringConstructor = false;
+        for (Constructor<?> constructor : HttpProductionContextQueryAdapter.class.getDeclaredConstructors()) {
+            if (constructor.getParameterCount() == 2 && constructor.isAnnotationPresent(Autowired.class)) {
+                hasSpringConstructor = true;
+                break;
+            }
+        }
+
+        assertTrue(hasSpringConstructor, "生产构造器必须显式标记 @Autowired，避免测试构造器让 Spring 误判为无参装配");
+    }
 
     @Test
     void usesServiceHmacHeadersAndDoesNotForwardUserAuthorities() {

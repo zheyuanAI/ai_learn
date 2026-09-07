@@ -2,6 +2,8 @@
   <configuration default="false" name="CoreApplication (10003)" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
     <module name="platform-core" />
     <option name="SPRING_BOOT_MAIN_CLASS" value="com.ailearn.platform.core.CoreApplication" />
+    <!-- 本地联调必须显式加载 application-dev.yml，打开 Core 到 IoT 的只读 Facts。 -->
+    <option name="ACTIVE_PROFILES" value="dev" />
     <extension name="coverage">
       <pattern>
         <option name="PATTERN" value="com.ailearn.platform.core.*" />

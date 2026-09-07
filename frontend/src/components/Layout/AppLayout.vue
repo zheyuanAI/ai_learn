@@ -34,7 +34,7 @@
                 v-for="sub in item.children"
                 :key="sub.path"
                 class="sub-nav-link"
-                :to="sub.path"
+                :to="normalizeMenuRoutePath(sub.path)"
               >
                 <span class="sub-dot"></span>
                 <div class="sub-link-content">
@@ -49,7 +49,7 @@
           <RouterLink
             v-else
             class="nav-link"
-            :to="item.path"
+            :to="normalizeMenuRoutePath(item.path)"
           >
             <div class="nav-link-main">
               <span class="nav-icon">{{ item.icon || '📄' }}</span>
@@ -110,6 +110,7 @@
 import { ref, computed, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useAuthStore } from "../../stores/auth";
+import { getMenuRoutePathname, normalizeMenuRoutePath } from "../../router/menuRouteMap";
 
 interface DisplayMenuItem {
   id: string;
@@ -156,7 +157,7 @@ const structuredMenus = computed<DisplayMenuItem[]>(() => {
     const idStr = String(m.id || m.menuCode || m.routePath);
     nodeMap.set(idStr, {
       id: idStr,
-      path: m.routePath || m.path || "/",
+      path: normalizeMenuRoutePath(m.routePath || m.path),
       label: m.menuName || m.label || m.name || "未命名菜单",
       detail: m.detail || "",
       icon: m.icon || "",
@@ -182,7 +183,7 @@ const structuredMenus = computed<DisplayMenuItem[]>(() => {
 function formatMenuNode(m: any): DisplayMenuItem {
   return {
     id: String(m.id || m.menuCode || m.routePath),
-    path: m.routePath || m.path || "/",
+    path: normalizeMenuRoutePath(m.routePath || m.path),
     label: m.menuName || m.label || m.name || "未命名菜单",
     detail: m.detail || "",
     icon: m.icon || "",
@@ -195,9 +196,9 @@ function formatMenuNode(m: any): DisplayMenuItem {
  */
 function isParentActive(item: DisplayMenuItem): boolean {
   if (!item.children || item.children.length === 0) {
-    return route.path === item.path;
+    return route.path === getMenuRoutePathname(item.path);
   }
-  return item.children.some((sub) => route.path.startsWith(sub.path));
+  return item.children.some((sub) => route.path.startsWith(getMenuRoutePathname(sub.path)));
 }
 
 /**
@@ -218,7 +219,7 @@ watch(
   () => route.path,
   (currentPath) => {
     for (const group of structuredMenus.value) {
-      if (group.children && group.children.some((sub) => currentPath.startsWith(sub.path))) {
+      if (group.children && group.children.some((sub) => currentPath.startsWith(getMenuRoutePathname(sub.path)))) {
         openGroupIds.value.add(group.id);
       }
     }

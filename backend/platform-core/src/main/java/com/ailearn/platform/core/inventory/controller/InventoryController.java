@@ -42,12 +42,12 @@ public class InventoryController {
     @GetMapping("/balances")
     @PreAuthorize("hasAuthority('inv:balance:view')")
     public ApiResponse<InventoryBalancePage> balances(
-            @RequestParam(required = false) UUID productId,
-            @RequestParam(required = false) UUID warehouseId,
-            @RequestParam(required = false) UUID locationId,
-            @RequestParam(required = false) String lotNo,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "50") int size) {
+            @RequestParam(name = "product_id", required = false) UUID productId,
+            @RequestParam(name = "warehouse_id", required = false) UUID warehouseId,
+            @RequestParam(name = "location_id", required = false) UUID locationId,
+            @RequestParam(name = "lot_no", required = false) String lotNo,
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "50") int size) {
         return ApiResponse.success(queryService.queryBalances(
                 new InventoryBalanceQuery(null, productId, warehouseId, locationId, lotNo, page, size)));
     }
@@ -59,17 +59,17 @@ public class InventoryController {
     @GetMapping("/reservations")
     @PreAuthorize("hasAuthority('inv:reservation:view')")
     public ApiResponse<InventoryReservationPage> reservations(
-            @RequestParam(required = false) UUID reservationId,
-            @RequestParam(required = false) String sourceType,
-            @RequestParam(required = false) UUID sourceId,
-            @RequestParam(required = false) UUID sourceLineId,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) UUID productId,
-            @RequestParam(required = false) UUID warehouseId,
-            @RequestParam(required = false) UUID locationId,
-            @RequestParam(required = false) String lotNo,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "50") int size) {
+            @RequestParam(name = "reservation_id", required = false) UUID reservationId,
+            @RequestParam(name = "source_type", required = false) String sourceType,
+            @RequestParam(name = "source_id", required = false) UUID sourceId,
+            @RequestParam(name = "source_line_id", required = false) UUID sourceLineId,
+            @RequestParam(name = "status", required = false) String status,
+            @RequestParam(name = "product_id", required = false) UUID productId,
+            @RequestParam(name = "warehouse_id", required = false) UUID warehouseId,
+            @RequestParam(name = "location_id", required = false) UUID locationId,
+            @RequestParam(name = "lot_no", required = false) String lotNo,
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "50") int size) {
         return ApiResponse.success(queryService.queryReservations(new InventoryReservationQuery(
                 null, reservationId, sourceType, sourceId, sourceLineId, status, productId,
                 warehouseId, locationId, lotNo, page, size)));
@@ -82,20 +82,20 @@ public class InventoryController {
     @GetMapping("/transactions")
     @PreAuthorize("hasAuthority('inv:transaction:view')")
     public ApiResponse<InventoryTransactionPage> transactions(
-            @RequestParam(required = false) String transactionType,
-            @RequestParam(required = false) String sourceType,
-            @RequestParam(required = false) UUID sourceId,
-            @RequestParam(required = false) UUID sourceLineId,
-            @RequestParam(required = false) UUID productId,
-            @RequestParam(required = false) UUID warehouseId,
-            @RequestParam(required = false) UUID locationId,
-            @RequestParam(required = false) String lotNo,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            @RequestParam(name = "transaction_type", required = false) String transactionType,
+            @RequestParam(name = "source_type", required = false) String sourceType,
+            @RequestParam(name = "source_id", required = false) UUID sourceId,
+            @RequestParam(name = "source_line_id", required = false) UUID sourceLineId,
+            @RequestParam(name = "product_id", required = false) UUID productId,
+            @RequestParam(name = "warehouse_id", required = false) UUID warehouseId,
+            @RequestParam(name = "location_id", required = false) UUID locationId,
+            @RequestParam(name = "lot_no", required = false) String lotNo,
+            @RequestParam(name = "occurred_from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             OffsetDateTime occurredFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            @RequestParam(name = "occurred_to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             OffsetDateTime occurredTo,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "50") int size) {
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "50") int size) {
         return ApiResponse.success(queryService.queryTransactions(new InventoryTransactionQuery(
                 null, transactionType, sourceType, sourceId, sourceLineId, productId, warehouseId,
                 locationId, lotNo, occurredFrom, occurredTo, page, size)));

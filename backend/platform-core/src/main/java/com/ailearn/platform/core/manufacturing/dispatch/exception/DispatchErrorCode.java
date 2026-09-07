@@ -9,7 +9,8 @@ public enum DispatchErrorCode implements ErrorCode {
     MES_DISPATCH_002("MES_DISPATCH_002", 409, HttpStatus.CONFLICT, "工单当前未 Released，禁止派工或开始"),
     MES_DISPATCH_003("MES_DISPATCH_003", 404, HttpStatus.NOT_FOUND, "派工单不存在"),
     MES_DISPATCH_004("MES_DISPATCH_004", 409, HttpStatus.CONFLICT, "派工单当前状态不允许该操作"),
-    MES_DISPATCH_005("MES_DISPATCH_005", 422, HttpStatus.UNPROCESSABLE_ENTITY, "关联对象不属于当前租户");
+    MES_DISPATCH_005("MES_DISPATCH_005", 422, HttpStatus.UNPROCESSABLE_ENTITY, "派工工序不属于工单冻结 Routing"),
+    MES_DISPATCH_006("MES_DISPATCH_006", 422, HttpStatus.UNPROCESSABLE_ENTITY, "累计派工数量超出工单计划数量");
 
     private final String businessCode;
     private final int code;

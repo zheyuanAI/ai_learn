@@ -8,7 +8,7 @@ import com.ailearn.platform.core.traceability.web.TrustedFactsQueryContextFactor
 import com.ailearn.platform.shared.api.ApiResponse;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,7 +25,8 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/dashboard")
-@ConditionalOnBean(DashboardApplicationService.class)
+// S7 控制器由同一开关统一启用，避免组件扫描早于条件 Bean 注册造成启动顺序依赖。
+@ConditionalOnProperty(prefix = "core.facts.iot", name = "enabled", havingValue = "true")
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class DashboardController {
 
@@ -104,18 +105,20 @@ public class DashboardController {
                                                            Map<String, String> parameters) {
         Map<String, String> safeParameters = parameters == null ? Map.of() : parameters;
         DashboardQuery query = new DashboardQuery(contextFactory.current(),
-                firstText(safeParameters.get("time_range"), safeParameters.get("timeRange")),
+                safeParameters.get("time_range"),
                 filters(safeParameters));
         return ApiResponse.success(applicationService.query(type, query));
     }
 
-    /** 只提取白名单筛选字段；客户端传入的 tenant_id 等未知参数不会传给 Facts 端口。 */
+    /**
+     * 只提取冻结契约中的 snake_case 筛选字段；客户端传入的 tenant_id 等未知参数不会传给 Facts 端口。
+     * 修改用途：删除历史 camelCase 查询别名，避免阶段 2-7 的正式查询参数形成两套语义。
+     */
     private static Map<String, String> filters(Map<String, String> parameters) {
         Map<String, String> filters = new LinkedHashMap<>();
-        put(filters, "warehouse_id", firstText(parameters.get("warehouse_id"), parameters.get("warehouseId")));
-        put(filters, "production_area_id",
-                firstText(parameters.get("production_area_id"), parameters.get("areaId")));
-        put(filters, "device_id", firstText(parameters.get("device_id"), parameters.get("deviceId")));
+        put(filters, "warehouse_id", parameters.get("warehouse_id"));
+        put(filters, "production_area_id", parameters.get("production_area_id"));
+        put(filters, "device_id", parameters.get("device_id"));
         return filters;
     }
 
@@ -126,13 +129,4 @@ public class DashboardController {
 
     }
 
-    private static String firstText(String first, String second) {
-        if (first != null && !first.isBlank()) {
-            return first.trim();
-        }
-        if (second != null && !second.isBlank()) {
-            return second.trim();
-        }
-        return null;
-    }
 }

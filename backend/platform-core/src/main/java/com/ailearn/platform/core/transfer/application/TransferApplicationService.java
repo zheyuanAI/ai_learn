@@ -1,7 +1,9 @@
 package com.ailearn.platform.core.transfer.application;
 
 import com.ailearn.platform.core.transfer.dto.TransferCreateRequest;
+import com.ailearn.platform.core.transfer.dto.TransferPageQuery;
 import com.ailearn.platform.core.transfer.dto.TransferView;
+import com.ailearn.platform.core.masterdata.dto.MasterDataPageResult;
 import java.util.UUID;
 
 /**
@@ -26,4 +28,15 @@ public interface TransferApplicationService {
      * @return 已确认调拨视图
      */
     TransferView confirm(UUID id, String idempotencyKey);
+
+    /**
+     * 查询当前租户调拨分页。
+     *
+     * @param query 分页和白名单筛选条件
+     * @return 统一 records/total/page/size/totalPages 结构
+     */
+    MasterDataPageResult<TransferView> page(TransferPageQuery query);
+
+    /** 查询当前租户单张调拨单详情。 */
+    TransferView find(UUID id);
 }

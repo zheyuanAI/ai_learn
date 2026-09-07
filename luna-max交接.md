@@ -2,7 +2,7 @@
 
 > 执行角色：Luna Max，负责安全链路、数据库、后端领域逻辑、接口契约和后端测试。  
 > 协作对象：Gemini 只负责界面，详见根目录 `gemini交接.md`。  
-> 基线日期：2026-09-03。  
+> 基线日期：2026-09-04；本次冻结以当前代码、配置和下文最终交接节为准。
 > Git 约束：只修改工作区，不执行 `git commit`、`git push`、建分支或合并，由用户统一审查。  
 > 事实原则：代码与实际配置优先于原型和计划；未在仓库确认的能力不得写成“已实现”。
 
@@ -312,7 +312,7 @@ MQTT 和开发/测试 simulate 共用 `TelemetryIngestionService.ingest(...)`。
 
 追溯从销售单、工单、库存流水或设备告警进入，沿真实来源字段双向构造节点。采用 `trace:chain:view` 加节点领域权限双重过滤；无权节点只返回计数；缺失来源明确标记，不建万能关系表。
 
-GIS 表：`gis_site_map`、`gis_site_map_asset`、`gis_map_point`。底图存 PostgreSQL `BYTEA`，仅 PNG/JPEG/WebP，最大 5 MiB，保存 MIME、大小、SHA-256。点位坐标 0–100，实体限仓库、生产区域、设备。点位只存配置，状态优先级 `Alarm > Offline > Warning > Normal`。
+GIS 表：`gis_site_map`、`gis_site_map_asset`、`gis_map_point`。底图保存外部资源 `storage_key` 及 MIME、大小、SHA-256 元数据，仅 PNG/JPEG/WebP、最大 5 MiB。点位坐标 0–100，实体限仓库、生产区域、设备。点位只存配置，状态优先级 `Alarm > Offline > Warning > Normal`。
 
 看板固定库存、履约、制造、质量、设备、告警、追溯七类摘要；范围仅 `today`、`7d`、`30d`。Redis 按租户、权限指纹、摘要、筛选、时间范围隔离：新鲜 60 秒，最近成功最多陈旧 10 分钟；来源失败可返回带时间的 `stale=true`，无旧结果报错，绝不伪造零值。
 
@@ -373,3 +373,117 @@ Gemini 可提出契约问题，但不能直接改后端 DTO；Luna Max 评估、
 只有 `READY-S0`、`READY-S2` 至 `READY-S7` 全部发布且有测试证据，迁移在 PostgreSQL 12.1 隔离环境通过，关键不变量通过自动化回归，规格与真实接口一致，并确认未提交 Git、未改历史迁移、未污染开发库，才可报告后端完成。
 
 阶段 8 AI、阶段 9 完整黄金闭环验收、RabbitMQ、MinIO、MRP、APS、WIP、线边仓、Modbus/OPC UA、三维数字孪生均不在本计划范围。
+
+## 17. 2026-09-05 最终后端冻结交接（权威覆盖前文目标性描述）
+
+本节是本轮阶段 2–7 修复后的权威交接；前文仍保留为实施背景，但其中与当前 Controller、DTO、应用服务、迁移脚本或本节冲突的“目标接口”不再作为 Gemini 接入依据。未在本节或对应领域 `接口契约.md` 列出的路由，不对外承诺。
+
+### 17.1 闸门状态
+
+| 闸门 | 当前状态 | 证据/边界 |
+| --- | --- | --- |
+| `READY-S2` | 代码闸门与 5433 实库联调通过 | 调拨/盘点分页、详情、库存查询契约、库存余额和黄金路径已在 `127.0.0.1:5433/ai_learn` 验证；隔离数据库迁移未验证 |
+| `READY-S3` | 代码闸门与 5433 实库联调通过 | 独立收货 ID、质量隔离、放行、上架和拒收边界已在当前练习库验证；多次拆分收货的独立事实已由回归覆盖 |
+| `READY-S4` | 代码闸门与 5433 实库联调通过 | 直接拣货、库存预留、发货扣减、订单完成和允许动作已通过 Gateway 实链路；复杂多批次并发仍以自动化回归为主 |
+| `READY-S5` | 代码闸门与 5433 实库联调通过 | BOM/工艺/工单/派工/执行/报工/质检/领退料/成品入库和工单完成已形成真实闭环；生产上下文正向关联未构造专用设备执行样本 |
+| `READY-S6` | 代码闸门与 5433 实库模拟接入通过 | 设备、凭证、遥测、状态、告警、同载荷去重、冲突、确认/恢复和延迟消息已通过受控 simulate；真实 Broker/ACL/QoS1 仍未验证 |
+| `READY-S7` | 代码闸门与 5433 实库联调通过 | BFS 真实适配器、反向追溯、GIS 创建/幂等/更新/软删除、七类看板和异常中心已通过；HMAC 负向上下文边界已验证，正向上下文仍未构造专用样本 |
+
+`READY-S0` 的既有基线未重做；本轮没有修改登录、JWT、租户上下文和权限核心实现。阶段 2–7 已完成当前 5433 练习库的业务联调，但不能把未执行的 PostgreSQL 12.1 隔离迁移、真实 Mosquitto 或生产上下文正向样本写成已完成环境验收。
+
+### 17.2 通用接口冻结
+
+- HTTP 成功和业务错误统一返回 `{code,message,data,request_id,timestamp}`；成功 `code=200`，时间为 ISO-8601，`request_id` 与 `X-Request-Id` 对应。
+- UUID 使用标准字符串；S2–S4 数量 DTO 使用字符串并按最多 6 位小数校验；制造摘要和看板指标中的 `BigDecimal` 为 JSON 数字。
+- 分页 DTO 使用 `records,total,page,size,totalPages`（设备和告警现有分页 DTO 的实际返回为 `records,total,page,size`）；页码从 1 开始，服务端页大小上限 200。库存预留记录是 `{reservation,allocations}`，Java 内部 `content()` 不出现在 HTTP。
+- 写接口带 `Authorization` 和 `Idempotency-Key`；客户端不得提交或覆盖 `tenantId/tenant_id`、操作人、会话和审计时间。相同租户、操作域、幂等键和载荷重放首次结果，不同载荷返回冲突。
+- 所有下文字段名以当前 JSON DTO 为准：有 `@JsonProperty` 的字段使用其声明名，未声明的 Java DTO 使用默认 camelCase；已有 `@JsonAlias` 只表示反序列化兼容，不扩展正式 URL 或查询参数。
+
+### 17.3 S2 最终 URL、参数和响应
+
+正式路由：
+
+- `GET /api/transfers?page=1&size=20&keyword=&status=`、`GET /api/transfers/{id}`、`POST /api/transfers`、`POST /api/transfers/{id}/confirm`
+- `GET /api/stocktakes?page=1&size=20&keyword=&status=`、`GET /api/stocktakes/{id}`、`POST /api/stocktakes`、`POST /api/stocktakes/{id}/start`、`POST /api/stocktakes/{id}/confirm`
+- `GET /api/inventory/balances?product_id=&warehouse_id=&location_id=&lot_no=&page=1&size=50`
+- `GET /api/inventory/reservations?reservation_id=&source_type=&source_id=&source_line_id=&status=&product_id=&warehouse_id=&location_id=&lot_no=&page=1&size=50`
+- `GET /api/inventory/transactions?transaction_type=&source_type=&source_id=&source_line_id=&product_id=&warehouse_id=&location_id=&lot_no=&occurred_from=&occurred_to=&page=1&size=50`
+
+调拨请求为 `transferNo,fromWarehouseId,fromLocationId,toWarehouseId,toLocationId,lines[{productId,lotNo,uom,quantity}]`；响应为 `TransferView`，含 `id,transferNo,fromWarehouseId,fromLocationId,toWarehouseId,toLocationId,status,version,confirmedBy,confirmedAt,lines,transactionIds,allowedActions`，状态 `Draft/Confirmed`，允许动作分别为 `confirm/[]`。盘点请求为 `stocktakeNo,warehouseId,locationId`；确认体为 `lines[{lineId,countedQty,varianceReason}]`，这是唯一记录入口；响应 `StocktakeView` 含系统快照版本、实盘/差异和调整流水，状态 `NotStarted/Counting/ConfirmedAdjusted`，允许动作分别为 `start/confirm/[]`。差异确认以余额版本锁校验，数量不能低于有效预留。
+
+### 17.4 S3 最终 URL、参数和响应
+
+- `POST /api/purchase-receipts/{receiptId}/confirm`：`{purchaseOrderId,receiptNo,receiptTime,qualityHoldLocationId,lines[{purchaseOrderLineId,productId,uom,arrivedQty,rejectedQty,receivedQty,lotNo,rejectionReason}]}`；路径 `receiptId` 是独立收货事实 ID，订单 ID 只取请求体 `purchaseOrderId`。
+- `GET /api/purchase-orders`、`GET /api/purchase-orders/{id}`、`POST /api/purchase-orders`、`PUT /api/purchase-orders/{id}`、`POST /api/purchase-orders/{id}/submit`、`approve`、`complete`；质量为 `GET /api/purchase-receipts/quality-inspections`、`POST /api/purchase-receipts/{id}/quality/inspect`、`GET /api/purchase-quality-dispositions`、`POST /api/purchase-receipts/{id}/quality/{release|return|scrap}`、`POST /api/purchase-quality-dispositions/{id}/confirm`；上架为 `GET /api/putaway-tasks`、`POST /api/putaway-tasks/{id}/confirm`。
+- 收货响应为 `PurchaseReceiptView`，含 `id,receiptNo,purchaseOrderId,receiptTime,qualityHoldLocationId,status,confirmedBy,confirmedSessionId,confirmedAt,version,lines,arrivalAcceptanceSummary,balanceDeltaSummary,inventoryTransactions,allowedActions`；收货状态 `Draft/Confirmed`。
+- 约束：`arrivedQty=rejectedQty+receivedQty`；拒收不产生库存，实际接收只进入 `QualityHold`；质量决定不等于仓库执行，放行后才从 `QualityHold` 移到 `ReceivingStaging`，上架再从暂存位移动到 `Storage`。同一订单的拆分收货必须使用不同 `receiptId`。
+
+### 17.5 S4 最终 URL、参数和响应
+
+- `GET /api/pick-tasks?page=1&size=20&keyword=&status=&customerId=&fulfillmentStatus=` 返回 `SalesOrderPageResult`；当前没有独立持久化 `pick_task` 或 shipment header。
+- `POST /api/pick-tasks/{id}/confirm` 请求 `salesOrderId,lines[{salesOrderLineId,pickedQty,sourceLocationId,shippingLocationId}]`；`POST /api/pick-tasks/{id}/return` 请求 `salesOrderId,lines[{salesOrderLineId,returnQty,toLocationId}]`。
+- `POST /api/sales-orders/{id}/reservations/release` 请求 `releaseLines[{salesOrderLineId,releaseQty,reason}]`；`POST /api/sales-shipments/{id}/confirm` 请求 `salesOrderId,shipTime,shipmentLines[{salesOrderLineId,productId,shipQty}]`；`POST /api/sales-orders/{id}/complete` 请求 `completionReason`。
+- 写响应为 `SalesFulfillmentResult{action,operationId,order,inventoryTransactionIds,reservationIds}`。路径 `{id}` 是履约操作标识，体内 `salesOrderId` 是订单标识；不提供无 ID 的旧通用动作路由。订单详情 `allowedActions` 只使用 `directPick,ship,returnPick,releaseReservation,manualComplete`，已完成订单为空。
+- 直接拣货先自动补足预留并把实物/有效分配移到 `ShippingStaging`，不扣企业总实物；发货才释放预留并扣实物；退回只处理未发货暂存；人工完成只释放未拣预留并留存原因。
+
+### 17.6 S5 最终 URL、参数和响应
+
+正式读路由为 `GET /api/boms`、`/api/boms/{id}`、`/api/routings`、`/api/routings/{id}`、`/api/work-orders`、`/api/work-orders/{id}`、`/api/dispatch-orders`、`/api/operation-executions`、`/api/work-reports?work_order_id=`、`/api/work-reports/{workOrderId}`、`/api/quality-inspections?work_order_id=`、`/api/quality-inspections/{workOrderId}`、`/api/finished-goods-receipts?work_order_id=`、`/api/finished-goods-receipts/{workOrderId}`；正式写路由为 `POST /api/dispatch-orders`、`POST /api/operation-executions`、`POST /api/material-issues`、`POST /api/material-issues/{id}/confirm`、`POST /api/material-returns`、`POST /api/material-returns/{id}/confirm`、`POST /api/work-reports`、`POST /api/quality-inspections`、`POST /api/quality-inspections/{id}/submit`、`POST /api/quality-inspections/{id}/close`、`POST /api/finished-goods-receipts`、`POST /api/finished-goods-receipts/{id}/confirm`，以及工单 `POST/PUT` 生命周期路由。
+
+核心字段：工单 `workOrderNo,productId,plannedQty,plannedStartTime,plannedFinishTime,bomId,routingId,sourceSalesOrderLineId`；派工正式字段 `work_order_id,operation_id,operator_id,dispatch_qty,device_id`；执行正式字段 `dispatch_order_id,work_order_id,operation_id,device_id`；领料 `issueNo,workOrderId,items[{productId,warehouseId,locationId,quantity}],overageReason`；报工 `reportNo,operationExecutionId,workOrderId,operationId,reportTime,qualifiedQty,defectQty,remark`；质检创建/提交/关闭分别为 `inspectionNo,workReportId,inspectionType,sampleQty`、`qualifiedQty,defectQty,result`、`disposition`；成品入库 `receiptNo,workOrderId,receiptQty,warehouseId,locationId`。列表为 `records,total,page,size,totalPages`，事实集合查询返回 JSON 数组，确认结果为 `ProductionFactSummary{operation,factId,fact,quantity,inventoryTransactionIds}`。
+
+状态和规则：工单 `Draft/PendingApproval/Rejected/Released/InProgress/Completed`；派工 `Draft/Released/Processing/Completed`；执行 `NotStarted/Running/Paused/Completed`；质检 `Draft/Submitted/Passed/Failed/Closed`；成品入库 `Draft/Confirmed`。派工工序必须属于冻结 Routing，累计派工不超计划；后续工序必须等待前置执行 `Completed`；累计报工不超对应派工/工单计划；Failed 质检必须以 `ISOLATE/SCRAP/CLOSE` 关闭。超 BOM 原因必填，确认时还要 `mes:material:overage`，库存变化只能经 `InventoryCommandService`。
+
+### 17.7 S6 最终 URL、参数和响应
+
+- `PATCH /api/devices/{id}/lifecycle` 请求 `{lifecycle_status}`，返回 `DeviceView`；`GET /api/devices/{id}/telemetry?metric_code=&date_from=&date_to=&limit=100` 返回 `TelemetryFact[]`；`GET /api/devices/{id}/status` 返回 `DeviceStatus`。
+- `POST /api/protocol-adapters/mqtt/simulate` 请求 `{device_code,ts,message_id,sequence,metrics[{metric_code,metric_value,metric_unit}]}`，返回 `TelemetryIngestionResult{accepted,duplicate,messageKey,telemetryIds,status}`；模拟能力默认关闭。
+- `GET /api/device-alarms?device_id=&status=&alarm_level=&date_from=&date_to=&context_status=&page=1&size=20`、`GET /api/device-alarms/{id}`、`POST /api/device-alarms/{id}/ack` 请求 `{ack_comment}`、`PUT /api/device-alarms/{id}/business-context` 请求 `{operation_execution_id,work_order_id}`（至少一项）。
+- 告警返回字段使用 `AlarmView` 的 `alarm_no,device_id,rule_id,alarm_type,alarm_level,status,triggered_at,acked_at,ack_user_id,recovered_at,operation_execution_id,work_order_id,context_source,context_status,ack_comment`。状态为 `Triggered/Acked/RecoveredUnacked/Recovered`；同键同载荷重复为幂等成功，同键不同载荷为 `IOT_TLM_003`。
+- 告警先本地保存，Core 不可用时上下文保持 `Pending` 并进入 `Retry`；调度器固定延迟默认 5 秒、每轮最多 16 个租户、每租户 50 条到期任务，退避上限 1 小时。真实 MQTT Topic 是 `devices/{credential_reference}/telemetry`，Broker 匿名关闭，凭证文件/ACL/密码只由运行环境注入。
+
+### 17.8 S7 最终 URL、参数和响应
+
+- 追溯：`GET /api/traceability?entity_type=&entity_id=`，仅接受 snake_case；返回 `TraceabilityProjection{nodes,links,hidden_node_count,missing_sources,generated_at,source_updated_at,request_id,truncated}`，BFS 上限为查询 256、节点 256、关系 512。
+- 地图：`GET/POST /api/site-maps`、`GET /api/site-map?site_map_id=&entity_type=&status=`、`GET /api/site-maps/{siteMapId}/projection`、`GET /api/site-map/points/{pointId}`、`POST/PUT/DELETE /api/site-map/points[/{pointId}]`。`site_map_id` 查询不再接受 `siteMapId` 别名；点位命令为 `siteMapId,entityType,entityId,xPercent,yPercent,rotation,linkedPage`，删除是 GIS 配置软删除。
+- 看板只有七个：`GET /api/dashboard/inventory`、`/fulfillment`、`/manufacturing`、`/quality`、`/device`、`/alarms`、`/traceability`；查询为 `time_range=today|7d|30d,warehouse_id,production_area_id,device_id`，不提供 `/api/dashboard/overview`，不再使用 `timeRange/warehouseId/areaId/deviceId` 别名。返回 `DashboardSummaryProjection{summary_type,metrics,time_range,source_summary,generated_at,source_updated_at,stale,stale_since,request_id}`。
+- 异常中心：`GET /api/exception-center?time_range=&source=&severity=&page=1&size=20`，返回 `ExceptionCenterPage{records,total,page,size,totalPages,generated_at,source_updated_at}`，记录为 `source,exception_type,severity,value,message,occurredAt`，只从库存、制造和 IoT 告警三类 Facts 派生。
+- GIS/追溯/看板/异常中心均按租户和权限裁剪；`production_area` 事实源在当前仓库中未确认，不能由原型补齐。
+
+### 17.9 本轮变更文件与迁移
+
+- `backend/platform-core/**`：S2 调拨/盘点读接口和分页、库存余额版本锁；S3 收货契约；S4 履约路径与动作；S5 foundation/派工/执行/生产事实/质量闭环/超 BOM；S7 BFS、真实 Facts 适配器、GIS 更新删除、七类看板和异常中心；对应测试位于 `backend/platform-core/src/test/**`。
+- `backend/platform-iot/**`：S6 设备/遥测/告警 HTTP 契约、自动补链、重试调度、MQTT 配置和对应测试；`backend/platform-auth/**` 增加正式 MES/S7 权限迁移。
+- 新增迁移仅有 `platform-auth` `auth/V7__stage_5_formal_permissions.sql`、`platform-core` `core/V7__mes_quality_inspection_closure.sql` 和 `core/V8__mes_material_overage_reason.sql`；当前工作树同时在既有 Core `V5__manufacturing_execution_inventory_links.sql` 中补齐 PostgreSQL 12.1 所需的 `(tenant_id,id)` 唯一约束，5433 实库已存在该约束并成功加载后续迁移，未执行清库或迁移重放。
+- `deploy/local/mosquitto.conf`、`deploy/docker/mosquitto.conf` 和 `runtime/README.md` 只补运行入口、匿名关闭、外部凭证文件与 ACL 占位说明，不含真实密钥。规格同步文件为四个领域的 `接口契约.md`、`领域模型.md`、`验收标准.md` 及必要业务规则文件。
+
+### 17.10 旧 Gemini 假设删除/纠正清单
+
+- 删除追溯 `entityType/entityId`、GIS `siteMapId` 查询别名；看板只认 snake_case 查询参数。
+- 删除 `/api/dashboard/overview` 假设；只能调用七个固定摘要入口。
+- 删除无 ID 的通用拣货/退回/发货假设；只能使用带路径 ID 的正式履约路由。`GET /api/pick-tasks` 是销售订单分页，不代表有独立任务表。
+- 删除 `/api/stocktakes/{id}/record` 假设；盘点实盘记录嵌在 `/confirm` 请求中。
+- 纠正采购收货 `{id}` 语义：路径是独立收货 ID，不是采购订单 ID；拆分到货必须产生不同收货事实 ID。
+- 删除“收货直接进入正常可用库存”“质检决定等同仓储执行”“Failed 可直接结束”的假设；实际接收进 `QualityHold`，质量决定与仓储执行分离，Failed 必须闭环。
+- 删除“报工只受工单计划量限制”的简化假设；现在同时受对应派工累计量和工单计划量限制，后续工序还受前置完成门控。
+
+### 17.11 验证证据、未验证项和 Git 状态
+
+已执行（均使用 Java 21、Maven 3.9.1 和仓库 `D:\project\MavenRepository391`；业务联调直接使用 `127.0.0.1:5433/ai_learn`）：
+
+```powershell
+cd backend
+D:\ruanjian\apache-maven-3.9.1\bin\mvn.cmd test '-Dtest=!AuthPostgresMigrationTest' '-Dcheckstyle.skip=true' '-Dmaven.repo.local=D:\project\MavenRepository391'
+D:\ruanjian\apache-maven-3.9.1\bin\mvn.cmd package '-DskipTests' '-Dcheckstyle.skip=true' '-Dmaven.repo.local=D:\project\MavenRepository391'
+cd ..\frontend
+npm run build
+cd ..
+git diff --check
+git status --short
+```
+
+后端聚合测试最终为 `platform-shared 18 + platform-gateway 11 + platform-auth 34 + platform-core 153 + platform-iot 70 = 286` 个通过测试；`AuthPostgresMigrationTest` 未纳入本次聚合运行，因为它是可选的外部隔离迁移测试，默认目标 `127.0.0.1:55432` 未提供服务；该地址不是本项目数据库，也不是项目运行依赖。聚合 `package -DskipTests` 和前端 `npm run build` 均成功；前端 Vite 构建通过 `vue-tsc --noEmit`，共转换 280 个模块。测试日志中的 Core unavailable 告警和 MQTT listener 错误日志是专门验证故障路径的预期输出，不是测试失败。`git diff --check` 通过（仅有工作区 LF/CRLF 转换提示），`git status --short` 确认改动仍在工作区。
+
+5433 只读核对结果为 PostgreSQL `12.1`，`auth_flyway_schema_history` 最新 `V7`、`core_flyway_schema_history` 最新 `V8`、`iot_flyway_schema_history` 最新 `V2` 且均为 `success=true`；Auth/Core/IoT/Gateway 健康端点均返回 HTTP 200。黄金流已通过 Gateway 写入并复读当前练习库：库存成品余额合计 `onHand=7,reserved=0,available=7`（Storage 5、Picking 2），工单为 `Completed` 且 `reportedQty=2,qualifiedQty=2,receivedQty=2`；IoT simulate 验证了遥测、在线/运行/告警状态、同载荷去重、同键异载荷冲突、告警确认/恢复及延迟消息不倒退；S7 追溯返回 `9 nodes/8 links/truncated=false`，七类看板均成功且 `stale=false`，异常中心成功，GIS 地图创建/幂等重放/点位创建更新/软删除均成功。开发库已保留本轮阶段 2–7 的练习数据，未清库；联调临时角色已清理。
+
+未验证或不纳入当前练习库完成判定：认证模块代码中预留的外部隔离迁移测试（默认目标地址为 `127.0.0.1:55432`）未执行；该地址不是本项目数据库，也不是项目启动依赖。真实 PostgreSQL 隔离迁移、Mosquitto ACL/QoS1 实机链路、IoT 与生产执行事实的正向上下文关联专用样本、生产区域 Facts 源未验证；IoT 本次使用开发 profile 的 HTTP `simulate` 入口，基础配置仍默认关闭。复杂多批次并发主要由自动化回归覆盖。未执行 `git commit`、`git push`、`git reset`、`git checkout`、`git clean` 或建分支；所有改动仍留在工作区，等待用户审查。

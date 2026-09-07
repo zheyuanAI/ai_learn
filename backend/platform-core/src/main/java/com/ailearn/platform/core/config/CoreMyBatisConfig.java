@@ -3,6 +3,8 @@ package com.ailearn.platform.core.config;
 import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
+import com.baomidou.mybatisplus.autoconfigure.ConfigurationCustomizer;
+import java.util.UUID;
 import org.apache.ibatis.annotations.Mapper;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.context.annotation.Bean;
@@ -36,5 +38,17 @@ public class CoreMyBatisConfig {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
         interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.POSTGRE_SQL));
         return interceptor;
+    }
+
+    /**
+     * 注册 Core 统一 UUID 类型处理器。
+     * 入参：MyBatis 全局配置；出参：无；流程：把 PostgreSQL/H2 UUID 映射注册到类型处理器仓库，供所有 Core Mapper 复用。
+     *
+     * @return MyBatis 配置定制器
+     */
+    @Bean
+    public ConfigurationCustomizer uuidTypeHandlerCustomizer() {
+        return configuration -> configuration.getTypeHandlerRegistry()
+                .register(UUID.class, new UuidTypeHandler());
     }
 }

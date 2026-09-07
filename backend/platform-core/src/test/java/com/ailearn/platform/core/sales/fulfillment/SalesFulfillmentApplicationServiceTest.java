@@ -105,6 +105,10 @@ class SalesFulfillmentApplicationServiceTest {
                 new InventoryReservationPage(List.of(), 0, 1, 200));
         InventoryDimension sourceDimension = new InventoryDimension(PRODUCT_ID, WAREHOUSE_ID,
                 SOURCE_LOCATION_ID, "");
+        when(inventoryQueryService.queryBalances(any())).thenReturn(new InventoryBalancePage(
+                List.of(new com.ailearn.platform.core.inventory.domain.InventoryBalance(
+                        UUID.randomUUID(), TENANT_ID, sourceDimension, qty("10"), qty("0"), 0L, TIME)),
+                1, 1, 200));
         when(inventoryCommandService.reserve(any())).thenReturn(mutation(
                 reservation(RESERVATION_ID, "4", "0"),
                 List.of(allocation(ALLOCATION_ID, RESERVATION_ID, sourceDimension, "4", "0")),

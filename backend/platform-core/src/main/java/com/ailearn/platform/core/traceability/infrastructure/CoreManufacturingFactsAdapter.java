@@ -168,6 +168,9 @@ public class CoreManufacturingFactsAdapter implements ManufacturingFactsQuery {
     public TraceFacts trace(TraceQuery query) {
         try {
             String type = query.entityType().trim().toLowerCase();
+            if ("sales_order_line".equals(type)) {
+                return sourceLineFacts(query.context().tenantId(), query.entityId());
+            }
             UUID tenantId = query.context().tenantId();
             if (isWorkOrder(type)) {
                 return workOrderFacts(tenantId, query.entityId());
@@ -201,6 +204,31 @@ public class CoreManufacturingFactsAdapter implements ManufacturingFactsQuery {
     public Optional<ReferencedEntity> findProductionArea(com.ailearn.platform.core.traceability.ports.FactsQueryContext context,
                                                           UUID productionAreaId) {
         return Optional.empty();
+    }
+
+    /** 从真实工单基础事实反向展开销售订单行到工单关系，供 S7 BFS 继续追溯制造事实。 */
+    private TraceFacts sourceLineFacts(UUID tenantId, UUID salesLineId) {
+        List<WorkOrderFact> workOrders = foundation.findWorkOrders(tenantId).stream()
+                .filter(workOrder -> salesLineId.equals(workOrder.sourceSalesOrderLineId()))
+                .toList();
+        if (workOrders.isEmpty()) {
+            return TraceFacts.empty("manufacturing source sales line");
+        }
+        List<TraceNode> nodes = new ArrayList<>();
+        List<TraceLink> links = new ArrayList<>();
+        Instant updated = null;
+        TraceNode source = new TraceNode(tenantId, "sales_order_line", salesLineId,
+                "sales-line-" + salesLineId, "ACTIVE", "sales:order:view", null, true);
+        nodes.add(source);
+        for (WorkOrderFact workOrder : workOrders) {
+            Instant workOrderUpdated = FactsAdapterSupport.instant(workOrder.createdAt());
+            updated = FactsAdapterSupport.later(updated, workOrderUpdated);
+            nodes.add(new TraceNode(tenantId, "work_order", workOrder.id(), workOrder.workOrderNo(),
+                    workOrder.status().name(), "mes:workorder:view", workOrderUpdated, true));
+            links.add(new TraceLink("sales_order_line", salesLineId, "work_order", workOrder.id(),
+                    "source_work_order"));
+        }
+        return new TraceFacts(nodes, links, updated, "manufacturing source sales line");
     }
 
     private TraceFacts workOrderFacts(UUID tenantId, UUID workOrderId) {

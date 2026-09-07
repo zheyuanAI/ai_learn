@@ -53,6 +53,14 @@ management:
 # 真实 MQTT 消费默认关闭。启用时必须显式提供 Broker 地址和只读订阅账号；连接失败由监听器重试，
 # 不会因为未配置 Broker 阻断 IoT HTTP 服务启动。发布设备凭证由 Mosquitto 外部 password_file 校验。
 iot:
+  context:
+    core:
+      # 本地练习默认使用显式不可用适配器；启用跨服务补链时同时提供 URL 和 HMAC 密钥。
+      enabled: ${IOT_CONTEXT_CORE_ENABLED:false}
+      query-url: ${IOT_CONTEXT_CORE_QUERY_URL:http://127.0.0.1:10003/internal/production-context}
+      hmac-secret: ${IOT_CONTEXT_CORE_HMAC_SECRET:}
+  context-link:
+    retry-delay-ms: ${IOT_CONTEXT_LINK_RETRY_DELAY_MS:5000}
   internal:
     # Core S7 只读 Facts 的服务间 HMAC 密钥；留空时内部接口拒绝所有调用。
     s7-hmac-secret: ${IOT_INTERNAL_S7_HMAC_SECRET:}
@@ -63,6 +71,9 @@ iot:
     client-id: ${IOT_MQTT_CLIENT_ID:platform-iot-telemetry-consumer}
     username: ${IOT_MQTT_USERNAME:}
     password: ${IOT_MQTT_PASSWORD:}
+    # Broker password_file/acl_file 只接受外部注入路径，仓库不保存真实凭证。
+    password-file: ${IOT_MQTT_PASSWORD_FILE:}
+    acl-file: ${IOT_MQTT_ACL_FILE:}
     qos: ${IOT_MQTT_QOS:1}
     connection-timeout-seconds: ${IOT_MQTT_CONNECTION_TIMEOUT_SECONDS:10}
     keep-alive-seconds: ${IOT_MQTT_KEEP_ALIVE_SECONDS:30}

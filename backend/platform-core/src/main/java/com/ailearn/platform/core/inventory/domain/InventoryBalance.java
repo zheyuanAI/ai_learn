@@ -1,5 +1,8 @@
 package com.ailearn.platform.core.inventory.domain;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -19,7 +22,9 @@ public record InventoryBalance(
         UUID id,
         UUID tenantId,
         InventoryDimension dimension,
+        @JsonSerialize(using = ToStringSerializer.class)
         BigDecimal onHandQty,
+        @JsonSerialize(using = ToStringSerializer.class)
         BigDecimal reservedQty,
         long version,
         OffsetDateTime lastTransactionAt) {
@@ -29,6 +34,8 @@ public record InventoryBalance(
      *
      * @return {@code onHandQty - reservedQty}
      */
+    @JsonProperty(value = "availableQty", access = JsonProperty.Access.READ_ONLY)
+    @JsonSerialize(using = ToStringSerializer.class)
     public BigDecimal availableQty() {
         return InventoryInvariant.availableQty(onHandQty, reservedQty);
     }

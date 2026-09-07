@@ -107,6 +107,7 @@ export const ROLE_PRESETS: Record<
         children: [
           { id: "6-1", parentId: "6", menuCode: "Traceability", routePath: "/traceability", menuName: "全链路闭环追溯", detail: "正反向溯源与断链诊断", sortOrder: 1 },
           { id: "6-2", parentId: "6", menuCode: "GisSiteMaps", routePath: "/gis/site-maps", menuName: "二维 GIS 站点地图", detail: "受控矢量底图与防漂移点位", sortOrder: 2 },
+          { id: "6-3", parentId: "6", menuCode: "ExceptionCenter", routePath: "/exception-center", menuName: "跨域异常中心", detail: "库存/工序/告警派生异常", sortOrder: 3 },
         ],
       },
       { id: "7", menuCode: "Ai", routePath: "/ai", menuName: "AI 只读助手", icon: "🤖", detail: "受控查询、来源与审计", sortOrder: 7 },

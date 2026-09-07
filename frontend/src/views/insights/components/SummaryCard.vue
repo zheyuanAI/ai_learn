@@ -18,8 +18,11 @@
       </div>
 
       <div class="header-right">
-        <!-- 陈旧数据标记 -->
-        <span v-if="card.stale" class="stale-badge" :title="`源服务延迟，数据截至: ${card.staleSince}`">
+        <!-- 修改：只有成功响应才允许显示实时；错误或缺少明确 stale 标识时显示不可用。 -->
+        <span v-if="card.error || (card.stale !== true && card.stale !== false)" class="unavailable-badge">
+          ● 不可用
+        </span>
+        <span v-else-if="card.stale === true" class="stale-badge" :title="`源服务延迟，数据截至: ${card.staleSince}`">
           ⚠️ 已过期
         </span>
         <span v-else class="live-badge">● 实时</span>
@@ -213,6 +216,16 @@ defineEmits<{
   padding: 2px 6px;
   border-radius: 4px;
   border: 1px solid rgba(245, 158, 11, 0.35);
+  font-weight: 600;
+}
+
+.unavailable-badge {
+  font-size: 10px;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.14);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
   font-weight: 600;
 }
 

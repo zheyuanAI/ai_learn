@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Result;
+import org.apache.ibatis.annotations.ResultMap;
 import org.apache.ibatis.annotations.Results;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
@@ -29,7 +30,7 @@ public interface TransferOrderMapper {
              LIMIT 1
             """)
     @Results(id = "transferOrderRowMap", value = {
-            @Result(property = "id", column = "id", id = true),
+            @Result(property = "id", column = "id", javaType = UUID.class, id = true),
             @Result(property = "tenantId", column = "tenant_id"),
             @Result(property = "transferNo", column = "transfer_no"),
             @Result(property = "fromWarehouseId", column = "from_warehouse_id"),
@@ -47,6 +48,41 @@ public interface TransferOrderMapper {
     })
     TransferOrderRow findById(@Param("tenantId") UUID tenantId, @Param("id") UUID id);
 
+    /** 按租户查询调拨表头分页。 */
+    @Select("""
+            <script>
+            SELECT id, tenant_id, transfer_no, from_warehouse_id, from_location_id,
+                   to_warehouse_id, to_location_id, status, version, confirmed_by, confirmed_at,
+                   created_by, created_at, updated_by, updated_at
+              FROM inv_transfer_order
+             WHERE tenant_id = #{tenantId} AND isdel = 0
+            <if test="status != null and status != ''"> AND status = #{status}</if>
+            <if test="keyword != null and keyword != ''"> AND transfer_no ILIKE CONCAT('%', #{keyword}, '%')</if>
+             ORDER BY created_at DESC, id DESC
+             LIMIT #{limit} OFFSET #{offset}
+            </script>
+            """)
+    @ResultMap("transferOrderRowMap")
+    List<TransferOrderRow> findPage(@Param("tenantId") UUID tenantId,
+                                    @Param("offset") int offset,
+                                    @Param("limit") int limit,
+                                    @Param("status") String status,
+                                    @Param("keyword") String keyword);
+
+    /** 统计当前租户调拨总数，筛选条件与分页查询保持一致。 */
+    @Select("""
+            <script>
+            SELECT COUNT(1)
+              FROM inv_transfer_order
+             WHERE tenant_id = #{tenantId} AND isdel = 0
+            <if test="status != null and status != ''"> AND status = #{status}</if>
+            <if test="keyword != null and keyword != ''"> AND transfer_no ILIKE CONCAT('%', #{keyword}, '%')</if>
+            </script>
+            """)
+    long count(@Param("tenantId") UUID tenantId,
+               @Param("status") String status,
+               @Param("keyword") String keyword);
+
     /**
      * 按租户读取调拨明细。
      */
@@ -57,7 +93,7 @@ public interface TransferOrderMapper {
              ORDER BY line_no, id
             """)
     @Results(id = "transferLineRowMap", value = {
-            @Result(property = "id", column = "id", id = true),
+            @Result(property = "id", column = "id", javaType = UUID.class, id = true),
             @Result(property = "tenantId", column = "tenant_id"),
             @Result(property = "transferOrderId", column = "transfer_order_id"),
             @Result(property = "lineNo", column = "line_no"),

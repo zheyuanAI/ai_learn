@@ -3,12 +3,15 @@ package com.ailearn.platform.core.manufacturing.dispatch.controller;
 import com.ailearn.platform.core.manufacturing.dispatch.application.DispatchApplicationService;
 import com.ailearn.platform.core.manufacturing.dispatch.domain.DispatchOrder;
 import com.ailearn.platform.core.manufacturing.dispatch.dto.DispatchCreateRequest;
+import com.ailearn.platform.core.manufacturing.dispatch.dto.DispatchPageQuery;
+import com.ailearn.platform.core.manufacturing.dispatch.domain.DispatchPage;
 import com.ailearn.platform.shared.api.ApiResponse;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -50,6 +53,13 @@ public class DispatchController {
     public ApiResponse<DispatchOrder> create(@Valid @RequestBody DispatchCreateRequest request,
                                              @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(service.create(request, idempotencyKey));
+    }
+
+    /** 查询当前租户派工分页；筛选和分页均由应用服务执行。 */
+    @GetMapping
+    @PreAuthorize("hasAuthority('mes:dispatch:manage')")
+    public ApiResponse<DispatchPage> page(@ModelAttribute DispatchPageQuery query) {
+        return ApiResponse.success(service.page(query));
     }
 
     /**

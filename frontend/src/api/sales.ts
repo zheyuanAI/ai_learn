@@ -6,24 +6,26 @@
  */
 
 import request, { type ApiResponse } from "../utils/request";
-import type { PageResult } from "../types/common";
 import type {
   SalesOrder,
+  SalesOrderPageResult,
   SalesOrderQuery,
   SalesOrderCreatePayload,
-  PickTask,
-  PickConfirmPayload,
+  PickTaskConfirmRequest,
+  PickTaskReturnRequest,
+  DirectPickPayload,
   PickReturnPayload,
-  ShipmentConfirmPayload,
+  SalesShipmentConfirmPayload,
   SalesReservationReleasePayload,
+  SalesFulfillmentResult,
 } from "../types/sales";
 
 /**
  * 分页查询销售订单列表（返回持久化状态与派生履约状态）
  * 接口路径：GET /api/sales-orders
  */
-export async function getSalesOrders(query: SalesOrderQuery = {}): Promise<ApiResponse<PageResult<SalesOrder>>> {
-  return await request<PageResult<SalesOrder>>({
+export async function getSalesOrders(query: SalesOrderQuery = {}): Promise<ApiResponse<SalesOrderPageResult>> {
+  return await request<SalesOrderPageResult>({
     url: "/api/sales-orders",
     method: "GET",
     params: query,
@@ -82,9 +84,9 @@ export async function approveSalesOrder(id: string | number): Promise<ApiRespons
 export async function completeSalesOrder(
   id: string | number,
   reasonOrPayload?: string | { completionReason: string }
-): Promise<ApiResponse<SalesOrder>> {
-  const data = typeof reasonOrPayload === "string" ? { completionReason: reasonOrPayload } : reasonOrPayload || {};
-  return await request<SalesOrder>({
+): Promise<ApiResponse<SalesFulfillmentResult>> {
+  const data = typeof reasonOrPayload === "string" ? { completionReason: reasonOrPayload } : reasonOrPayload || { completionReason: "" };
+  return await request<SalesFulfillmentResult>({
     url: `/api/sales-orders/${id}/complete`,
     method: "POST",
     data,
@@ -95,21 +97,26 @@ export async function completeSalesOrder(
  * 异常释放未拣预留
  * 接口路径：POST /api/sales-orders/{id}/reservations/release
  */
-export async function releaseSalesReservation(orderId: string | number, payload: SalesReservationReleasePayload): Promise<ApiResponse<SalesOrder>> {
-  return await request<SalesOrder>({
+export async function releaseSalesReservation(
+  orderId: string | number,
+  payload: SalesReservationReleasePayload
+): Promise<ApiResponse<SalesFulfillmentResult>> {
+  return await request<SalesFulfillmentResult>({
     url: `/api/sales-orders/${orderId}/reservations/release`,
     method: "POST",
-    data: payload,
+    data: {
+      releaseLines: payload.releaseLines,
+    },
   });
 }
 export const releaseReservation = releaseSalesReservation;
 
 /**
- * 分页查询拣货任务列表
+ * 分页查询订单驱动的拣货任务队列（基于销售订单分页）
  * 接口路径：GET /api/pick-tasks
  */
-export async function getPickTasks(query: { page?: number; size?: number; status?: string } = {}): Promise<ApiResponse<PageResult<PickTask>>> {
-  return await request<PageResult<PickTask>>({
+export async function getPickTasks(query: SalesOrderQuery = {}): Promise<ApiResponse<SalesOrderPageResult>> {
+  return await request<SalesOrderPageResult>({
     url: "/api/pick-tasks",
     method: "GET",
     params: query,
@@ -117,49 +124,62 @@ export async function getPickTasks(query: { page?: number; size?: number; status
 }
 
 /**
- * 确认直接拣货（先补齐预留，再将实物与预留分配同步移至 ShippingStaging 发货暂存位）
- * 接口路径：POST /api/pick-tasks/{id}/confirm 或 POST /api/pick-tasks/confirm
+ * 确认直接拣货
+ * 路径 {id} 为履约操作事实标识，请求体内 salesOrderId 为销售订单标识
+ * 接口路径：POST /api/pick-tasks/{id}/confirm
  */
-export async function confirmPickTask(taskIdOrPayload: any, payload?: PickConfirmPayload): Promise<ApiResponse<PickTask>> {
-  const actualPayload = payload || taskIdOrPayload;
-  const targetId = payload ? taskIdOrPayload : (actualPayload.taskId || actualPayload.id || "");
-  const url = targetId ? `/api/pick-tasks/${targetId}/confirm` : "/api/pick-tasks/confirm";
-  return await request<PickTask>({
-    url,
+export async function confirmPickTask(
+  operationId: string,
+  payload: PickTaskConfirmRequest
+): Promise<ApiResponse<SalesFulfillmentResult>> {
+  return await request<SalesFulfillmentResult>({
+    url: `/api/pick-tasks/${operationId}/confirm`,
     method: "POST",
-    data: actualPayload,
+    data: payload,
   });
 }
 export const confirmDirectPick = confirmPickTask;
 
 /**
- * 退回未发货拣货（从 ShippingStaging 移回合法来源库位，减少已拣数量）
+ * 退回未发货拣货
+ * 路径 {id} 为履约操作事实标识，请求体内 salesOrderId 为销售订单标识
  * 接口路径：POST /api/pick-tasks/{id}/return
  */
-export async function returnPickTask(taskIdOrPayload: any, payload?: PickReturnPayload): Promise<ApiResponse<PickTask>> {
-  const actualPayload = payload || taskIdOrPayload;
-  const targetId = payload ? taskIdOrPayload : (actualPayload.taskId || actualPayload.id || "");
-  const url = targetId ? `/api/pick-tasks/${targetId}/return` : "/api/pick-tasks/return";
-  return await request<PickTask>({
-    url,
+export async function returnPickTask(
+  operationId: string,
+  payload: PickTaskReturnRequest
+): Promise<ApiResponse<SalesFulfillmentResult>> {
+  return await request<SalesFulfillmentResult>({
+    url: `/api/pick-tasks/${operationId}/return`,
     method: "POST",
-    data: actualPayload,
+    data: payload,
   });
 }
 export const returnPick = returnPickTask;
 
 /**
  * 销售发货确认（扣减企业总实物库存，释放业务预留，更新履约数量）
- * 接口路径：POST /api/sales-shipments/{id}/confirm 或 POST /api/sales-shipments/confirm
+ * 路径 {id} 为发货履约事实标识，请求体内 salesOrderId 为销售订单标识
+ * 接口路径：POST /api/sales-shipments/{id}/confirm
  */
-export async function confirmSalesShipment(shipmentIdOrPayload: any, payload?: ShipmentConfirmPayload): Promise<ApiResponse<SalesOrder>> {
-  const actualPayload = payload || shipmentIdOrPayload;
-  const targetId = payload ? shipmentIdOrPayload : (actualPayload.shipmentId || actualPayload.id || "");
-  const url = targetId ? `/api/sales-shipments/${targetId}/confirm` : "/api/sales-shipments/confirm";
-  return await request<SalesOrder>({
-    url,
+export async function confirmSalesShipment(
+  operationId: string,
+  payload: SalesShipmentConfirmPayload
+): Promise<ApiResponse<SalesFulfillmentResult>> {
+  const requestBody = {
+    salesOrderId: String(payload.salesOrderId),
+    shipTime: payload.shipTime,
+    shipmentLines: (payload.shipmentLines || payload.lines || []).map((line) => ({
+      salesOrderLineId: String(line.salesOrderLineId),
+      productId: String(line.productId),
+      shipQty: String(line.shipQty),
+    })),
+  };
+
+  return await request<SalesFulfillmentResult>({
+    url: `/api/sales-shipments/${operationId}/confirm`,
     method: "POST",
-    data: actualPayload,
+    data: requestBody,
   });
 }
 export const confirmShipment = confirmSalesShipment;

@@ -94,6 +94,18 @@ export interface SalesOrder extends BaseEntity {
 }
 
 /**
+ * 后端 GET /api/sales-orders 与 GET /api/pick-tasks 的同源分页结果。
+ * 拣货页展示订单履约视图，不存在可由前端拼装的独立 PickTask 业务事实。
+ */
+export interface SalesOrderPageResult {
+  records: SalesOrder[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages?: number;
+}
+
+/**
  * 销售订单查询参数
  */
 export interface SalesOrderQuery extends PageQuery {
@@ -163,16 +175,63 @@ export interface PickTask extends BaseEntity {
 }
 
 /**
+ * 直接拣货行项请求
+ */
+export interface PickTaskConfirmLine {
+  salesOrderLineId: string;
+  pickedQty: string;
+  sourceLocationId: string;
+  shippingLocationId: string;
+}
+
+/**
+ * 直接拣货确认请求载荷
+ */
+export interface PickTaskConfirmRequest {
+  salesOrderId: string;
+  lines: PickTaskConfirmLine[];
+}
+
+/**
+ * 拣货退回行项请求
+ */
+export interface PickTaskReturnLine {
+  salesOrderLineId: string;
+  returnQty: string;
+  toLocationId: string;
+}
+
+/**
+ * 拣货退回确认请求载荷
+ */
+export interface PickTaskReturnRequest {
+  salesOrderId: string;
+  lines: PickTaskReturnLine[];
+}
+
+/**
+ * 销售履约写操作通用返回结果
+ */
+export interface SalesFulfillmentResult {
+  action: string;
+  operationId: string;
+  order: SalesOrder;
+  inventoryTransactionIds: string[];
+  reservationIds: string[];
+}
+
+/**
  * 直接拣货提交载荷（自动预留并移至发货暂存位）
  */
 export interface DirectPickPayload {
   salesOrderId: string | number;
-  salesOrderLineId: string | number;
-  productId: string | number;
-  pickedQty: string;
-  sourceLocationId: string | number;
-  shippingLocationId: string | number;
+  salesOrderLineId?: string | number;
+  productId?: string | number;
+  pickedQty?: string;
+  sourceLocationId?: string | number;
+  shippingLocationId?: string | number;
   lotNo?: string;
+  lines?: PickTaskConfirmLine[];
 }
 
 /**
@@ -180,10 +239,11 @@ export interface DirectPickPayload {
  */
 export interface PickReturnPayload {
   salesOrderId: string | number;
-  salesOrderLineId: string | number;
-  returnQty: string;
-  toLocationId: string | number; // 移回原合法来源/拣选库位
+  salesOrderLineId?: string | number;
+  returnQty?: string;
+  toLocationId?: string | number; // 移回原合法来源/拣选库位
   reason?: string;
+  lines?: PickTaskReturnLine[];
 }
 
 /**
@@ -242,8 +302,8 @@ export interface SalesShipmentLine {
  * 发货单提交明细
  */
 export interface SalesShipmentConfirmLine {
-  salesOrderLineId: string | number;
-  productId: string | number;
+  salesOrderLineId: string;
+  productId: string;
   shipQty: string;
   lotNo?: string;
 }
@@ -252,14 +312,14 @@ export interface SalesShipmentConfirmLine {
  * 确认发货提交载荷
  */
 export interface SalesShipmentConfirmPayload {
-  salesOrderId: string | number;
+  salesOrderId: string;
   shipTime: string;
   carrierName?: string;
   trackingNo?: string;
-  lines: SalesShipmentConfirmLine[];
+  shipmentLines?: SalesShipmentConfirmLine[];
+  lines?: SalesShipmentConfirmLine[];
 }
 
-export type PickConfirmPayload = DirectPickPayload;
+export type PickConfirmPayload = PickTaskConfirmRequest | DirectPickPayload;
 export type ShipmentConfirmPayload = SalesShipmentConfirmPayload;
 export type SalesReservationReleasePayload = ReleaseReservationPayload;
-

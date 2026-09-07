@@ -93,6 +93,34 @@ class GisApplicationServiceTest {
         assertEquals(DisplayStatus.ALARM, projection.displayStatus());
     }
 
+    /** 点位更新和删除只影响当前租户的 GIS 配置，并沿用正式幂等写入边界。 */
+    @Test
+    void shouldUpdateAndDeletePointWithinCurrentTenant() {
+        S7FactsFake facts = new S7FactsFake();
+        UUID deviceId = UUID.randomUUID();
+        facts.putDevice(deviceId, entity(TENANT_A, "DEVICE", deviceId, true),
+                new PointStatusFacts(false, false, false, null, null, null, Instant.now()));
+        GisApplicationService service = service(facts);
+        var context = S7TestSupport.context(TENANT_A, "perm-update", "gis:map:view", "gis:map:manage");
+        SiteMapConfiguration map = service.createMap(context,
+                new CreateSiteMapCommand("factory-update", "厂区", new MapAssetMetadata(
+                        "factory.png", "image/png", 1024, HASH)));
+        var original = service.savePoint(context, new SaveMapPointCommand(map.id(), MapEntityType.DEVICE,
+                deviceId, 10, 20, 0, "/devices/old"), "point-create-update");
+
+        var updated = service.updatePoint(context, original.id(), new SaveMapPointCommand(map.id(),
+                MapEntityType.DEVICE, deviceId, 30, 40, 15, "/devices/new"), "point-update");
+
+        assertEquals(30, updated.xPercent());
+        assertEquals(40, updated.yPercent());
+        assertEquals(15, updated.rotation());
+        assertEquals("/devices/new", updated.linkedPage());
+        assertEquals(30, service.getPoint(context, original.id()).xPercent());
+
+        assertEquals(true, service.deletePoint(context, original.id(), "point-delete"));
+        assertCode("GIS_POINT_001", () -> service.getPoint(context, original.id()));
+    }
+
     @Test
     void shouldRequireConfigurationAndViewPermissions() {
         S7FactsFake facts = new S7FactsFake();

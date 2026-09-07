@@ -10,7 +10,8 @@ public enum OperationExecutionErrorCode implements ErrorCode {
     MES_OPERATION_003("MES_OPERATION_003", 409, HttpStatus.CONFLICT, "工序执行当前状态不允许该操作"),
     MES_OPERATION_004("MES_OPERATION_004", 409, HttpStatus.CONFLICT, "工单当前未 Released，禁止开始工序"),
     MES_OPERATION_005("MES_OPERATION_005", 422, HttpStatus.UNPROCESSABLE_ENTITY, "派工单与工序执行关联不一致"),
-    MES_OPERATION_006("MES_OPERATION_006", 409, HttpStatus.CONFLICT, "同一设备存在多个活动工序，生产上下文不唯一");
+    MES_OPERATION_006("MES_OPERATION_006", 409, HttpStatus.CONFLICT, "同一设备存在多个活动工序，生产上下文不唯一"),
+    MES_OPERATION_007("MES_OPERATION_007", 409, HttpStatus.CONFLICT, "工序前置工序尚未全部完成");
 
     private final String businessCode;
     private final int code;

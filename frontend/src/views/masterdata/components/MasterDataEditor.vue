@@ -73,9 +73,10 @@
           <div class="form-item">
             <label>所属仓库 <span class="req">*</span></label>
             <select v-model="formData.warehouseId" class="form-select" required>
-              <option value="1">原料一仓</option>
-              <option value="2">成品一仓</option>
-              <option value="3">虚拟仓</option>
+              <option value="">请选择仓库</option>
+              <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">
+                {{ warehouse.code }} - {{ warehouse.name }}
+              </option>
             </select>
           </div>
           <div class="form-item">
@@ -96,9 +97,8 @@
           <div class="form-item">
             <label>状态</label>
             <select v-model="formData.status" class="form-select">
-              <option value="AVAILABLE">AVAILABLE (空闲可用)</option>
-              <option value="OCCUPIED">OCCUPIED (已占用)</option>
-              <option value="LOCKED">LOCKED (已锁定)</option>
+              <option value="ACTIVE">ACTIVE (启用)</option>
+              <option value="INACTIVE">INACTIVE (停用)</option>
             </select>
           </div>
           <div class="form-item full-width">
@@ -168,6 +168,8 @@
  * 流程：通过 deep clone 传入的 initialData 进行编辑，提交时通过 save 事件派发
  */
 import { ref, watch, computed } from "vue";
+import { getWarehouses } from "@/api/masterData";
+import type { Warehouse } from "@/types/inventory";
 
 const props = withDefaults(
   defineProps<{
@@ -203,11 +205,15 @@ const title = computed(() => {
 });
 
 const formData = ref<Record<string, any>>({});
+const warehouses = ref<Warehouse[]>([]);
 
 watch(
   () => props.visible,
   (val) => {
     if (val) {
+      if (props.type === "location") {
+        void loadWarehouses();
+      }
       if (props.initialData) {
         formData.value = JSON.parse(JSON.stringify(props.initialData));
       } else {
@@ -226,7 +232,7 @@ function resetForm() {
       uom: "件",
       category: "原材料",
       batchMgmt: false,
-      status: "ENABLE",
+      status: "ACTIVE",
       unitPrice: "0.00",
       minStock: "0",
       maxStock: "1000",
@@ -237,10 +243,10 @@ function resetForm() {
     formData.value = {
       code: "",
       name: "",
-      warehouseId: "1",
+      warehouseId: "",
       type: "Storage",
       capacity: "1000",
-      status: "AVAILABLE",
+      status: "ACTIVE",
       description: "",
     };
   } else if (props.type === "customer") {
@@ -261,6 +267,18 @@ function resetForm() {
       address: "",
       status: "ACTIVE",
     };
+  }
+}
+
+/**
+ * 加载库位表单可选仓库，提交时使用后端返回的真实 UUID。
+ */
+async function loadWarehouses() {
+  try {
+    const response = await getWarehouses({ page: 1, size: 200, status: "ACTIVE" });
+    warehouses.value = response.data.records;
+  } catch (error) {
+    console.error("[MasterDataEditor] 加载仓库失败", error);
   }
 }
 

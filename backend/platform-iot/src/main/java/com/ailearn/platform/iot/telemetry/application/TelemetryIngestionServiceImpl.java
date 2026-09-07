@@ -263,6 +263,7 @@ public class TelemetryIngestionServiceImpl implements TelemetryIngestionService 
         };
     }
 
+    /** 构造统一的非法遥测消息异常；调用方在事实持久化前拒绝整条消息。 */
     private TelemetryException invalid(String detail) {
         return new TelemetryException(TelemetryErrorCode.INVALID_MESSAGE, detail);
     }

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ailearn.platform.core.manufacturing.dispatch.port.WorkOrderReleasePort;
 import com.ailearn.platform.core.manufacturing.contextquery.domain.ProductionContext;
 import com.ailearn.platform.core.manufacturing.contextquery.exception.ProductionContextException;
 import com.ailearn.platform.core.manufacturing.contextquery.infrastructure.InMemoryProductionContextQuery;
@@ -24,6 +25,8 @@ import com.ailearn.platform.shared.context.RequestContextHolder;
 import com.ailearn.platform.shared.context.TenantContextHolder;
 import com.ailearn.platform.shared.context.UserContextHolder;
 import java.time.OffsetDateTime;
+import java.math.BigDecimal;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
@@ -144,6 +147,53 @@ class Task15DispatchOperationContextTest {
         assertEquals(WORK_ORDER, execution.workOrderId());
         assertEquals(OPERATION, execution.operationId());
         assertEquals(DEVICE, execution.deviceId());
+    }
+
+    /**
+     * 验证累计派工上限和前置工序完成门禁均由生产内部端口执行。
+     * 入参：一条计划数量为 1 的工单及其派工；出参：超额和前置未完成分别返回稳定业务码；流程：先锁定累计派工，再在执行开始时检查前置工序。
+     */
+    @Test
+    void dispatchQuantityAndPredecessorRulesAreEnforcedByProductionPort() {
+        InMemoryDispatchRepository constrainedRepository = new InMemoryDispatchRepository();
+        AtomicBoolean predecessorsCompleted = new AtomicBoolean(false);
+        WorkOrderReleasePort constrainedPort = new WorkOrderReleasePort() {
+            @Override
+            public boolean isReleased(UUID tenantId, UUID workOrderId) {
+                return TENANT_A.equals(tenantId) && WORK_ORDER.equals(workOrderId);
+            }
+
+            @Override
+            public Optional<BigDecimal> plannedQty(UUID tenantId, UUID workOrderId) {
+                return Optional.of(BigDecimal.ONE);
+            }
+
+            @Override
+            public boolean arePredecessorsCompleted(UUID tenantId, UUID workOrderId, UUID operationId) {
+                return predecessorsCompleted.get();
+            }
+        };
+        DispatchApplicationServiceImpl constrainedDispatch = new DispatchApplicationServiceImpl(
+                constrainedRepository, constrainedPort);
+
+        DispatchOrder first = constrainedDispatch.create(
+                new DispatchCreateRequest(WORK_ORDER, OPERATION, USER, BigDecimal.ONE, DEVICE),
+                "dispatch-cap-first");
+        DispatchException overCapacity = assertThrows(DispatchException.class,
+                () -> constrainedDispatch.create(
+                        new DispatchCreateRequest(WORK_ORDER, OPERATION, USER, BigDecimal.ONE, DEVICE),
+                        "dispatch-cap-second"));
+        assertEquals("MES_DISPATCH_006", overCapacity.getBusinessCode());
+
+        constrainedDispatch.release(first.id(), "dispatch-cap-release");
+        OperationExecutionApplicationServiceImpl constrainedOperation =
+                new OperationExecutionApplicationServiceImpl(new InMemoryOperationExecutionRepository(),
+                        constrainedRepository, constrainedPort);
+        OperationExecution execution = constrainedOperation.create(
+                new OperationExecutionCreateRequest(first.id()), "execution-predecessor");
+        OperationExecutionException predecessorError = assertThrows(OperationExecutionException.class,
+                () -> constrainedOperation.start(execution.id(), START, "execution-predecessor-start"));
+        assertEquals("MES_OPERATION_007", predecessorError.getBusinessCode());
     }
 
     /** 同一设备活动执行不能重叠，保证上下文端口不会返回歧义结果。 */

@@ -74,10 +74,26 @@ public class CorePurchasingFactsAdapter implements PurchasingFactsQuery {
     @Override
     public TraceFacts trace(TraceQuery query) {
         try {
-            if (!"purchase_order".equalsIgnoreCase(query.entityType())) {
-                return TraceFacts.empty("purchasing");
+            String type = query.entityType().trim().toLowerCase(java.util.Locale.ROOT);
+            UUID tenantId = query.context().tenantId();
+            if ("purchase_order".equals(type)) {
+                return orderFacts(tenantId, query.entityId());
             }
-            Optional<PurchaseOrder> order = repository.findById(query.context().tenantId(), query.entityId());
+            if ("purchase_order_line".equals(type)) {
+                return lineFacts(tenantId, query.entityId());
+            }
+            if ("work_order".equals(type)) {
+                return sourceWorkOrderFacts(tenantId, query.entityId());
+            }
+            return TraceFacts.empty("purchasing");
+        } catch (RuntimeException exception) {
+            throw FactsAdapterSupport.unavailable("purchasing", exception);
+        }
+    }
+
+    /** 从真实采购订单聚合展开采购订单及明细节点。 */
+    private TraceFacts orderFacts(UUID tenantId, UUID orderId) {
+        Optional<PurchaseOrder> order = repository.findById(tenantId, orderId);
             if (order.isEmpty()) {
                 return TraceFacts.empty("purchasing order");
             }
@@ -93,9 +109,56 @@ public class CorePurchasingFactsAdapter implements PurchasingFactsQuery {
                 links.add(new TraceLink("purchase_order", value.id(), "purchase_order_line", line.id(), "order_line"));
             }
             return new TraceFacts(nodes, links, FactsAdapterSupport.instant(value.updatedAt()), "purchasing order");
-        } catch (RuntimeException exception) {
-            throw FactsAdapterSupport.unavailable("purchasing", exception);
+    }
+
+    /** 通过真实采购订单反向解析采购订单行。 */
+    private TraceFacts lineFacts(UUID tenantId, UUID lineId) {
+        for (PurchaseOrder order : orders(tenantId)) {
+            Optional<PurchaseOrderLine> found = order.lines().stream()
+                    .filter(line -> line.id().equals(lineId)).findFirst();
+            if (found.isEmpty()) {
+                continue;
+            }
+            PurchaseOrderLine line = found.get();
+            Instant updated = FactsAdapterSupport.instant(order.updatedAt() == null
+                    ? order.createdAt() : order.updatedAt());
+            TraceNode orderNode = new TraceNode(tenantId, "purchase_order", order.id(), order.poNo(),
+                    order.status().name(), "pur:order:view", updated, true);
+            TraceNode lineNode = new TraceNode(tenantId, "purchase_order_line", line.id(),
+                    "line-" + line.lineNo(), order.status().name(), "pur:order:view", updated, true);
+            return new TraceFacts(List.of(lineNode, orderNode),
+                    List.of(new TraceLink("purchase_order", order.id(), "purchase_order_line", line.id(), "order_line")),
+                    updated, "purchasing order line");
         }
+        return TraceFacts.empty("purchasing order line");
+    }
+
+    /** 从真实采购订单行的 sourceWorkOrderId 关系反向展开采购事实。 */
+    private TraceFacts sourceWorkOrderFacts(UUID tenantId, UUID workOrderId) {
+        List<TraceNode> nodes = new ArrayList<>();
+        List<TraceLink> links = new ArrayList<>();
+        Instant updated = null;
+        for (PurchaseOrder order : orders(tenantId)) {
+            Instant orderUpdated = FactsAdapterSupport.instant(order.updatedAt() == null
+                    ? order.createdAt() : order.updatedAt());
+            List<PurchaseOrderLine> matches = order.lines().stream()
+                    .filter(line -> workOrderId.equals(line.sourceWorkOrderId())).toList();
+            if (matches.isEmpty()) {
+                continue;
+            }
+            nodes.add(new TraceNode(tenantId, "purchase_order", order.id(), order.poNo(),
+                    order.status().name(), "pur:order:view", orderUpdated, true));
+            updated = FactsAdapterSupport.later(updated, orderUpdated);
+            for (PurchaseOrderLine line : matches) {
+                nodes.add(new TraceNode(tenantId, "purchase_order_line", line.id(),
+                        "line-" + line.lineNo(), order.status().name(), "pur:order:view", orderUpdated, true));
+                links.add(new TraceLink("work_order", workOrderId, "purchase_order_line", line.id(),
+                        "source_purchase_order"));
+                links.add(new TraceLink("purchase_order", order.id(), "purchase_order_line", line.id(), "order_line"));
+            }
+        }
+        return nodes.isEmpty() ? TraceFacts.empty("purchasing source work order")
+                : new TraceFacts(nodes, links, updated, "purchasing source work order");
     }
 
     private List<PurchaseOrder> orders(UUID tenantId) {

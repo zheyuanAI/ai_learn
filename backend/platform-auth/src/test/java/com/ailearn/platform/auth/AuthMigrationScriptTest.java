@@ -136,4 +136,40 @@ class AuthMigrationScriptTest {
         }
     }
 
+    /**
+     * 校验 V8 将演示菜单统一迁移到当前前端正式业务路由。
+     * 入参：无；出参：无；流程：读取 V8 资源，逐项确认菜单编码、正式路由、组件路径和幂等判断均存在。
+     *
+     * @throws IOException 读取迁移资源失败时抛出
+     */
+    @Test
+    @DisplayName("V8 必须对齐演示菜单的正式前端路由")
+    void shouldAlignBuiltinMenuRoutesInV8() throws IOException {
+        try (InputStream input = getClass().getResourceAsStream(
+                "/db/migration/auth/V8__align_builtin_menu_routes.sql")) {
+            assertNotNull(input, "V8 迁移脚本必须存在");
+            String sql = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            List<String[]> mappings = List.of(
+                    new String[]{"master_product", "/master-data?tab=products", "views/masterdata/MasterDataView.vue"},
+                    new String[]{"master_warehouse", "/master-data?tab=warehouses", "views/masterdata/MasterDataView.vue"},
+                    new String[]{"master_inventory", "/inventory/balances", "views/inventory/InventoryBalanceView.vue"},
+                    new String[]{"purchase_order", "/purchasing/orders", "views/purchasing/PurchaseOrderListView.vue"},
+                    new String[]{"purchase_inbound", "/purchasing/receipts", "views/purchasing/PurchaseOrderListView.vue"},
+                    new String[]{"purchase_putaway", "/purchasing/putaway", "views/purchasing/PutawayTaskView.vue"},
+                    new String[]{"sales_outbound", "/sales/picks", "views/sales/PickTaskView.vue"},
+                    new String[]{"mes_execution", "/mes/dispatch", "views/manufacturing/DispatchView.vue"},
+                    new String[]{"gis", "/gis/site-maps", "views/insights/SiteMapListView.vue"});
+
+            for (String[] mapping : mappings) {
+                assertTrue(sql.contains("WHERE menu_code = '" + mapping[0] + "'"),
+                        "V8 缺少菜单编码更新: " + mapping[0]);
+                assertTrue(sql.contains("SET route_path = '" + mapping[1] + "'"),
+                        "V8 缺少正式路由: " + mapping[1]);
+                assertTrue(sql.contains("component_path = '" + mapping[2] + "'"),
+                        "V8 缺少正式组件路径: " + mapping[2]);
+            }
+            assertTrue(sql.contains("IS DISTINCT FROM"), "V8 应避免无变化更新并保持重复执行安全");
+        }
+    }
+
 }

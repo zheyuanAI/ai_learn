@@ -28,6 +28,18 @@ public interface StocktakeRepository {
     Optional<StocktakeOrder> findById(UUID tenantId, UUID id);
 
     /**
+     * 查询当前租户盘点分页；实现必须在表头与统计查询中同时限定 tenant_id 和 isdel。
+     *
+     * @param tenantId 可信租户
+     * @param offset 零基偏移量
+     * @param limit 当前页大小
+     * @param status 可选状态
+     * @param keyword 可选盘点单号关键词
+     * @return 当前页聚合和总数
+     */
+    StocktakePage findPage(UUID tenantId, int offset, int limit, String status, String keyword);
+
+    /**
      * 以版本条件开始盘点。
      *
      * @param tenantId 可信租户

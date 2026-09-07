@@ -12,9 +12,11 @@ import com.ailearn.platform.core.manufacturing.foundation.domain.WorkOrderFact;
 import com.ailearn.platform.core.manufacturing.foundation.domain.WorkOrderStatus;
 import com.ailearn.platform.core.manufacturing.foundation.dto.BomComponentRequest;
 import com.ailearn.platform.core.manufacturing.foundation.dto.BomCreateRequest;
+import com.ailearn.platform.core.manufacturing.foundation.dto.ManufacturingPageQuery;
 import com.ailearn.platform.core.manufacturing.foundation.dto.RoutingCreateRequest;
 import com.ailearn.platform.core.manufacturing.foundation.dto.RoutingOperationRequest;
 import com.ailearn.platform.core.manufacturing.foundation.dto.WorkOrderCreateRequest;
+import com.ailearn.platform.core.masterdata.dto.MasterDataPageResult;
 import com.ailearn.platform.core.manufacturing.foundation.exception.FoundationErrorCode;
 import com.ailearn.platform.core.manufacturing.foundation.exception.FoundationException;
 import com.ailearn.platform.shared.context.TenantContextHolder;
@@ -27,6 +29,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -104,6 +107,108 @@ public class ManufacturingFoundationServiceImpl implements ManufacturingFoundati
                 () -> buildWorkOrder(request, tenantId, userId));
     }
 
+    /** 查询当前租户 BOM 分页；只读接口不接收客户端租户字段。 */
+    @Override
+    @PreAuthorize("hasAuthority('mes:bom:view')")
+    public MasterDataPageResult<BomFact> listBoms(ManufacturingPageQuery query) {
+        ManufacturingPageQuery normalized = normalized(query);
+        List<BomFact> all = repository.findBoms(trustedTenant());
+        List<BomFact> filtered = all.stream()
+                .filter(item -> normalized.getStatus() == null || item.status().name().equalsIgnoreCase(normalized.getStatus()))
+                .filter(item -> normalized.getKeyword() == null
+                        || item.bomCode().toLowerCase(java.util.Locale.ROOT)
+                        .contains(normalized.getKeyword().toLowerCase(java.util.Locale.ROOT)))
+                .toList();
+        return page(filtered, normalized);
+    }
+
+    /** 查询当前租户单个 BOM；不存在和跨租户对象统一不可见。 */
+    @Override
+    @PreAuthorize("hasAuthority('mes:bom:view')")
+    public Optional<BomFact> findBom(UUID id) {
+        return repository.findBom(trustedTenant(), id);
+    }
+
+    /** 查询当前租户 Routing 分页；只读接口不接收客户端租户字段。 */
+    @Override
+    @PreAuthorize("hasAuthority('mes:routing:view')")
+    public MasterDataPageResult<RoutingFact> listRoutings(ManufacturingPageQuery query) {
+        ManufacturingPageQuery normalized = normalized(query);
+        List<RoutingFact> all = repository.findRoutings(trustedTenant());
+        List<RoutingFact> filtered = all.stream()
+                .filter(item -> normalized.getStatus() == null || item.status().name().equalsIgnoreCase(normalized.getStatus()))
+                .filter(item -> normalized.getKeyword() == null
+                        || item.routingCode().toLowerCase(java.util.Locale.ROOT)
+                        .contains(normalized.getKeyword().toLowerCase(java.util.Locale.ROOT)))
+                .toList();
+        return page(filtered, normalized);
+    }
+
+    /** 查询当前租户单个 Routing；不存在和跨租户对象统一不可见。 */
+    @Override
+    @PreAuthorize("hasAuthority('mes:routing:view')")
+    public Optional<RoutingFact> findRouting(UUID id) {
+        return repository.findRouting(trustedTenant(), id);
+    }
+
+    /**
+     * 修改 Draft/Rejected 工单基础生产意图。
+     * 入参：工单 ID、完整工单请求和幂等键；出参：更新后工单；流程：租户读取 -> 状态/来源/BOM/Routing 校验 -> 版本更新。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    @PreAuthorize("hasAuthority('mes:workorder:update')")
+    public WorkOrderFact updateWorkOrder(UUID id, WorkOrderCreateRequest request, String idempotencyKey) {
+        UUID tenantId = trustedTenant();
+        UUID userId = trustedUser();
+        if (id == null) {
+            throw workOrderInvalid("工单 ID 不能为空");
+        }
+        if (request == null) {
+            throw workOrderInvalid("WorkOrder 请求不能为空");
+        }
+        return idempotency.execute("manufacturing:foundation:work-order:update", tenantId, idempotencyKey,
+                new WorkOrderUpdatePayload(id, request), WorkOrderFact.class, () -> {
+                    WorkOrderFact current = repository.findWorkOrder(tenantId, id)
+                            .orElseThrow(() -> workOrderInvalid("工单不存在"));
+                    if (current.status() != WorkOrderStatus.Draft && current.status() != WorkOrderStatus.Rejected) {
+                        throw new FoundationException(FoundationErrorCode.MES_WO_005,
+                                "只有 Draft 或 Rejected 工单允许修改");
+                    }
+                    WorkOrderFact candidate = buildWorkOrder(request, tenantId, userId, current.status(), current.id());
+                    return repository.updateWorkOrder(candidate, current.version());
+                });
+    }
+
+    /** 查询当前租户工单基础事实分页。 */
+    @Override
+    @PreAuthorize("hasAuthority('mes:workorder:view')")
+    public MasterDataPageResult<WorkOrderFact> listWorkOrders(ManufacturingPageQuery query) {
+        ManufacturingPageQuery normalized = normalized(query);
+        List<WorkOrderFact> filtered = repository.findWorkOrders(trustedTenant()).stream()
+                .filter(item -> normalized.getStatus() == null || item.status().name().equalsIgnoreCase(normalized.getStatus()))
+                .filter(item -> normalized.getKeyword() == null
+                        || item.workOrderNo().toLowerCase(java.util.Locale.ROOT)
+                        .contains(normalized.getKeyword().toLowerCase(java.util.Locale.ROOT)))
+                .toList();
+        return page(filtered, normalized);
+    }
+
+    /**
+     * 构造基础事实分页结果；入参为已过滤集合和规范化查询，出参包含总数及总页数。
+     */
+    private <T> MasterDataPageResult<T> page(List<T> values, ManufacturingPageQuery query) {
+        int from = Math.min((query.getPage() - 1) * query.getSize(), values.size());
+        int to = Math.min(from + query.getSize(), values.size());
+        return new MasterDataPageResult<>(values.subList(from, to), values.size(),
+                query.getPage(), query.getSize());
+    }
+
+    /** 将空查询替换为默认分页并限制客户端页大小。 */
+    private ManufacturingPageQuery normalized(ManufacturingPageQuery query) {
+        return query == null ? new ManufacturingPageQuery() : query.normalized();
+    }
+
     private BomFact buildBom(BomCreateRequest request, UUID tenantId, UUID userId) {
         if (request == null) {
             throw invalid("BOM 请求不能为空");
@@ -136,6 +241,12 @@ public class ManufacturingFoundationServiceImpl implements ManufacturingFoundati
     }
 
     private WorkOrderFact buildWorkOrder(WorkOrderCreateRequest request, UUID tenantId, UUID userId) {
+        return buildWorkOrder(request, tenantId, userId, WorkOrderStatus.Draft, null);
+    }
+
+    /** 复用创建校验构造工单更新快照，并保留原工单身份和目标状态。 */
+    private WorkOrderFact buildWorkOrder(WorkOrderCreateRequest request, UUID tenantId, UUID userId,
+                                         WorkOrderStatus status, UUID existingId) {
         if (request == null) {
             throw workOrderInvalid("WorkOrder 请求不能为空");
         }
@@ -166,11 +277,13 @@ public class ManufacturingFoundationServiceImpl implements ManufacturingFoundati
         String workOrderNo = request.workOrderNo() == null || request.workOrderNo().isBlank()
                 ? "WO-" + UUID.randomUUID() : request.workOrderNo().trim();
         try {
-            return repository.saveWorkOrder(new WorkOrderFact(UUID.randomUUID(), tenantId, workOrderNo,
+            WorkOrderFact candidate = new WorkOrderFact(existingId == null ? UUID.randomUUID() : existingId, tenantId,
+                    workOrderNo,
                     request.productId(), request.plannedQty(), request.plannedStartTime(),
                     request.plannedFinishTime(), bom.id(), bom.version(), routing.id(), routing.version(),
-                    request.sourceSalesOrderLineId(), WorkOrderStatus.Draft, false, userId,
-                    OffsetDateTime.now(ZoneOffset.UTC)));
+                    request.sourceSalesOrderLineId(), status, false, userId,
+                    OffsetDateTime.now(ZoneOffset.UTC));
+            return existingId == null ? repository.saveWorkOrder(candidate) : candidate;
         } catch (IllegalArgumentException exception) {
             throw workOrderInvalid(exception.getMessage());
         }
@@ -219,5 +332,9 @@ public class ManufacturingFoundationServiceImpl implements ManufacturingFoundati
 
     private FoundationException workOrderInvalid(String message) {
         return new FoundationException(FoundationErrorCode.MES_WO_005, message);
+    }
+
+    /** 幂等摘要载荷；避免 List.of 在参数为空时先于领域校验抛出 NPE。 */
+    private record WorkOrderUpdatePayload(UUID id, WorkOrderCreateRequest request) {
     }
 }

@@ -9,7 +9,7 @@
 - Java 21：`D:\AI\ai_learn_wms_ai\ai_learn_developProject\runtime\jdk`
 - Maven 3.9.1：`D:\ruanjian\apache-maven-3.9.1`；依赖仓库：`D:\project\MavenRepository391`
 - 本机开发数据库：PostgreSQL 12.1，`127.0.0.1:5433/ai_learn`；SQL/Flyway 兼容性以下限 12.1 为准
-- 本目录不提供数据库运行包；真实迁移验证使用独立的 PostgreSQL 12.1 验证实例，禁止写入本机开发数据库
+- 本目录不提供数据库运行包；阶段 0-7 的本地练习与迁移验证直接使用本机 PostgreSQL 12.1（`127.0.0.1:5433/ai_learn`）
 
 手动启动前先确认 6379 和 1883 未被其他进程占用。
 
@@ -51,6 +51,40 @@ Set-Location 'D:\AI\ai_learn_wms_ai\ai_learn_developProject\runtime\redis-3.0.50
 本任务仅完成下载、静默安装和只读检查，未启动 Mosquitto Broker。
 
 审计说明：未捕获安装程序退出码；已以官方 URL、SHA256、已安装的 `mosquitto.exe` 2.1.2、帮助命令退出码、忽略的 PATH 以及原服务 PID 未变化作为补偿验证，未重跑安装程序。
+
+### 本项目 MQTT 运行初始化（不含真实密码）
+
+IoT 真实消费默认关闭；启用前必须先在运行环境创建 Mosquitto 凭证文件和 ACL 文件，且两个文件不得加入 Git。设备用户名使用平台创建凭证返回的 `credential_reference`，IoT 服务消费使用独立的只读订阅账号，二者不能混用。
+
+PowerShell 示例（占位符必须替换为本机安全路径和账号，不要把真实密码写入仓库）：
+
+```powershell
+$mqttPasswordFile = 'D:\secrets\mosquitto\passwordfile'
+$mqttAclFile = 'D:\secrets\mosquitto\aclfile'
+& 'D:\AI\ai_learn_wms_ai\ai_learn_developProject\runtime\mosquitto-2.1.2\app\mosquitto_passwd.exe' -c $mqttPasswordFile '<iot-subscription-account>'
+& 'D:\AI\ai_learn_wms_ai\ai_learn_developProject\runtime\mosquitto-2.1.2\app\mosquitto_passwd.exe' $mqttPasswordFile '<credential_reference>'
+```
+
+`passwordfile` 创建后应由文件权限保护；`aclfile` 至少包含以下规则，并将 `<iot-subscription-account>` 替换为独立订阅账号：
+
+```text
+pattern write devices/%u/telemetry
+user <iot-subscription-account>
+topic read devices/#
+```
+
+在 `deploy/local/mosquitto.conf` 或 `deploy/docker/mosquitto.conf` 中启用与实际路径一致的 `password_file`、`acl_file`。IoT 服务配置示例：
+
+```text
+IOT_MQTT_ENABLED=true
+IOT_MQTT_SERVER_URI=tcp://127.0.0.1:1883
+IOT_MQTT_USERNAME=<iot-subscription-account>
+IOT_MQTT_PASSWORD=<runtime-injected-secret>
+IOT_MQTT_PASSWORD_FILE=<external-password-file>
+IOT_MQTT_ACL_FILE=<external-acl-file>
+```
+
+设备仅可发布 `devices/{credential_reference}/telemetry`；模拟入口仍需显式开启对应应用能力。不要提交真实密码、生成的 `passwordfile`/`aclfile` 或包含密钥的日志。
 
 ## OpenJDK 21 (Eclipse Temurin)
 

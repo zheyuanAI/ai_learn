@@ -40,6 +40,7 @@ class S7ApiConfigurationTest {
         new WebApplicationContextRunner()
                 .withBean(S7FactsFake.class)
                 .withBean(GisConfigurationStore.class, InMemoryGisConfigurationStore::new)
+                .withPropertyValues("core.facts.iot.enabled=true")
                 .withUserConfiguration(S7ApiConfiguration.class, GisController.class,
                         TraceabilityController.class, DashboardController.class,
                         TrustedFactsQueryContextFactory.class)

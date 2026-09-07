@@ -305,7 +305,7 @@
                 v-model="ruleForm.deviceProfileId"
                 type="text"
                 class="form-input font-mono"
-                placeholder="例如 prof-001"
+                placeholder="请输入设备模型 UUID"
                 required
               />
             </div>
@@ -440,7 +440,7 @@ const createRuleModalVisible = ref(false);
 const ruleForm = reactive<DeviceAlarmRuleCreateRequest>({
   ruleCode: "",
   ruleName: "",
-  deviceProfileId: "prof-001",
+  deviceProfileId: "",
   metricCode: "spindle_temp",
   operator: "GT" as AlarmOperator,
   triggerThreshold: "65.00",
@@ -535,7 +535,7 @@ async function submitCreateProfile() {
 function openCreateRuleModal() {
   ruleForm.ruleCode = "";
   ruleForm.ruleName = "";
-  ruleForm.deviceProfileId = profileList.value[0]?.id as string || "prof-001";
+  ruleForm.deviceProfileId = (profileList.value[0]?.id as string) || "";
   ruleForm.metricCode = "spindle_temp";
   ruleForm.operator = "GT";
   ruleForm.triggerThreshold = "65.00";
@@ -545,7 +545,7 @@ function openCreateRuleModal() {
 }
 
 async function submitCreateRule() {
-  if (!ruleForm.ruleCode || !ruleForm.metricCode) return;
+  if (!ruleForm.ruleCode || !ruleForm.metricCode || !ruleForm.deviceProfileId) return;
   isSubmitting.value = true;
   try {
     await createAlarmRule(ruleForm);

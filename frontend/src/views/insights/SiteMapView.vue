@@ -8,7 +8,7 @@
     >
       <template #actions>
         <div class="nav-sub-tabs">
-          <RouterLink to="/gis" class="tab-btn">
+          <RouterLink to="/dashboard" class="tab-btn">
             <span>📊 综合看板</span>
           </RouterLink>
           <button type="button" class="tab-btn is-active">
@@ -84,14 +84,6 @@
             <option value="admin">租户管理员 (全域权限)</option>
             <option value="iot">IoT 工程师 (仅设备与告警)</option>
             <option value="warehouse">仓储操作员 (仅库区)</option>
-          </select>
-        </div>
-
-        <div class="state-simulator-box">
-          <select v-model="simulateState" class="control-select" @change="loadMapProjection">
-            <option value="normal">正常事实 (Ready)</option>
-            <option value="empty">无点位 (Empty)</option>
-            <option value="error">加载异常 (Error)</option>
           </select>
         </div>
       </div>
@@ -350,14 +342,9 @@ import StatusBadge from "../../components/common/StatusBadge.vue";
 import EmptyState from "../../components/common/EmptyState.vue";
 import ErrorState from "../../components/common/ErrorState.vue";
 
-const props = withDefaults(
-  defineProps<{
-    mapId?: string | number;
-  }>(),
-  {
-    mapId: "MAP-001",
-  }
-);
+const props = defineProps<{
+  mapId?: string | number;
+}>();
 
 const emit = defineEmits<{
   (e: "back-list"): void;
@@ -370,14 +357,13 @@ const router = useRouter();
 // 界面状态
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref<string>("");
-const currentMapId = ref<string | number>(props.mapId);
+const currentMapId = ref<string | number>(props.mapId || "");
 const mapProjection = ref<SiteMapProjection | null>(null);
 const selectedPoint = ref<MapPoint | null>(null);
 
 // 交互过滤
 const activeFilter = ref<"all" | "alarm" | "device" | "warehouse">("all");
 const simulatedRole = ref<"admin" | "iot" | "warehouse">("admin");
-const simulateState = ref<"normal" | "empty" | "error">("normal");
 
 /**
  * 装载地图点位投影
@@ -387,10 +373,7 @@ async function loadMapProjection() {
   errorMessage.value = "";
 
   try {
-    const projection = await fetchSiteMapProjection({
-      siteMapId: currentMapId.value,
-      simulateState: simulateState.value,
-    });
+    const projection = await fetchSiteMapProjection(currentMapId.value);
     mapProjection.value = projection;
 
     if (!projection.points || projection.points.length === 0) {

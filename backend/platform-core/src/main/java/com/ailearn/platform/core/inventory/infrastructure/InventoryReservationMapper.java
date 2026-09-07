@@ -36,7 +36,7 @@ public interface InventoryReservationMapper {
              FOR UPDATE
             """)
     @Results(id = "reservationRowMap", value = {
-            @Result(property = "id", column = "id", id = true),
+            @Result(property = "id", column = "id", javaType = UUID.class, id = true),
             @Result(property = "tenantId", column = "tenant_id"),
             @Result(property = "reservationNo", column = "reservation_no"),
             @Result(property = "sourceType", column = "source_type"),

@@ -108,6 +108,10 @@ public class DashboardApplicationService {
         return query(DashboardSummaryType.parse(summaryType), query);
     }
 
+    /**
+     * 按摘要类型选择事实端口；履约摘要需要同时合并采购和销售来源，其余摘要保持单一来源口径。
+     * 端口调用中未声明的运行时失败统一转成事实源不可用，由上层决定是否返回陈旧缓存，不能在此处用 0 值补齐指标。
+     */
     private FactsSummary load(DashboardSummaryType type, FactsQueryRequest request) {
         try {
             return switch (type) {
@@ -127,6 +131,9 @@ public class DashboardApplicationService {
         }
     }
 
+    /**
+     * 合并采购与销售履约指标，不产生新的业务事实；同名指标相加，来源更新时间取较新者，便于响应标明聚合口径。
+     */
     private static FactsSummary merge(String firstName, FactsSummary first,
                                       String secondName, FactsSummary second) {
         Map<String, BigDecimal> metrics = new LinkedHashMap<>(first.metrics());
@@ -140,6 +147,9 @@ public class DashboardApplicationService {
         return new FactsSummary(metrics, summary, updated);
     }
 
+    /**
+     * 只校验契约允许的实体筛选项，并把可信查询上下文传递给各领域 Facts 端口，避免看板自行拼接跨域查询。
+     */
     private void validateFilters(FactsQueryContext context, Map<String, String> filters) {
         validateEntityFilter(filters, "warehouse_id", value -> inventoryFacts.findWarehouse(context, value));
         validateEntityFilter(filters, "production_area_id",
@@ -147,6 +157,10 @@ public class DashboardApplicationService {
         validateEntityFilter(filters, "device_id", value -> iotFacts.findDevice(context, value));
     }
 
+    /**
+     * 校验白名单实体筛选，并把格式错误、实体不存在或不属于当前租户统一收敛为 GIS_TENANT_001，避免泄露跨租户实体是否存在。
+     * 具体查找仍通过带有可信上下文的 Facts 端口完成，不能仅凭前端传入的 UUID 判定可见性。
+     */
     private static void validateEntityFilter(Map<String, String> filters, String key,
                                              EntityLookup lookup) {
         String raw = filters.get(key);
@@ -168,6 +182,10 @@ public class DashboardApplicationService {
         }
     }
 
+    /**
+     * 生成与请求内容无关的稳定缓存键：租户和权限指纹隔离数据范围，排序后的筛选条件保证参数顺序不影响命中。
+     * request_id 不进入缓存键，命中后由 withRequestId 使用当前请求号重新包装响应。
+     */
     private static String cacheKey(DashboardSummaryType type, FactsQueryContext context,
                                    DashboardTimeRange range, Map<String, String> filters) {
         String normalizedFilters = filters.entrySet().stream()
@@ -186,6 +204,9 @@ public class DashboardApplicationService {
                 cached.staleSince(), requestId);
     }
 
+    /**
+     * 校验看板总权限或摘要专属权限；缺少可信上下文时直接按无权访问处理，不依赖前端菜单可见性作为安全判断。
+     */
     private static void requirePermission(FactsQueryContext context, DashboardSummaryType type) {
         if (context == null || (!context.hasPermission("dashboard:view")
                 && !context.hasPermission(type.permission()))) {
@@ -195,6 +216,7 @@ public class DashboardApplicationService {
 
     @FunctionalInterface
     private interface EntityLookup {
+        /** 在已绑定租户和权限的 Facts 查询范围内查找筛选实体。 */
         java.util.Optional<com.ailearn.platform.core.traceability.ports.ReferencedEntity> find(UUID id);
     }
 }

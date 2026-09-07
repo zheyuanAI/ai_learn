@@ -45,7 +45,7 @@ public interface InventoryBalanceMapper {
              FOR UPDATE
             """)
     @Results(id = "balanceRowMap", value = {
-            @Result(property = "id", column = "id", id = true),
+            @Result(property = "id", column = "id", javaType = UUID.class, id = true),
             @Result(property = "tenantId", column = "tenant_id"),
             @Result(property = "productId", column = "product_id"),
             @Result(property = "warehouseId", column = "warehouse_id"),

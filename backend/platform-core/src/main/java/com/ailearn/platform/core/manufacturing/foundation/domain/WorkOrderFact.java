@@ -11,7 +11,19 @@ public record WorkOrderFact(UUID id, UUID tenantId, String workOrderNo, UUID pro
                             OffsetDateTime plannedFinishTime, UUID bomId, String bomVersion,
                             UUID routingId, String routingVersion, UUID sourceSalesOrderLineId,
                             WorkOrderStatus status, boolean deleted, UUID createdBy,
-                            OffsetDateTime createdAt) {
+                            OffsetDateTime createdAt, long version) {
+
+    /** 保留旧调用方构造器；新持久化读写使用显式版本。 */
+    public WorkOrderFact(UUID id, UUID tenantId, String workOrderNo, UUID productId,
+                         BigDecimal plannedQty, OffsetDateTime plannedStartTime,
+                         OffsetDateTime plannedFinishTime, UUID bomId, String bomVersion,
+                         UUID routingId, String routingVersion, UUID sourceSalesOrderLineId,
+                         WorkOrderStatus status, boolean deleted, UUID createdBy,
+                         OffsetDateTime createdAt) {
+        this(id, tenantId, workOrderNo, productId, plannedQty, plannedStartTime, plannedFinishTime,
+                bomId, bomVersion, routingId, routingVersion, sourceSalesOrderLineId, status,
+                deleted, createdBy, createdAt, 0L);
+    }
 
     public WorkOrderFact {
         Objects.requireNonNull(id, "workOrderId 不能为空");
@@ -33,6 +45,9 @@ public record WorkOrderFact(UUID id, UUID tenantId, String workOrderNo, UUID pro
         Objects.requireNonNull(status, "status 不能为空");
         Objects.requireNonNull(createdBy, "createdBy 不能为空");
         Objects.requireNonNull(createdAt, "createdAt 不能为空");
+        if (version < 0) {
+            throw new IllegalArgumentException("version 不能为负数");
+        }
     }
 
     /** 转换为采购等下游只读校验所需的最小来源事实。 */
@@ -51,7 +66,25 @@ public record WorkOrderFact(UUID id, UUID tenantId, String workOrderNo, UUID pro
         Objects.requireNonNull(nextStatus, "nextStatus 不能为空");
         return new WorkOrderFact(id, tenantId, workOrderNo, productId, plannedQty,
                 plannedStartTime, plannedFinishTime, bomId, bomVersion, routingId, routingVersion,
-                sourceSalesOrderLineId, nextStatus, deleted, createdBy, createdAt);
+                sourceSalesOrderLineId, nextStatus, deleted, createdBy, createdAt, version);
+    }
+
+    /** 返回 Draft/Rejected 修改后的工单快照，并递增基础事实版本。 */
+    public WorkOrderFact updated(String nextWorkOrderNo, UUID nextProductId, BigDecimal nextPlannedQty,
+                                 OffsetDateTime nextPlannedStartTime, OffsetDateTime nextPlannedFinishTime,
+                                 UUID nextBomId, String nextBomVersion, UUID nextRoutingId,
+                                 String nextRoutingVersion, UUID nextSourceSalesOrderLineId) {
+        return new WorkOrderFact(id, tenantId, nextWorkOrderNo, nextProductId, nextPlannedQty,
+                nextPlannedStartTime, nextPlannedFinishTime, nextBomId, nextBomVersion, nextRoutingId,
+                nextRoutingVersion, nextSourceSalesOrderLineId, status, deleted, createdBy, createdAt,
+                version + 1);
+    }
+
+    /** 仅替换持久化版本，用于把数据库 CAS 成功后的版本带回应用响应。 */
+    public WorkOrderFact withVersion(long nextVersion) {
+        return new WorkOrderFact(id, tenantId, workOrderNo, productId, plannedQty,
+                plannedStartTime, plannedFinishTime, bomId, bomVersion, routingId, routingVersion,
+                sourceSalesOrderLineId, status, deleted, createdBy, createdAt, nextVersion);
     }
 
     private static void requireText(String name, String value) {

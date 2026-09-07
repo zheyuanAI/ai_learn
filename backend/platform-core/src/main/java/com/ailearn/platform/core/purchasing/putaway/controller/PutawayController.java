@@ -35,9 +35,9 @@ public class PutawayController {
      * 分页查询上架任务。
      */
     @GetMapping
-    public ApiResponse<PutawayTaskPageView> page(@RequestParam(required = false) String status,
-                                                   @RequestParam(defaultValue = "1") int page,
-                                                   @RequestParam(defaultValue = "20") int size) {
+    public ApiResponse<PutawayTaskPageView> page(@RequestParam(name = "status", required = false) String status,
+                                                   @RequestParam(name = "page", defaultValue = "1") int page,
+                                                   @RequestParam(name = "size", defaultValue = "20") int size) {
         return ApiResponse.success(applicationService.page(status, page, size));
     }
 
@@ -45,7 +45,7 @@ public class PutawayController {
      * 确认从 ReceivingStaging 移动到 Storage。
      */
     @PostMapping("/{id}/confirm")
-    public ApiResponse<PutawayTaskView> confirm(@PathVariable UUID id,
+    public ApiResponse<PutawayTaskView> confirm(@PathVariable("id") UUID id,
                                                 @RequestBody PutawayConfirmRequest request,
                                                 @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(applicationService.confirm(id, request, idempotencyKey));

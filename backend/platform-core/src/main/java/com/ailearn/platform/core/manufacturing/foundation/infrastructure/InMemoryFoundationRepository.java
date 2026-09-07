@@ -78,6 +78,32 @@ public class InMemoryFoundationRepository implements FoundationRepository {
         return putOnce(workOrders, workOrder.id(), workOrder);
     }
 
+    /** 按租户和版本更新 Draft/Rejected 工单，模拟生产库的乐观并发条件。 */
+    @Override
+    public WorkOrderFact updateWorkOrder(WorkOrderFact workOrder, long expectedVersion) {
+        WorkOrderFact current = workOrders.get(workOrder.id());
+        if (current == null || !current.tenantId().equals(workOrder.tenantId())
+                || current.version() != expectedVersion) {
+            throw new IllegalStateException("工单版本已变化或不属于当前租户");
+        }
+        workOrders.put(workOrder.id(), workOrder);
+        return workOrder;
+    }
+
+    /** 返回当前租户未删除 BOM，供只读页面和详情接口使用。 */
+    @Override
+    public List<BomFact> findBoms(UUID tenantId) {
+        return boms.values().stream().filter(item -> tenantId.equals(item.tenantId()) && !item.deleted())
+                .sorted(java.util.Comparator.comparing(BomFact::createdAt).thenComparing(BomFact::id)).toList();
+    }
+
+    /** 返回当前租户未删除 Routing，供只读页面和详情接口使用。 */
+    @Override
+    public List<RoutingFact> findRoutings(UUID tenantId) {
+        return routings.values().stream().filter(item -> tenantId.equals(item.tenantId()) && !item.deleted())
+                .sorted(java.util.Comparator.comparing(RoutingFact::createdAt).thenComparing(RoutingFact::id)).toList();
+    }
+
     /** 按租户读取完整工单生产意图，避免测试适配器绕过租户边界。 */
     @Override
     public Optional<WorkOrderFact> findWorkOrder(UUID tenantId, UUID workOrderId) {

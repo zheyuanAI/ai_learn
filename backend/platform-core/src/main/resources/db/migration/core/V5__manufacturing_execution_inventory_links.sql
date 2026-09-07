@@ -267,6 +267,8 @@ CREATE TABLE IF NOT EXISTS mes_work_report (
     isdel SMALLINT NOT NULL DEFAULT 0 CHECK (isdel IN (0, 1)),
     CONSTRAINT ck_mes_work_report_quantity
         CHECK (report_qty = qualified_qty + defect_qty),
+    -- 复合租户外键要求被引用表存在完整的 (tenant_id, id) 唯一键；主键 id 不能替代该约束。
+    CONSTRAINT uq_mes_work_report_tenant_id UNIQUE (tenant_id, id),
     CONSTRAINT fk_mes_work_report_execution_tenant
         FOREIGN KEY (tenant_id, operation_execution_id) REFERENCES mes_operation_execution (tenant_id, id),
     CONSTRAINT fk_mes_work_report_execution_context_tenant

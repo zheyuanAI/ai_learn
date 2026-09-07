@@ -32,7 +32,7 @@ public class PurchaseReceiptController {
      * 确认外观验收、拒收和实际接收。
      */
     @PostMapping("/{id}/confirm")
-    public ApiResponse<PurchaseReceiptView> confirm(@PathVariable UUID id,
+    public ApiResponse<PurchaseReceiptView> confirm(@PathVariable("id") UUID id,
                                                     @RequestBody PurchaseReceiptConfirmRequest request,
                                                     @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(applicationService.confirmReceipt(id, request, idempotencyKey));

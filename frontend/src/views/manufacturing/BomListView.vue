@@ -192,14 +192,11 @@
           </div>
 
           <div class="form-item">
-            <label>产出产品代码/标识 <span class="req">*</span></label>
-            <input
-              v-model="createForm.productId"
-              type="text"
-              class="form-input"
-              placeholder="例如 prod-101 (工业网关主板)"
-              required
-            />
+            <label>产出产品 <span class="req">*</span></label>
+            <select v-model="createForm.productId" class="form-input" required>
+              <option value="">请选择真实产品</option>
+              <option v-for="product in products" :key="product.id" :value="String(product.id)">{{ product.sku }} ({{ product.name }})</option>
+            </select>
           </div>
 
           <!-- 动态组件清单编辑 -->
@@ -218,13 +215,10 @@
                 class="component-form-row"
               >
                 <div class="comp-col-id">
-                  <input
-                    v-model="comp.componentProductId"
-                    type="text"
-                    class="form-input"
-                    placeholder="组件产品 ID"
-                    required
-                  />
+                  <select v-model="comp.componentProductId" class="form-input" required>
+                    <option value="">选择真实组件产品</option>
+                    <option v-for="product in products" :key="product.id" :value="String(product.id)">{{ product.sku }}</option>
+                  </select>
                 </div>
                 <div class="comp-col-qty">
                   <input
@@ -302,6 +296,8 @@ import type { TableColumn } from "../../components/common/DataTable.vue";
 import type { ViewState } from "../../types/common";
 import type { BomItem, BomCreateRequest } from "../../types/manufacturing";
 import { getBoms, createBom, deleteBom } from "../../api/manufacturing";
+import { getProducts } from "../../api/masterData";
+import type { Product } from "../../types/inventory";
 
 /**
  * 界面四态与错误信息
@@ -314,6 +310,7 @@ const errorMessage = ref("");
  */
 const bomList = ref<BomItem[]>([]);
 const total = ref(0);
+const products = ref<Product[]>([]);
 const queryParams = reactive({
   page: 1,
   size: 10,
@@ -494,7 +491,14 @@ async function handleConfirmDelete() {
 
 onMounted(() => {
   fetchBomList();
+  loadProducts();
 });
+
+/** 加载 BOM 主项和组件选择器的真实产品 UUID。 */
+async function loadProducts() {
+  const response = await getProducts({ page: 1, size: 200, status: "ENABLE" });
+  products.value = response.data.records || [];
+}
 </script>
 
 <style scoped>

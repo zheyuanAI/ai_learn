@@ -76,7 +76,11 @@ export interface TraceabilityChainResult {
   coverageRate: string;
   hasBrokenLinks: boolean;
   brokenCount: number;
-  generatedAt: string;
+  missingSources: string[];
+  hiddenNodeCount: number;
+  truncated: boolean;
+  generatedAt?: string;
+  sourceUpdatedAt?: string;
   sourceSummary: string;
 }
 
@@ -159,9 +163,10 @@ export interface SiteMapProjection {
   mapCode: string;
   mapName: string;
   backgroundType: string;
-  backgroundUrl?: string;
+  storageKey?: string;
   points: MapPoint[];
-  generatedAt: string;
+  generatedAt?: string;
+  requestId?: string;
 }
 
 /**
@@ -209,9 +214,9 @@ export interface DashboardCardData {
   metrics: CardMetric[];
   timeRange: string;
   sourceSummary: string;
-  generatedAt: string;
-  sourceUpdatedAt: string;
-  stale: boolean;
+  generatedAt?: string;
+  sourceUpdatedAt?: string;
+  stale?: boolean;
   staleSince?: string;
   error?: string;
   linkedRoute?: string;
@@ -223,13 +228,127 @@ export interface DashboardCardData {
 export interface DashboardOverviewData {
   timeRange: DashboardTimeRange;
   timeRangeLabel: string;
-  generatedAt: string;
-  sourceUpdatedAt: string;
+  generatedAt?: string;
+  sourceUpdatedAt?: string;
   cards: Record<DashboardCardType, DashboardCardData>;
   staleCardsCount: number;
 }
 
 export type MapPointCreatePayload = Partial<MapPoint>;
 export type DomainSummaryMetric = DashboardCardData;
-export type DashboardQuery = { timeRange?: DashboardTimeRange; warehouseId?: string; areaId?: string; deviceId?: string };
+export type DashboardQuery = {
+  time_range?: DashboardTimeRange | string;
+  warehouse_id?: string;
+  production_area_id?: string;
+  device_id?: string;
+  timeRange?: DashboardTimeRange | string;
+  warehouseId?: string;
+  areaId?: string;
+  deviceId?: string;
+};
 
+/**
+ * 追溯节点后端原生投影
+ */
+export interface TraceabilityNodeProjection {
+  tenant_id?: string;
+  entity_type?: string;
+  entity_id?: string;
+  label?: string;
+  status?: string;
+  required_permission?: string;
+  source_updated_at?: string;
+  complete?: boolean;
+}
+
+/**
+ * 追溯关系后端原生投影
+ */
+export interface TraceabilityLinkProjection {
+  from_type: string;
+  from_id: string;
+  to_type: string;
+  to_id: string;
+  relation: string;
+}
+
+/**
+ * 全链路追溯拓扑投影响应
+ */
+export interface TraceabilityProjection {
+  nodes: TraceabilityNodeProjection[];
+  links: TraceabilityLinkProjection[];
+  hidden_node_count?: number;
+  missing_sources?: string[];
+  generated_at?: string;
+  source_updated_at?: string;
+  request_id?: string;
+  truncated: boolean;
+}
+
+/**
+ * 七类看板统一指标投影
+ */
+export interface DashboardSummaryProjection {
+  summary_type: string;
+  metrics: Record<string, any>;
+  time_range: string;
+  source_summary?: string;
+  generated_at?: string;
+  source_updated_at?: string;
+  stale: boolean;
+  stale_since?: string;
+  request_id?: string;
+}
+
+/**
+ * 异常中心单条异常记录
+ */
+export interface ExceptionCenterRecord {
+  source: string;
+  exception_type: string;
+  severity: string;
+  value: number;
+  message: string;
+  occurredAt: string;
+}
+
+/**
+ * 异常中心统一分页响应
+ */
+export interface ExceptionCenterPage {
+  records: ExceptionCenterRecord[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages?: number;
+  generated_at?: string;
+  source_updated_at?: string;
+}
+
+/**
+ * GIS 站点地图创建命令
+ */
+export interface CreateSiteMapCommand {
+  mapCode: string;
+  mapName: string;
+  asset: {
+    storageKey: string;
+    mimeType: "image/png" | "image/jpeg" | "image/webp";
+    sizeBytes: number;
+    sha256: string;
+  };
+}
+
+/**
+ * GIS 站点地图点位保存命令
+ */
+export interface SaveMapPointCommand {
+  siteMapId: string;
+  entityType: MapEntityType;
+  entityId: string;
+  xPercent: number;
+  yPercent: number;
+  rotation?: number;
+  linkedPage?: string;
+}

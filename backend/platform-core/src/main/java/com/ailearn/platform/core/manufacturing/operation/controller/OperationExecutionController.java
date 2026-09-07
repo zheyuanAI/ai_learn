@@ -3,6 +3,8 @@ package com.ailearn.platform.core.manufacturing.operation.controller;
 import com.ailearn.platform.core.manufacturing.operation.application.OperationExecutionApplicationService;
 import com.ailearn.platform.core.manufacturing.operation.domain.OperationExecution;
 import com.ailearn.platform.core.manufacturing.operation.dto.OperationExecutionCreateRequest;
+import com.ailearn.platform.core.manufacturing.operation.dto.OperationExecutionPageQuery;
+import com.ailearn.platform.core.manufacturing.operation.domain.OperationExecutionPage;
 import com.ailearn.platform.shared.api.ApiResponse;
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -11,6 +13,7 @@ import java.util.UUID;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -52,6 +55,13 @@ public class OperationExecutionController {
             @RequestBody OperationExecutionCreateRequest request,
             @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(service.create(request, idempotencyKey));
+    }
+
+    /** 查询当前租户工序执行分页；状态和实体筛选均在应用服务内完成。 */
+    @GetMapping
+    @PreAuthorize("hasAuthority('mes:execution:manage')")
+    public ApiResponse<OperationExecutionPage> page(@ModelAttribute OperationExecutionPageQuery query) {
+        return ApiResponse.success(service.page(query));
     }
 
     /**

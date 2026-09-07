@@ -9,7 +9,17 @@ public record MaterialIssue(UUID id, UUID tenantId, String issueNo, UUID workOrd
                             MaterialDocumentStatus status, List<MaterialIssueLine> lines,
                             UUID inventoryOperationId, UUID confirmedBy, String confirmedSessionId,
                             OffsetDateTime confirmedAt, UUID createdBy, OffsetDateTime createdAt,
-                            UUID updatedBy, OffsetDateTime updatedAt) {
+                            UUID updatedBy, OffsetDateTime updatedAt, String overageReason) {
+
+    /** 保留已有 focused 测试和内部构造调用；没有超额领料原因时使用 null。 */
+    public MaterialIssue(UUID id, UUID tenantId, String issueNo, UUID workOrderId,
+                         MaterialDocumentStatus status, List<MaterialIssueLine> lines,
+                         UUID inventoryOperationId, UUID confirmedBy, String confirmedSessionId,
+                         OffsetDateTime confirmedAt, UUID createdBy, OffsetDateTime createdAt,
+                         UUID updatedBy, OffsetDateTime updatedAt) {
+        this(id, tenantId, issueNo, workOrderId, status, lines, inventoryOperationId, confirmedBy,
+                confirmedSessionId, confirmedAt, createdBy, createdAt, updatedBy, updatedAt, null);
+    }
 
     public MaterialIssue {
         requireHeader(tenantId, id, workOrderId, issueNo, createdBy, createdAt);
@@ -26,13 +36,24 @@ public record MaterialIssue(UUID id, UUID tenantId, String issueNo, UUID workOrd
                 || lines.stream().anyMatch(line -> line.inventoryTransactionId() == null))) {
             throw new IllegalArgumentException("已确认领料必须保留库存和审计事实");
         }
+        if (overageReason != null && overageReason.trim().length() > 512) {
+            throw new IllegalArgumentException("overageReason 不能超过 512 个字符");
+        }
+        overageReason = overageReason == null || overageReason.isBlank() ? null : overageReason.trim();
     }
 
     /** 创建 Draft 领料单。 */
     public static MaterialIssue draft(UUID id, UUID tenantId, String issueNo, UUID workOrderId,
                                       List<MaterialIssueLine> lines, UUID userId, OffsetDateTime now) {
+        return draft(id, tenantId, issueNo, workOrderId, lines, userId, now, null);
+    }
+
+    /** 创建带超额领料原因的 Draft 领料单。 */
+    public static MaterialIssue draft(UUID id, UUID tenantId, String issueNo, UUID workOrderId,
+                                      List<MaterialIssueLine> lines, UUID userId, OffsetDateTime now,
+                                      String overageReason) {
         return new MaterialIssue(id, tenantId, issueNo, workOrderId, MaterialDocumentStatus.Draft,
-                lines, null, null, null, null, userId, now, userId, now);
+                lines, null, null, null, null, userId, now, userId, now, overageReason);
     }
 
     /** 生成确认后的领料聚合，不改变原始明细数量。 */
@@ -46,7 +67,8 @@ public record MaterialIssue(UUID id, UUID tenantId, String issueNo, UUID workOrd
             confirmedLines.add(lines.get(i).confirmed(transactionIds.get(i)));
         }
         return new MaterialIssue(id, tenantId, issueNo, workOrderId, MaterialDocumentStatus.Confirmed,
-                confirmedLines, operationId, userId, sessionId, now, createdBy, createdAt, userId, now);
+                confirmedLines, operationId, userId, sessionId, now, createdBy, createdAt, userId, now,
+                overageReason);
     }
 
     private static void requireHeader(UUID tenantId, UUID id, UUID workOrderId, String no,

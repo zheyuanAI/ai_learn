@@ -119,6 +119,13 @@ public record WorkOrderLifecycle(
                 rejectionReason, completionType, completionReason, completedBy, completedSessionId, completedAt);
     }
 
+    /** 将基础工单修改后的快照合并回生命周期，保留审核、执行和完成审计字段。 */
+    public WorkOrderLifecycle withWorkOrder(WorkOrderFact newWorkOrder) {
+        return new WorkOrderLifecycle(newWorkOrder, status, requiredOperationIds, progress,
+                lockedBomVersion, lockedRoutingVersion, submittedBy, submittedAt, reviewedBy, reviewedAt,
+                rejectionReason, completionType, completionReason, completedBy, completedSessionId, completedAt);
+    }
+
     /** 生成按完整事实正常完成后的聚合。 */
     public WorkOrderLifecycle completedNormally(UUID userId, String sessionId, OffsetDateTime time) {
         return new WorkOrderLifecycle(workOrder.withStatus(WorkOrderStatus.Completed), WorkOrderStatus.Completed, requiredOperationIds, progress,

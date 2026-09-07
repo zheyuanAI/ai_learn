@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -52,6 +53,7 @@ public class S7FactsController {
     private final Clock clock;
 
     /** 生产装配入口；密钥必须通过外部配置提供，不能写入仓库。 */
+    @Autowired
     public S7FactsController(DeviceRepository deviceRepository,
                              AlarmRepository alarmRepository,
                              DeviceStatusPort statusPort,
@@ -71,7 +73,7 @@ public class S7FactsController {
 
     /** 返回设备或告警摘要；时间范围只约束告警事实，设备状态仍返回当前快照。 */
     @GetMapping("/summary/{kind}")
-    public SummaryResponse summary(@PathVariable String kind,
+    public SummaryResponse summary(@PathVariable("kind") String kind,
                                    @RequestParam("tenant_id") UUID tenantId,
                                    @RequestParam(name = "device_id", required = false) UUID deviceId,
                                    @RequestParam(name = "from", required = false) OffsetDateTime from,
@@ -92,7 +94,7 @@ public class S7FactsController {
 
     /** 返回设备主数据及当前状态引用，供 GIS 校验点位实体。 */
     @GetMapping("/device/{deviceId}")
-    public EntityResponse device(@PathVariable UUID deviceId,
+    public EntityResponse device(@PathVariable("deviceId") UUID deviceId,
                                   @RequestParam("tenant_id") UUID tenantId,
                                   HttpServletRequest request,
                                   @RequestHeader("X-Service-Name") String serviceName,
@@ -106,7 +108,7 @@ public class S7FactsController {
 
     /** 返回点位所需的设备状态和当前活动告警摘要。 */
     @GetMapping("/status/{deviceId}")
-    public PointStatusResponse status(@PathVariable UUID deviceId,
+    public PointStatusResponse status(@PathVariable("deviceId") UUID deviceId,
                                       @RequestParam("tenant_id") UUID tenantId,
                                       HttpServletRequest request,
                                       @RequestHeader("X-Service-Name") String serviceName,
@@ -133,8 +135,8 @@ public class S7FactsController {
 
     /** 返回设备或告警的 IoT 事实关系；上下文引用标记为 incomplete，避免伪称 Core 事实已存在。 */
     @GetMapping("/trace/{entityType}/{entityId}")
-    public TraceResponse trace(@PathVariable String entityType,
-                               @PathVariable UUID entityId,
+    public TraceResponse trace(@PathVariable("entityType") String entityType,
+                               @PathVariable("entityId") UUID entityId,
                                @RequestParam("tenant_id") UUID tenantId,
                                HttpServletRequest request,
                                @RequestHeader("X-Service-Name") String serviceName,

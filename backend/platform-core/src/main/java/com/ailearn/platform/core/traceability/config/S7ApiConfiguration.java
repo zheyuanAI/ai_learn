@@ -4,6 +4,8 @@ import com.ailearn.platform.core.dashboard.application.DashboardApplicationServi
 import com.ailearn.platform.core.dashboard.infrastructure.PostgresDashboardCache;
 import com.ailearn.platform.core.dashboard.ports.DashboardCache;
 import com.ailearn.platform.core.dashboard.ports.InMemoryDashboardCache;
+import com.ailearn.platform.core.dashboard.exceptioncenter.application.ExceptionCenterApplicationService;
+import com.ailearn.platform.core.dashboard.exceptioncenter.application.ExceptionCenterApplicationServiceImpl;
 import com.ailearn.platform.core.gis.application.GisApplicationService;
 import com.ailearn.platform.core.gis.ports.GisConfigurationStore;
 import com.ailearn.platform.core.traceability.application.TraceabilityApplicationService;
@@ -15,6 +17,8 @@ import com.ailearn.platform.core.traceability.ports.QualityFactsQuery;
 import com.ailearn.platform.core.traceability.ports.SalesFactsQuery;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.ailearn.platform.shared.idempotency.IdempotencyStorage;
+import com.ailearn.platform.shared.idempotency.InMemoryIdempotencyStorage;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -69,8 +73,14 @@ public class S7ApiConfiguration {
     public GisApplicationService gisApplicationService(GisConfigurationStore store,
                                                        InventoryFactsQuery inventoryFacts,
                                                        ManufacturingFactsQuery manufacturingFacts,
-                                                       IotFactsPort iotFacts) {
-        return new GisApplicationService(store, inventoryFacts, manufacturingFacts, iotFacts);
+                                                       IotFactsPort iotFacts,
+                                                       ObjectProvider<IdempotencyStorage> storageProvider,
+                                                       ObjectProvider<ObjectMapper> mapperProvider) {
+        IdempotencyStorage storage = storageProvider.getIfAvailable(InMemoryIdempotencyStorage::new);
+        ObjectMapper mapper = mapperProvider.getIfAvailable(() ->
+                new ObjectMapper().registerModule(new JavaTimeModule()));
+        return new GisApplicationService(store, inventoryFacts, manufacturingFacts, iotFacts,
+                java.time.Clock.systemUTC(), storage, mapper);
     }
 
     /** 看板依赖全部摘要事实和追溯应用服务，缺一不可。 */
@@ -87,5 +97,15 @@ public class S7ApiConfiguration {
         return new DashboardApplicationService(inventoryFacts, purchasingFacts, salesFacts,
                 manufacturingFacts, qualityFacts, iotFacts, traceability, cache,
                 java.time.Clock.systemUTC());
+    }
+
+    /** 全部三类源 Facts 可用时装配异常中心；异常记录由实时摘要派生，不新增事实表。 */
+    @Bean
+    @ConditionalOnMissingBean(ExceptionCenterApplicationService.class)
+    @ConditionalOnBean({InventoryFactsQuery.class, ManufacturingFactsQuery.class, IotFactsPort.class})
+    public ExceptionCenterApplicationService exceptionCenterApplicationService(
+            InventoryFactsQuery inventoryFacts, ManufacturingFactsQuery manufacturingFacts,
+            IotFactsPort iotFacts) {
+        return new ExceptionCenterApplicationServiceImpl(inventoryFacts, manufacturingFacts, iotFacts);
     }
 }

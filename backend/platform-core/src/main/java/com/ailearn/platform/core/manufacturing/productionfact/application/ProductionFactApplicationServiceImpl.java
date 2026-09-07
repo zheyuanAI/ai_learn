@@ -5,19 +5,27 @@ import com.ailearn.platform.core.inventory.application.InventoryCommandMetadata;
 import com.ailearn.platform.core.inventory.application.InventoryCommandService;
 import com.ailearn.platform.core.inventory.application.InventoryDecreaseCommand;
 import com.ailearn.platform.core.inventory.application.InventoryIncreaseCommand;
+import com.ailearn.platform.core.inventory.application.InventoryBalancePage;
+import com.ailearn.platform.core.inventory.application.InventoryBalanceQuery;
 import com.ailearn.platform.core.inventory.application.InventoryMutationResult;
+import com.ailearn.platform.core.inventory.application.InventoryQueryService;
 import com.ailearn.platform.core.inventory.domain.InventoryDimension;
+import com.ailearn.platform.core.inventory.domain.InventoryBalance;
 import com.ailearn.platform.core.inventory.domain.LocationSnapshot;
 import com.ailearn.platform.core.inventory.domain.LocationType;
 import com.ailearn.platform.core.inventory.infrastructure.InventoryLocationPort;
 import com.ailearn.platform.core.manufacturing.execution.application.WorkOrderExecutionService;
 import com.ailearn.platform.core.manufacturing.execution.domain.WorkOrderLifecycle;
 import com.ailearn.platform.core.manufacturing.foundation.domain.WorkOrderStatus;
+import com.ailearn.platform.core.manufacturing.foundation.domain.BomComponentFact;
 import com.ailearn.platform.core.manufacturing.foundation.domain.BomFact;
 import com.ailearn.platform.core.manufacturing.foundation.domain.port.BomFactsPort;
 import com.ailearn.platform.core.manufacturing.operation.domain.OperationExecution;
 import com.ailearn.platform.core.manufacturing.operation.domain.OperationExecutionRepository;
 import com.ailearn.platform.core.manufacturing.operation.domain.OperationExecutionStatus;
+import com.ailearn.platform.core.manufacturing.dispatch.domain.DispatchOrder;
+import com.ailearn.platform.core.manufacturing.dispatch.domain.DispatchStatus;
+import com.ailearn.platform.core.manufacturing.dispatch.port.DispatchReferencePort;
 import com.ailearn.platform.core.manufacturing.execution.domain.WorkOrderProgress;
 import com.ailearn.platform.core.manufacturing.productionfact.domain.FinishedGoodsReceipt;
 import com.ailearn.platform.core.manufacturing.productionfact.domain.MaterialDocumentStatus;
@@ -36,6 +44,7 @@ import com.ailearn.platform.core.manufacturing.productionfact.dto.MaterialItemRe
 import com.ailearn.platform.core.manufacturing.productionfact.dto.MaterialReturnCreateRequest;
 import com.ailearn.platform.core.manufacturing.productionfact.dto.QualityInspectionCreateRequest;
 import com.ailearn.platform.core.manufacturing.productionfact.dto.QualityInspectionSubmitRequest;
+import com.ailearn.platform.core.manufacturing.productionfact.dto.QualityInspectionCloseRequest;
 import com.ailearn.platform.core.manufacturing.productionfact.dto.WorkReportCreateRequest;
 import com.ailearn.platform.core.manufacturing.productionfact.exception.ProductionFactErrorCode;
 import com.ailearn.platform.core.manufacturing.productionfact.exception.ProductionFactException;
@@ -52,8 +61,11 @@ import java.security.MessageDigest;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -77,7 +89,9 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
     private final WorkOrderExecutionService workOrderService;
     private final BomFactsPort bomFactsPort;
     private final OperationExecutionRepository operationExecutionRepository;
+    private final DispatchReferencePort dispatchReferencePort;
     private final InventoryLocationPort inventoryLocationPort;
+    private final InventoryQueryService inventoryQueryService;
     private final CoreIdempotencyExecutor idempotency;
     private final ObjectMapper objectMapper;
 
@@ -87,6 +101,7 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
                                                 WorkOrderExecutionService workOrderService) {
         this(repository, inventoryCommandService, workOrderService,
                 null, null, null,
+                null, null,
                 new com.ailearn.platform.shared.idempotency.InMemoryIdempotencyStorage(),
                 new ObjectMapper().registerModule(new JavaTimeModule()));
     }
@@ -98,7 +113,20 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
                                                 BomFactsPort bomFactsPort,
                                                 IdempotencyStorage storage, ObjectMapper objectMapper) {
         this(repository, inventoryCommandService, workOrderService, bomFactsPort, null, null,
+                null, null,
                 storage, objectMapper);
+    }
+
+    /** 保留既有八参数生产构造器；未提供派工读取端口时维持 focused 测试兼容。 */
+    public ProductionFactApplicationServiceImpl(ProductionFactRepository repository,
+                                                InventoryCommandService inventoryCommandService,
+                                                WorkOrderExecutionService workOrderService,
+                                                BomFactsPort bomFactsPort,
+                                                OperationExecutionRepository operationExecutionRepository,
+                                                InventoryLocationPort inventoryLocationPort,
+                                                IdempotencyStorage storage, ObjectMapper objectMapper) {
+        this(repository, inventoryCommandService, workOrderService, bomFactsPort,
+                operationExecutionRepository, inventoryLocationPort, null, null, storage, objectMapper);
     }
 
     /** 创建可替换幂等存储和序列化器的生产服务。 */
@@ -109,6 +137,8 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
                                                 BomFactsPort bomFactsPort,
                                                 OperationExecutionRepository operationExecutionRepository,
                                                 InventoryLocationPort inventoryLocationPort,
+                                                DispatchReferencePort dispatchReferencePort,
+                                                InventoryQueryService inventoryQueryService,
                                                 IdempotencyStorage storage, ObjectMapper objectMapper) {
         this.repository = repository;
         this.inventoryCommandService = inventoryCommandService;
@@ -116,6 +146,8 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
         this.bomFactsPort = bomFactsPort;
         this.operationExecutionRepository = operationExecutionRepository;
         this.inventoryLocationPort = inventoryLocationPort;
+        this.dispatchReferencePort = dispatchReferencePort;
+        this.inventoryQueryService = inventoryQueryService;
         this.objectMapper = objectMapper.copy().registerModule(new JavaTimeModule());
         this.idempotency = new CoreIdempotencyExecutor(storage, this.objectMapper);
     }
@@ -133,9 +165,11 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
                 digest(request), MaterialIssue.class, () -> {
                     WorkOrderLifecycle lifecycle = requireExecutableWorkOrder(request.workOrderId());
                     List<MaterialIssueLine> lines = issueLines(request.items());
-                    requireBomMaterials(lifecycle, lines.stream().map(MaterialIssueLine::productId).toList());
+                    repository.lockWorkOrder(actor.tenantId(), request.workOrderId());
+                    validateIssueQuantity(lifecycle, lines, request.overageReason(), false);
                     return repository.saveIssue(MaterialIssue.draft(UUID.randomUUID(), actor.tenantId(),
-                            request.issueNo().trim(), request.workOrderId(), lines, actor.userId(), now()));
+                            request.issueNo().trim(), request.workOrderId(), lines, actor.userId(), now(),
+                            request.overageReason()));
                 });
     }
 
@@ -150,7 +184,8 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
                 digest(List.of(id)), ProductionFactSummary.class, () -> {
                     MaterialIssue issue = requiredIssue(actor.tenantId(), id);
                     WorkOrderLifecycle lifecycle = requireExecutableWorkOrder(issue.workOrderId());
-                    requireBomMaterials(lifecycle, issue.lines().stream().map(MaterialIssueLine::productId).toList());
+                    repository.lockWorkOrder(actor.tenantId(), issue.workOrderId());
+                    validateIssueQuantity(lifecycle, issue.lines(), issue.overageReason(), true);
                     if (issue.status() != MaterialDocumentStatus.Draft) {
                         throw error(ProductionFactErrorCode.MES_FACT_001, "领料单不是 Draft 状态");
                     }
@@ -158,8 +193,9 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
                     for (MaterialIssueLine line : issue.lines()) {
                         InventoryMutationResult result = inventoryCommandService.decrease(
                                 new InventoryDecreaseCommand(decreaseMetadata(actor, issue.id(), line.id(),
-                                        idempotencyKey), new InventoryDimension(line.productId(), line.warehouseId(),
-                                        line.locationId(), ""), line.issueQty()));
+                                idempotencyKey), new InventoryDimension(line.productId(), line.warehouseId(),
+                                        line.locationId(), resolveAvailableLot(actor.tenantId(), line.productId(),
+                                                line.warehouseId(), line.locationId(), line.issueQty())), line.issueQty()));
                         transactionIds.add(requiredTransaction(result, ProductionFactErrorCode.MES_MAT_001));
                     }
                     UUID operationId = operationId("issue", issue.id());
@@ -231,7 +267,9 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
                         InventoryMutationResult result = inventoryCommandService.increase(
                                 new InventoryIncreaseCommand(increaseMetadata(actor, value.id(), line.id(),
                                         idempotencyKey, "MATERIAL_RETURN", "MATERIAL_RETURN"),
-                                        new InventoryDimension(line.productId(), line.warehouseId(), line.locationId(), ""),
+                                        new InventoryDimension(line.productId(), line.warehouseId(), line.locationId(),
+                                                resolveExistingLot(actor.tenantId(), line.productId(), line.warehouseId(),
+                                                        line.locationId())),
                                         line.returnQty()));
                         transactionIds.add(requiredTransaction(result, ProductionFactErrorCode.MES_MAT_002));
                     }
@@ -267,8 +305,8 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
                      // 先锁工单主表，再读取累计报工，保证并发请求不能同时通过数量上限检查。
                      repository.lockWorkOrder(actor.tenantId(), request.workOrderId());
                      WorkOrderLifecycle lifecycle = requireInProgressWorkOrder(request.workOrderId());
-                     validateCompletedOperationExecution(actor.tenantId(), request.operationExecutionId(),
-                             request.workOrderId(), request.operationId());
+                     OperationExecution execution = validateCompletedOperationExecution(actor.tenantId(),
+                             request.operationExecutionId(), request.workOrderId(), request.operationId());
                      if (!lifecycle.requiredOperationIds().contains(request.operationId())) {
                         throw error(ProductionFactErrorCode.MES_FACT_002, "报工工序不属于工单冻结 Routing");
                     }
@@ -277,6 +315,7 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
                     if (quantity.signum() <= 0) {
                         throw error(ProductionFactErrorCode.MES_FACT_002, "报工数量必须大于 0");
                     }
+                    validateDispatchReportQuantity(actor.tenantId(), execution, quantity);
                     BigDecimal existing = repository.findReports(actor.tenantId(), request.workOrderId()).stream()
                             .map(WorkReport::reportQty).reduce(BigDecimal.ZERO, BigDecimal::add);
                     if (existing.add(quantity).compareTo(lifecycle.workOrder().plannedQty()) > 0) {
@@ -384,6 +423,39 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    @PreAuthorize("hasAuthority('mes:quality:inspect')")
+    public QualityInspection closeQualityInspection(UUID id, QualityInspectionCloseRequest request,
+                                                     String idempotencyKey) {
+        Actor actor = actor();
+        requireKey(idempotencyKey);
+        requireId(id, "qualityInspectionId");
+        if (request == null) {
+            throw error(ProductionFactErrorCode.MES_FACT_002, "质检关闭请求不能为空");
+        }
+        return idempotency.execute("mes:quality-inspection:close", actor.tenantId(), idempotencyKey,
+                digest(List.of(id, request)), QualityInspection.class, () -> {
+                    QualityInspection current = repository.findInspection(actor.tenantId(), id)
+                            .orElseThrow(() -> error(ProductionFactErrorCode.MES_TENANT_001,
+                                    "质检不存在或不属于当前租户"));
+                    requireInProgressWorkOrder(current.workOrderId());
+                    try {
+                        QualityInspection closed = current.close(request.disposition(), actor.userId(), now());
+                        QualityInspection saved = repository.updateInspection(actor.tenantId(), id,
+                                value -> value.status() == QualityInspectionStatus.Failed ? closed
+                                        : failStatus("质检已被其他命令改变"));
+                        if (saved == null) {
+                            throw error(ProductionFactErrorCode.MES_TENANT_001, "质检不存在或不属于当前租户");
+                        }
+                        synchronizeProgress(actor.tenantId(), saved.workOrderId(), idempotencyKey);
+                        return saved;
+                    } catch (IllegalArgumentException | IllegalStateException exception) {
+                        throw error(ProductionFactErrorCode.MES_FACT_001, exception.getMessage());
+                    }
+                });
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     @PreAuthorize("hasAuthority('mes:finished:receipt')")
     public FinishedGoodsReceipt createFinishedGoodsReceipt(FinishedGoodsReceiptCreateRequest request,
                                                            String idempotencyKey) {
@@ -433,7 +505,9 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
                             new InventoryIncreaseCommand(increaseMetadata(actor, receipt.id(), null, idempotencyKey,
                                     "FINISHED_GOODS_RECEIPT", "FINISHED_GOODS_RECEIPT"),
                             new InventoryDimension(lifecycle.workOrder().productId(), receipt.warehouseId(),
-                                    receipt.locationId(), ""), receipt.receiptQty()));
+                                    receipt.locationId(), resolveExistingLot(actor.tenantId(),
+                                            lifecycle.workOrder().productId(), receipt.warehouseId(), receipt.locationId())),
+                            receipt.receiptQty()));
                     UUID transactionId = requiredTransaction(result, ProductionFactErrorCode.MES_FG_001);
                     FinishedGoodsReceipt confirmed = repository.updateReceipt(actor.tenantId(), id,
                             current -> current.status() == com.ailearn.platform.core.manufacturing.productionfact.domain.FinishedGoodsReceiptStatus.Draft
@@ -517,10 +591,10 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
      * @param workOrderId 当前工单标识
      * @param operationId 当前工序标识
      */
-    private void validateCompletedOperationExecution(UUID tenantId, UUID executionId,
-                                                     UUID workOrderId, UUID operationId) {
+    private OperationExecution validateCompletedOperationExecution(UUID tenantId, UUID executionId,
+                                                                    UUID workOrderId, UUID operationId) {
         if (operationExecutionRepository == null) {
-            return;
+            return null;
         }
         OperationExecution execution = operationExecutionRepository.find(tenantId, executionId)
                 .orElseThrow(() -> error(ProductionFactErrorCode.MES_TENANT_001,
@@ -535,6 +609,29 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
         if (execution.status() != OperationExecutionStatus.Completed) {
             throw error(ProductionFactErrorCode.MES_FACT_001,
                     "只有已完成的工序执行才能报工");
+        }
+        return execution;
+    }
+
+    /** 校验同一工序执行的累计报工不超过其对应派工数量，避免只按工单总量放大现场事实。 */
+    private void validateDispatchReportQuantity(UUID tenantId, OperationExecution execution,
+                                                BigDecimal requested) {
+        if (dispatchReferencePort == null || execution == null) {
+            return;
+        }
+        DispatchOrder dispatch = dispatchReferencePort.find(tenantId, execution.dispatchId())
+                .orElseThrow(() -> error(ProductionFactErrorCode.MES_TENANT_001,
+                        "报工对应的派工不存在或不属于当前租户"));
+        if (!tenantId.equals(dispatch.tenantId()) || !execution.workOrderId().equals(dispatch.workOrderId())
+                || !execution.operationId().equals(dispatch.operationId())
+                || dispatch.status() == DispatchStatus.Draft) {
+            throw error(ProductionFactErrorCode.MES_FACT_002, "报工对应的派工关系或状态不一致");
+        }
+        BigDecimal existing = repository.findReports(tenantId, execution.workOrderId()).stream()
+                .filter(value -> execution.id().equals(value.operationExecutionId()))
+                .map(WorkReport::reportQty).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (existing.add(requested).compareTo(dispatch.dispatchQty()) > 0) {
+            throw error(ProductionFactErrorCode.MES_WO_003, "累计报工数量超出对应派工数量");
         }
     }
 
@@ -567,9 +664,9 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
      * 校验领料/退料产品必须来自当前工单冻结版本对应的同租户有效 BOM。
      * focused 测试使用三参数构造器时没有 BOM 只读端口，因此保持其内存夹具兼容；生产 Bean 必须注入真实端口。
      */
-    private void requireBomMaterials(WorkOrderLifecycle lifecycle, List<UUID> productIds) {
+    private BomFact requireBomMaterials(WorkOrderLifecycle lifecycle, List<UUID> productIds) {
         if (bomFactsPort == null) {
-            return;
+            return null;
         }
         BomFact bom = bomFactsPort.findActiveBom(lifecycle.workOrder().tenantId(), lifecycle.workOrder().bomId())
                 .filter(value -> value.isActiveFor(lifecycle.workOrder().tenantId(), lifecycle.workOrder().productId()))
@@ -579,6 +676,42 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
                 .map(component -> component.componentProductId()).collect(java.util.stream.Collectors.toSet());
         if (productIds.stream().anyMatch(productId -> !componentProducts.contains(productId))) {
             throw error(ProductionFactErrorCode.MES_FACT_002, "生产物料不在工单 BOM 组件范围内");
+        }
+        return bom;
+    }
+
+    /**
+     * 校验本次领料及该工单已确认领料不超过冻结 BOM 预计用量。
+     * 入参：工单生命周期、领料明细、超额原因和是否正在执行确认；出参：无。
+     * 流程：读取同租户 BOM -> 汇总既有确认量与本次量 -> 超额时要求原因，确认阶段再要求专用权限。
+     */
+    private void validateIssueQuantity(WorkOrderLifecycle lifecycle, List<MaterialIssueLine> lines,
+                                       String overageReason, boolean confirming) {
+        BomFact bom = requireBomMaterials(lifecycle, lines.stream().map(MaterialIssueLine::productId).toList());
+        if (bom == null) {
+            return;
+        }
+        Map<UUID, BigDecimal> expected = new HashMap<>();
+        for (BomComponentFact component : bom.components()) {
+            expected.merge(component.componentProductId(),
+                    component.quantity().multiply(lifecycle.workOrder().plannedQty()), BigDecimal::add);
+        }
+        Map<UUID, BigDecimal> actual = new HashMap<>();
+        repository.findIssues(lifecycle.workOrder().tenantId(), lifecycle.workOrder().id()).stream()
+                .filter(value -> value.status() == MaterialDocumentStatus.Confirmed)
+                .flatMap(value -> value.lines().stream())
+                .forEach(line -> actual.merge(line.productId(), line.issueQty(), BigDecimal::add));
+        lines.forEach(line -> actual.merge(line.productId(), line.issueQty(), BigDecimal::add));
+        boolean overage = actual.entrySet().stream()
+                .anyMatch(entry -> entry.getValue().compareTo(expected.getOrDefault(entry.getKey(), BigDecimal.ZERO)) > 0);
+        if (!overage) {
+            return;
+        }
+        if (overageReason == null || overageReason.isBlank()) {
+            throw error(ProductionFactErrorCode.MES_FACT_002, "领料超过 BOM 预计用量时必须填写 overageReason");
+        }
+        if (confirming && !UserContextHolder.hasPermission("mes:material:overage")) {
+            throw error(ProductionFactErrorCode.MES_FACT_002, "确认超额领料需要 mes:material:overage 权限");
         }
     }
 
@@ -698,6 +831,55 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
         return new InventoryCommandMetadata(actor.tenantId(), actor.userId(), actor.sessionId(), actor.requestId(),
                 childKey(key, sourceId, lineId), digest(new InventoryDigestPayload(sourceId, lineId, transactionType)), sourceType,
                 sourceId, lineId, transactionType, now());
+    }
+
+    /**
+     * 选择可完整承载本次领料数量的单一批次。
+     * 入参：可信租户、产品、仓库、库位和数量；出参：规范化批次号；流程：查询余额、校验可用量并稳定选择最大批次。
+     * focused 测试未注入查询端口时保留无批次维度，生产装配始终使用 PostgreSQL 查询端口。
+     */
+    private String resolveAvailableLot(UUID tenantId, UUID productId, UUID warehouseId, UUID locationId,
+                                       BigDecimal quantity) {
+        if (inventoryQueryService == null) {
+            return "";
+        }
+        InventoryBalancePage page = inventoryQueryService.queryBalances(new InventoryBalanceQuery(
+                tenantId, productId, warehouseId, locationId, null, 1, 200));
+        if (page == null || page.content() == null) {
+            throw error(ProductionFactErrorCode.MES_MAT_001, "领料来源库存查询不可用");
+        }
+        return page.content().stream()
+                .filter(balance -> balance != null && balance.dimension() != null
+                        && balance.availableQty().compareTo(quantity) >= 0)
+                .sorted(Comparator.comparing(InventoryBalance::availableQty).reversed()
+                        .thenComparing(balance -> balance.dimension().normalizedLotNo()))
+                .map(balance -> balance.dimension().normalizedLotNo())
+                .findFirst()
+                .orElseThrow(() -> error(ProductionFactErrorCode.MES_MAT_001,
+                        "领料来源库位没有包含所需数量的单一批次可用库存"));
+    }
+
+    /**
+     * 为退料或成品入库保留目标库位已有的批次维度。
+     * 入参：可信租户、产品、仓库和目标库位；出参：已有实物最多的批次号或空批次；流程：读取余额后稳定排序选择。
+     */
+    private String resolveExistingLot(UUID tenantId, UUID productId, UUID warehouseId, UUID locationId) {
+        if (inventoryQueryService == null) {
+            return "";
+        }
+        InventoryBalancePage page = inventoryQueryService.queryBalances(new InventoryBalanceQuery(
+                tenantId, productId, warehouseId, locationId, null, 1, 200));
+        if (page == null || page.content() == null) {
+            throw error(ProductionFactErrorCode.MES_FACT_002, "目标库存查询不可用");
+        }
+        return page.content().stream()
+                .filter(balance -> balance != null && balance.dimension() != null
+                        && balance.onHandQty().signum() > 0)
+                .sorted(Comparator.comparing(InventoryBalance::onHandQty).reversed()
+                        .thenComparing(balance -> balance.dimension().normalizedLotNo()))
+                .map(balance -> balance.dimension().normalizedLotNo())
+                .findFirst()
+                .orElse("");
     }
 
     private UUID requiredTransaction(InventoryMutationResult result, ProductionFactErrorCode code) {

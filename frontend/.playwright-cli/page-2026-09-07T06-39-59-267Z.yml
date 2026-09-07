@@ -1,0 +1,79 @@
+- generic [ref=f31e3]:
+  - complementary [ref=f31e4]:
+    - generic [ref=f31e5]:
+      - paragraph [ref=f31e6]: AI Learn
+      - heading "制造与仓储协同执行平台" [level=1] [ref=f31e7]
+      - paragraph [ref=f31e8]: 一期壳层按黄金业务闭环组织；动态挂载当前角色授权菜单。
+    - navigation [ref=f31e9]:
+      - link "DashboardOutlined 控制台看板" [ref=f31e10] [cursor=pointer]:
+        - /url: /dashboard
+        - generic [ref=f31e11]:
+          - generic [ref=f31e12]: DashboardOutlined
+          - strong [ref=f31e14]: 控制台看板
+      - generic [ref=f31e15]:
+        - button "DatabaseOutlined 主数据管理 ▼" [active] [ref=f31e16] [cursor=pointer]:
+          - generic [ref=f31e17]:
+            - generic [ref=f31e18]: DatabaseOutlined
+            - strong [ref=f31e20]: 主数据管理
+          - generic [ref=f31e21]: ▼
+        - generic [ref=f31e87]:
+          - link "商品主数据" [ref=f31e88] [cursor=pointer]:
+            - /url: /master-data?tab=products
+          - link "仓库与库位" [ref=f31e92] [cursor=pointer]:
+            - /url: /master-data?tab=warehouses
+          - link "实物库存台账" [ref=f31e96] [cursor=pointer]:
+            - /url: /inventory/balances
+      - button "ShoppingOutlined 采购入库 ▼" [ref=f31e23] [cursor=pointer]:
+        - generic [ref=f31e24]:
+          - generic [ref=f31e25]: ShoppingOutlined
+          - strong [ref=f31e27]: 采购入库
+        - generic [ref=f31e28]: ▼
+      - button "ShopOutlined 销售出库 ▼" [ref=f31e30] [cursor=pointer]:
+        - generic [ref=f31e31]:
+          - generic [ref=f31e32]: ShopOutlined
+          - strong [ref=f31e34]: 销售出库
+        - generic [ref=f31e35]: ▼
+      - button "ToolOutlined 制造执行 ▼" [ref=f31e37] [cursor=pointer]:
+        - generic [ref=f31e38]:
+          - generic [ref=f31e39]: ToolOutlined
+          - strong [ref=f31e41]: 制造执行
+        - generic [ref=f31e42]: ▼
+      - link "CompassOutlined 厂区二维地图" [ref=f31e43] [cursor=pointer]:
+        - /url: /gis/site-maps
+        - generic [ref=f31e44]:
+          - generic [ref=f31e45]: CompassOutlined
+          - strong [ref=f31e47]: 厂区二维地图
+      - button "RobotOutlined AI助手与追溯 ▼" [ref=f31e49] [cursor=pointer]:
+        - generic [ref=f31e50]:
+          - generic [ref=f31e51]: RobotOutlined
+          - strong [ref=f31e53]: AI助手与追溯
+        - generic [ref=f31e54]: ▼
+    - generic [ref=f31e55]: 系统认证状态：在线
+  - generic [ref=f31e58]:
+    - banner [ref=f31e59]:
+      - generic [ref=f31e60]:
+        - generic [ref=f31e61]: AI-LEARN / WORKSPACE
+        - generic [ref=f31e62]: 🏢 tenant_demo_a
+      - generic [ref=f31e63]:
+        - generic [ref=f31e64]:
+          - generic [ref=f31e65]: 👤
+          - generic [ref=f31e66]:
+            - generic [ref=f31e67]: 王库管
+            - generic [ref=f31e68]: warehouse.operator
+        - button "退出登录" [ref=f31e69] [cursor=pointer]:
+          - generic [aria-hidden] [ref=f31e71]: ➔
+    - main [ref=f31e72]:
+      - generic [ref=f31e73]:
+        - paragraph [ref=f31e74]: Phase 1 Target Design
+        - heading "围绕一条黄金业务闭环推进" [level=2] [ref=f31e75]
+        - paragraph [ref=f31e76]: 销售需求通过人工来源关系连接生产与采购，再贯通收货、上架、领退料、工序执行、成品入库、库存预留、拣货和发货。这里仅展示一期目标与导航，不代表业务功能已经实现。
+      - generic [ref=f31e77]:
+        - article [ref=f31e78]:
+          - heading "业务主线" [level=3] [ref=f31e79]
+          - paragraph [ref=f31e80]: 销售行 -> 生产工单 -> 采购来源 -> 制造执行 -> 销售交付。
+        - article [ref=f31e81]:
+          - heading "事实边界" [level=3] [ref=f31e82]
+          - paragraph [ref=f31e83]: 预留不扣实物，上架与拣货只移位，发货才扣减总库存；遥测、状态与告警分离。
+        - article [ref=f31e84]:
+          - heading "展示边界" [level=3] [ref=f31e85]
+          - paragraph [ref=f31e86]: 二维地图、看板、追溯与 AI 均只读，不建立第二套事实来源。

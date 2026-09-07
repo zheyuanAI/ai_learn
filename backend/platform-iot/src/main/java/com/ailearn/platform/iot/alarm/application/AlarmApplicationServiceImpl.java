@@ -8,6 +8,8 @@ import com.ailearn.platform.iot.alarm.dto.AlarmPageResult;
 import com.ailearn.platform.iot.alarm.dto.AlarmView;
 import com.ailearn.platform.iot.alarm.exception.AlarmErrorCode;
 import com.ailearn.platform.iot.alarm.exception.AlarmException;
+import com.ailearn.platform.iot.contextlink.application.AlarmContextLinkApplicationService;
+import com.ailearn.platform.iot.contextlink.domain.ContextLinkResult;
 import com.ailearn.platform.iot.device.application.IotIdempotencyExecutor;
 import com.ailearn.platform.iot.device.exception.IotErrorCode;
 import com.ailearn.platform.iot.device.exception.IotException;
@@ -32,6 +34,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * IoT 告警生命周期服务。
@@ -42,24 +46,35 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 public class AlarmApplicationServiceImpl implements AlarmApplicationService, TelemetryAlarmPort {
     private static final String ACK_OPERATION = "iot:alarm:ack";
+    private static final Logger log = LoggerFactory.getLogger(AlarmApplicationServiceImpl.class);
     private final AlarmRepository alarmRepository;
     private final AlarmRuleFactsPort ruleFactsPort;
     private final IotIdempotencyExecutor idempotency;
     private final DeviceStatusPort statusPort;
+    private final AlarmContextLinkApplicationService contextLinkService;
 
+    /** 兼容测试装配；未提供设备状态同步和 Core 上下文补链时，告警本地事实仍可独立运行。 */
     public AlarmApplicationServiceImpl(AlarmRepository alarmRepository, AlarmRuleFactsPort ruleFactsPort,
                                        IotIdempotencyExecutor idempotency) {
         this(alarmRepository, ruleFactsPort, idempotency, null);
     }
 
     /** 生产装配构造器：告警生命周期变化后同步设备状态快照。 */
-    @org.springframework.beans.factory.annotation.Autowired
     public AlarmApplicationServiceImpl(AlarmRepository alarmRepository, AlarmRuleFactsPort ruleFactsPort,
                                        IotIdempotencyExecutor idempotency, DeviceStatusPort statusPort) {
+        this(alarmRepository, ruleFactsPort, idempotency, statusPort, null);
+    }
+
+    /** 生产装配构造器：告警保存成功后立即进入 Core 生产上下文自动补链。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    public AlarmApplicationServiceImpl(AlarmRepository alarmRepository, AlarmRuleFactsPort ruleFactsPort,
+                                       IotIdempotencyExecutor idempotency, DeviceStatusPort statusPort,
+                                       AlarmContextLinkApplicationService contextLinkService) {
         this.alarmRepository = alarmRepository;
         this.ruleFactsPort = ruleFactsPort;
         this.idempotency = idempotency;
         this.statusPort = statusPort;
+        this.contextLinkService = contextLinkService;
     }
 
     /**
@@ -85,6 +100,10 @@ public class AlarmApplicationServiceImpl implements AlarmApplicationService, Tel
         updateDeviceAlarmStatus(tenantId, command.deviceId());
     }
 
+    /**
+     * 按单条告警规则推进状态：已有活动告警只尝试恢复，没有活动告警且达到触发阈值时原子创建新告警。
+     * 状态迁移由仓储条件更新保证并发安全，创建后的 Core 上下文补链不参与本地告警事实事务。
+     */
     private void processRule(TelemetryIngestionCommand command, AlarmRule rule, BigDecimal value) {
         UUID tenantId = command.credentialContext().tenantId();
         Optional<AlarmFact> active = alarmRepository.findActive(tenantId, command.deviceId(), rule.id());
@@ -104,10 +123,29 @@ public class AlarmApplicationServiceImpl implements AlarmApplicationService, Tel
             AlarmFact fact = new AlarmFact(alarmId, tenantId, "ALM-" + alarmId,
                     command.deviceId(), rule.id(), rule.ruleCode(), rule.alarmLevel(), AlarmStatus.Triggered,
                     command.timestamp(), null, null, null, null, null, null, "Pending", command.receivedAt());
-            alarmRepository.createIfAbsent(fact);
+            AlarmFact saved = alarmRepository.createIfAbsent(fact);
+            linkContextAfterAlarmSaved(saved);
         }
     }
 
+    /** 告警事实提交后自动补链；Core 不可用只记录日志并由任务重试，不回滚本地告警保存。 */
+    private void linkContextAfterAlarmSaved(AlarmFact alarm) {
+        if (contextLinkService == null || alarm == null) {
+            return;
+        }
+        try {
+            ContextLinkResult result = contextLinkService.link(alarm.tenantId(), alarm.id());
+            if (result.status() == ContextLinkResult.Status.RETRY_SCHEDULED
+                    || result.status() == ContextLinkResult.Status.NOT_DUE) {
+                log.debug("告警上下文补链已进入重试队列: alarmId={}, status={}", alarm.id(), result.status());
+            }
+        } catch (RuntimeException exception) {
+            // 生产告警是 IoT 本地事实；Core/任务库短暂不可用不能使遥测消费整体回滚。
+            log.warn("告警自动补链暂时失败，将由重试任务处理: alarmId={}", alarm.id(), exception);
+        }
+    }
+
+    /** 从当前遥测消息中提取指定指标并转换为数值；缺失或不可解析时跳过该规则，不伪造指标值。 */
     private java.util.Optional<BigDecimal> metric(TelemetryIngestionCommand command, String metricCode) {
         for (TelemetryMetric item : command.metrics()) {
             if (item == null || !metricCode.equals(item.metricCode()) || item.metricValue() == null) {
@@ -122,10 +160,12 @@ public class AlarmApplicationServiceImpl implements AlarmApplicationService, Tel
         return java.util.Optional.empty();
     }
 
+    /** 按规则操作符判断当前指标是否达到触发阈值。 */
     private boolean triggerMatches(AlarmRule rule, BigDecimal value) {
         return compare(value, rule.triggerThreshold(), rule.operator());
     }
 
+    /** 按与触发方向相反的恢复条件判断告警是否可以进入恢复态。 */
     private boolean recoveryMatches(AlarmRule rule, BigDecimal value) {
         if (rule.recoveryThreshold() == null) {
             return false;
@@ -138,6 +178,7 @@ public class AlarmApplicationServiceImpl implements AlarmApplicationService, Tel
         };
     }
 
+    /** 执行单值与阈值比较；未知操作符或缺少阈值按不匹配处理。 */
     private boolean compare(BigDecimal value, BigDecimal threshold, String operator) {
         if (threshold == null || operator == null) {
             return false;
@@ -152,6 +193,9 @@ public class AlarmApplicationServiceImpl implements AlarmApplicationService, Tel
         };
     }
 
+    /**
+     * 在当前租户范围内分页查询告警，并按设备、状态、级别、时间和上下文状态过滤；非法分页或时间范围直接拒绝。
+     */
     @Override
     @PreAuthorize("hasAuthority('iot:alarm:view')")
     public AlarmPageResult page(UUID deviceId, AlarmStatus status, String alarmLevel, OffsetDateTime from,
@@ -170,6 +214,9 @@ public class AlarmApplicationServiceImpl implements AlarmApplicationService, Tel
         return new AlarmPageResult(records, total, page, size);
     }
 
+    /**
+     * 查询单条告警详情；仓储查询同时带租户条件，记录不存在和跨租户访问统一返回不可见错误。
+     */
     @Override
     @PreAuthorize("hasAuthority('iot:alarm:view')")
     public AlarmView detail(UUID alarmId) {
@@ -179,6 +226,9 @@ public class AlarmApplicationServiceImpl implements AlarmApplicationService, Tel
                 .orElseThrow(() -> new IotException(IotErrorCode.TENANT_VIOLATION, "告警不存在或不属于当前租户"));
     }
 
+    /**
+     * 以服务端载荷摘要执行幂等人工确认，防止同一幂等键复用不同确认内容；真正的状态迁移委托给 doAck。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     @PreAuthorize("hasAuthority('iot:alarm:ack')")
@@ -193,6 +243,10 @@ public class AlarmApplicationServiceImpl implements AlarmApplicationService, Tel
                 () -> doAck(tenantId, alarmId, comment));
     }
 
+    /**
+     * 在当前用户和租户上下文中执行一次条件状态迁移；只允许 Triggered/RecoveredUnacked 进入对应完成态。
+     * 记录已被并发请求推进时返回状态错误，不能把竞争失败包装成成功确认。
+     */
     private AlarmView doAck(UUID tenantId, UUID alarmId, String comment) {
         UserContextHolder.requireUserId();
         AlarmFact current = alarmRepository.findById(tenantId, alarmId)
@@ -219,6 +273,7 @@ public class AlarmApplicationServiceImpl implements AlarmApplicationService, Tel
                 alarmRepository.hasActiveForDevice(tenantId, deviceId) ? "Alarm" : "Normal");
     }
 
+    /** 校验并裁剪人工确认说明，拒绝空内容和超过接口约定长度的输入。 */
     private String normalizeComment(String comment) {
         if (comment == null || comment.isBlank() || comment.trim().length() > 512) {
             throw new IllegalArgumentException("ack_comment 必须为 1 到 512 个字符");
@@ -226,16 +281,19 @@ public class AlarmApplicationServiceImpl implements AlarmApplicationService, Tel
         return comment.trim();
     }
 
+    /** 将可选筛选字符串统一为空值或去除首尾空白后的值，避免空字符串进入仓储查询。 */
     private String normalize(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
+    /** 校验分页参数上限，避免一次请求读取无限告警记录。 */
     private void validatePage(int page, int size) {
         if (page < 1 || size < 1 || size > 100) {
             throw new IllegalArgumentException("page 必须大于等于 1，size 必须在 1 到 100 之间");
         }
     }
 
+    /** 为幂等执行生成稳定的服务端载荷摘要；JDK 缺少 SHA-256 时按运行环境错误抛出。 */
     private String sha256(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")

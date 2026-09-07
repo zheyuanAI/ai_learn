@@ -183,14 +183,11 @@
           </div>
 
           <div class="form-item">
-            <label>产出产品代码/标识 <span class="req">*</span></label>
-            <input
-              v-model="createForm.productId"
-              type="text"
-              class="form-input"
-              placeholder="例如 prod-101"
-              required
-            />
+            <label>产出产品 <span class="req">*</span></label>
+            <select v-model="createForm.productId" class="form-input" required>
+              <option value="">请选择真实产品</option>
+              <option v-for="product in products" :key="product.id" :value="String(product.id)">{{ product.sku }} ({{ product.name }})</option>
+            </select>
           </div>
 
           <!-- 动态工序行 -->
@@ -232,7 +229,7 @@
                     v-model="op.workCenterId"
                     type="text"
                     class="form-input"
-                    placeholder="工作中心 ID (如 wc-01)"
+                    placeholder="真实工作中心 UUID"
                     required
                   />
                 </div>
@@ -294,12 +291,15 @@ import type { TableColumn } from "../../components/common/DataTable.vue";
 import type { ViewState } from "../../types/common";
 import type { RoutingItem, RoutingCreateRequest } from "../../types/manufacturing";
 import { getRoutings, createRouting, deleteRouting } from "../../api/manufacturing";
+import { getProducts } from "../../api/masterData";
+import type { Product } from "../../types/inventory";
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 
 const routingList = ref<RoutingItem[]>([]);
 const total = ref(0);
+const products = ref<Product[]>([]);
 const queryParams = reactive({
   page: 1,
   size: 10,
@@ -327,8 +327,7 @@ const createForm = reactive<RoutingCreateRequest>({
   productId: "",
   version: "V1.0",
   operations: [
-    { operationNo: 10, operationName: "基础功能测试", workCenterId: "wc-01", standardTimeMinutes: "15.00" },
-    { operationNo: 20, operationName: "组装封壳", workCenterId: "wc-02", standardTimeMinutes: "20.00" },
+    { operationNo: 10, operationName: "", workCenterId: "", standardTimeMinutes: "" },
   ],
 });
 
@@ -397,7 +396,7 @@ function openCreateModal() {
   createForm.productId = "";
   createForm.version = "V1.0";
   createForm.operations = [
-    { operationNo: 10, operationName: "功能预检", workCenterId: "wc-01", standardTimeMinutes: "10.00" },
+    { operationNo: 10, operationName: "", workCenterId: "", standardTimeMinutes: "" },
   ];
   createModalVisible.value = true;
 }
@@ -453,7 +452,14 @@ async function handleConfirmDelete() {
 
 onMounted(() => {
   fetchRoutingList();
+  loadProducts();
 });
+
+/** 加载工艺路线所关联的真实产品 UUID。 */
+async function loadProducts() {
+  const response = await getProducts({ page: 1, size: 200, status: "ENABLE" });
+  products.value = response.data.records || [];
+}
 </script>
 
 <style scoped>

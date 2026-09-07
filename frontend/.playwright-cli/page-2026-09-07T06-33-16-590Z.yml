@@ -1,0 +1,109 @@
+- generic [ref=f26e235]:
+  - generic [ref=f26e236]:
+    - banner [ref=f26e237]:
+      - generic [ref=f26e238]:
+        - generic [ref=f26e239]:
+          - generic [ref=f26e240]: AUTH / PLATFORM LOGIN & SESSION
+          - generic [ref=f26e241]: 租户与单会话
+        - heading "系统登录与认证上下文" [level=1] [ref=f26e243]
+        - paragraph [ref=f26e244]: 承接租户识别、用户鉴权、角色权限与菜单加载。执行“后登录替换前登录”的单会话规则，旧 JWT 再次调用返回 401。
+    - region "登录与会话工作台" [ref=f26e245]:
+      - generic [ref=f26e246]:
+        - generic [ref=f26e247]:
+          - text: 用户登录
+          - heading "统一身份认证" [level=2] [ref=f26e248]
+        - generic [ref=f26e249]:
+          - generic [ref=f26e250]:
+            - generic [ref=f26e251]: 企业租户编码 (Tenant Code) *
+            - combobox "企业租户编码 (Tenant Code) *" [ref=f26e252] [cursor=pointer]:
+              - option "tenant_demo_a (华北智能工厂示范租户)" [selected]
+              - option "tenant_demo_b (华东高精装备制造租户)"
+          - generic [ref=f26e253]:
+            - generic [ref=f26e254]: 账号用户名 (Username) *
+            - textbox "账号用户名 (Username) *" [ref=f26e255]:
+              - /placeholder: 请输入用户名
+              - text: wh.operator
+          - generic [ref=f26e256]:
+            - generic [ref=f26e257]: 登录密码 (Password) *
+            - textbox "登录密码 (Password) *" [ref=f26e258]:
+              - /placeholder: 请输入登录密码
+              - text: "123456"
+          - button "登录进入系统 POST /api/auth/login" [ref=f26e259] [cursor=pointer]:
+            - generic [ref=f26e260]: 登录进入系统
+            - generic [ref=f26e261]: POST /api/auth/login
+        - generic [ref=f26e262]:
+          - generic [ref=f26e263]: 快速切换演示角色登录（6 类正式角色）：
+          - generic [ref=f26e264]:
+            - button "租户管理员 admin.zhang" [ref=f26e265] [cursor=pointer]:
+              - generic [ref=f26e266]: 租户管理员
+              - generic [ref=f26e267]: admin.zhang
+            - button "销售人员 sales.liu" [ref=f26e268] [cursor=pointer]:
+              - generic [ref=f26e269]: 销售人员
+              - generic [ref=f26e270]: sales.liu
+            - button "采购人员 buyer.chen" [ref=f26e271] [cursor=pointer]:
+              - generic [ref=f26e272]: 采购人员
+              - generic [ref=f26e273]: buyer.chen
+            - button "仓库人员 wh.operator" [active] [ref=f26e274] [cursor=pointer]:
+              - generic [ref=f26e275]: 仓库人员
+              - generic [ref=f26e276]: wh.operator
+            - button "生产质检人员 mes.inspector" [ref=f26e277] [cursor=pointer]:
+              - generic [ref=f26e278]: 生产质检人员
+              - generic [ref=f26e279]: mes.inspector
+            - button "IoT人员 iot.engineer" [ref=f26e280] [cursor=pointer]:
+              - generic [ref=f26e281]: IoT人员
+              - generic [ref=f26e282]: iot.engineer
+      - complementary [ref=f26e283]:
+        - generic [ref=f26e284]:
+          - generic [ref=f26e285]:
+            - generic [ref=f26e286]: SECURITY & JWT SESSION
+            - generic [ref=f26e287]: 会话正常 (Active)
+          - heading "当前认证上下文与会话事实" [level=2] [ref=f26e288]
+          - paragraph [ref=f26e289]: 服务端在 Redis 维护最新 jti，当同一账号在另一设备登录时，新 jti 替换旧 jti。
+        - generic [ref=f26e290]:
+          - generic [ref=f26e291]:
+            - generic [ref=f26e292]: 当前生效租户
+            - generic [ref=f26e293]: tenant_demo_a
+          - generic [ref=f26e294]:
+            - generic [ref=f26e295]: 当前登录用户
+            - generic [ref=f26e296]: 王仓管 (wh.operator)
+          - generic [ref=f26e297]:
+            - generic [ref=f26e298]: 生效角色
+            - generic [ref=f26e299]: 仓库人员
+          - generic [ref=f26e300]:
+            - generic [ref=f26e301]: 当前 JWT 会话标识 (jti)
+            - generic [ref=f26e302]: jti_7c91d8a4f210
+        - generic [ref=f26e303]:
+          - generic [ref=f26e304]:
+            - strong [ref=f26e305]: 单会话顶替机制模拟演示
+            - button "⚠️ 模拟新设备登录（踢出当前会话）" [ref=f26e306] [cursor=pointer]
+          - paragraph [ref=f26e307]: 模拟另一个客户端使用相同账号成功登录并获取新 jti。当前页面下一次请求将被服务端 401 拦截并弹出失效警告。
+        - generic [ref=f26e308]:
+          - generic [ref=f26e309]:
+            - heading "已加载菜单与功能权限树 (Menu Permissions)" [level=3] [ref=f26e310]
+            - text: 根据 Auth 服务加载当前用户权限点
+          - generic [ref=f26e311]:
+            - generic [ref=f26e327]:
+              - text: 🔑
+              - code [ref=f26e328]: inventory.receipt.confirm (采购外观验收与实收)
+            - generic [ref=f26e329]:
+              - text: 🔑
+              - code [ref=f26e330]: inventory.quality-disposition.confirm (处置执行移位与报废扣减)
+            - generic [ref=f26e331]:
+              - text: 🔑
+              - code [ref=f26e332]: inventory.putaway.confirm (确认上架存储)
+            - generic [ref=f26e333]:
+              - text: 🔑
+              - code [ref=f26e334]: inventory.pick.confirm (销售直接拣货内部自动预留)
+            - generic [ref=f26e335]:
+              - text: 🔑
+              - code [ref=f26e336]: inventory.shipment.confirm (销售发货确认扣减总库存)
+            - generic [ref=f26e337]:
+              - text: 🔑
+              - code [ref=f26e338]: inventory.issue.confirm (生产领料发货确认)
+            - generic [ref=f26e339]:
+              - text: 🔑
+              - code [ref=f26e340]: inventory.transfer.confirm (库位调拨)
+    - contentinfo [ref=f26e324]:
+      - generic [ref=f26e325]: PRODUCTION / AUTHENTICATED WORKSPACE
+      - paragraph [ref=f26e326]: 基于 Vue 3 + Pinia + Axios 真实前后端链路，承载 6 类正式角色鉴权与动态菜单流转。
+  - status [ref=f26e341]: 已选择角色：wh.operator，已自动填入演示密码 123456

@@ -11,4 +11,9 @@ public interface OperationExecutionRepository {
     OperationExecution saveIfAbsent(OperationExecution execution);
     OperationExecution update(UUID tenantId, UUID id, UnaryOperator<OperationExecution> updater);
     List<OperationExecution> findByDevice(UUID tenantId, UUID deviceId);
+
+    /** 查询当前租户全部未删除工序执行；旧 focused 适配器可使用默认空集合。 */
+    default List<OperationExecution> findAll(UUID tenantId) {
+        return List.of();
+    }
 }

@@ -205,7 +205,7 @@
               v-model="contextForm.workOrderId"
               type="text"
               class="form-input font-mono"
-              placeholder="例如 wo-001 或 WO-20260901-001"
+              placeholder="请输入工单 UUID"
             />
           </div>
 
@@ -215,7 +215,7 @@
               v-model="contextForm.operationExecutionId"
               type="text"
               class="form-input font-mono"
-              placeholder="例如 exec-002 或 EXE-20260901-02"
+              placeholder="请输入工序执行 UUID"
             />
           </div>
 
@@ -396,13 +396,17 @@ async function submitAck() {
 
 function openContextModal(item: DeviceAlarmItem) {
   activeAlarm.value = item;
-  contextForm.workOrderId = item.workOrderId || "wo-001";
-  contextForm.operationExecutionId = item.operationExecutionId || "exec-002";
+  contextForm.workOrderId = item.workOrderId || "";
+  contextForm.operationExecutionId = item.operationExecutionId || "";
   contextModalVisible.value = true;
 }
 
 async function submitContext() {
   if (!activeAlarm.value) return;
+  if (!contextForm.workOrderId.trim() && !contextForm.operationExecutionId.trim()) {
+    errorMessage.value = "请填写至少一个后端已分配的工单或工序执行 UUID";
+    return;
+  }
   isSubmitting.value = true;
   try {
     await updateAlarmBusinessContext(activeAlarm.value.id as string, contextForm);

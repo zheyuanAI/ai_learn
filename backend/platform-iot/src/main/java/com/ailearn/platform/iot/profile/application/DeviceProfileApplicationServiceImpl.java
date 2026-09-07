@@ -57,6 +57,7 @@ public class DeviceProfileApplicationServiceImpl implements DeviceProfileApplica
         this(repository, idempotency, null);
     }
 
+    /** 创建当前租户设备模型，先完整校验指标白名单和离线阈值，再以幂等命令落库。 */
     @Override
     @PreAuthorize("hasAuthority('iot:device:manage')")
     @Transactional(rollbackFor = Exception.class)
@@ -80,6 +81,7 @@ public class DeviceProfileApplicationServiceImpl implements DeviceProfileApplica
                 });
     }
 
+    /** 按当前租户分页查询设备模型，空筛选按无条件查询处理，分页范围由服务端限制。 */
     @Override
     @PreAuthorize("hasAuthority('iot:device:view')")
     public DeviceProfilePageResult page(String profileCode, int page, int size) {
@@ -93,6 +95,7 @@ public class DeviceProfileApplicationServiceImpl implements DeviceProfileApplica
         return new DeviceProfilePageResult(records, repository.count(tenantId, code), normalizedPage, normalizedSize);
     }
 
+    /** 查询当前租户设备模型详情；不存在或跨租户记录不向调用方暴露。 */
     @Override
     @PreAuthorize("hasAuthority('iot:device:view')")
     public DeviceProfileView detail(UUID id) {
@@ -102,6 +105,9 @@ public class DeviceProfileApplicationServiceImpl implements DeviceProfileApplica
         return toView(profile);
     }
 
+    /**
+     * 创建单指标告警规则，并校验指标类型、操作符、阈值方向及可选设备与模型绑定关系。
+     */
     @Override
     @PreAuthorize("hasAuthority('iot:device:manage')")
     @Transactional(rollbackFor = Exception.class)
@@ -141,6 +147,7 @@ public class DeviceProfileApplicationServiceImpl implements DeviceProfileApplica
                 });
     }
 
+    /** 查询指定设备模型下的告警规则；查询范围由当前租户和模型 ID共同约束。 */
     @Override
     @PreAuthorize("hasAuthority('iot:device:view')")
     public List<AlarmRuleView> rules(UUID profileId, int page, int size) {
@@ -151,6 +158,7 @@ public class DeviceProfileApplicationServiceImpl implements DeviceProfileApplica
                 .stream().map(this::toView).toList();
     }
 
+    /** 规范化设备模型请求，并拒绝重复指标编码、无效离线超时或缺少必填字段。 */
     private DeviceProfile normalize(DeviceProfileCreateRequest request) {
         if (request == null || blank(request.profileCode()) || blank(request.profileName())
                 || request.metrics() == null || request.metrics().isEmpty()) {
@@ -168,6 +176,7 @@ public class DeviceProfileApplicationServiceImpl implements DeviceProfileApplica
                 "ACTIVE", timeout, metrics, null, null, null, null);
     }
 
+    /** 规范化单个指标定义，确保值类型属于一期支持的 NUMBER/BOOLEAN/TEXT。 */
     private DeviceProfile.MetricDefinition normalizeMetric(MetricDefinitionRequest request) {
         if (request == null || blank(request.metricCode()) || blank(request.metricName())) {
             throw new ValidationException("指标编码和名称不能为空");
@@ -180,6 +189,7 @@ public class DeviceProfileApplicationServiceImpl implements DeviceProfileApplica
                 type, blank(request.unit()) ? null : text(request.unit(), 32), Boolean.TRUE.equals(request.required()));
     }
 
+    /** 规范化告警规则字段；阈值方向和模型归属在后续 validateRule 中继续校验。 */
     private NormalizedRule normalizeRule(AlarmRuleCreateRequest request) {
         if (blank(request.ruleCode()) || blank(request.metricCode()) || blank(request.operator())
                 || blank(request.alarmLevel()) || request.triggerThreshold() == null || request.recoveryThreshold() == null) {
@@ -190,6 +200,7 @@ public class DeviceProfileApplicationServiceImpl implements DeviceProfileApplica
                 request.recoveryThreshold(), text(request.alarmLevel(), 16));
     }
 
+    /** 校验规则引用 NUMBER 指标、支持的比较操作符、精度及触发/恢复阈值方向。 */
     private void validateRule(NormalizedRule request, DeviceProfile profile) {
         if (!profile.metrics().stream().anyMatch(m -> m.metricCode().equals(request.metricCode())
                 && m.valueType() == MetricValueType.NUMBER)) {

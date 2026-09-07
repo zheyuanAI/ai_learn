@@ -154,6 +154,25 @@ public class PostgresOperationExecutionRepository implements OperationExecutionR
         });
     }
 
+    /** 查询当前租户全部工序执行，供正式列表接口在应用层执行白名单筛选和分页。 */
+    @Override
+    public List<OperationExecution> findAll(UUID tenantId) {
+        return database(() -> {
+            List<OperationExecution> result = new ArrayList<>();
+            try (Connection connection = dataSource.getConnection();
+                 PreparedStatement statement = connection.prepareStatement(selectSql()
+                         + " WHERE tenant_id = ? AND isdel = 0 ORDER BY id")) {
+                statement.setObject(1, tenantId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) {
+                        result.add(read(rows, connection));
+                    }
+                }
+            }
+            return List.copyOf(result);
+        });
+    }
+
     private OperationExecution findInternal(Connection connection, UUID tenantId, UUID id, boolean forUpdate)
             throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(selectSql()

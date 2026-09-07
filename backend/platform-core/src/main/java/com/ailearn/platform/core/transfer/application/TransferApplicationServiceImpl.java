@@ -12,11 +12,14 @@ import com.ailearn.platform.core.masterdata.domain.port.WarehouseReferencePort;
 import com.ailearn.platform.core.masterdata.dto.AllowedActionVo;
 import com.ailearn.platform.core.transfer.domain.TransferLine;
 import com.ailearn.platform.core.transfer.domain.TransferOrder;
+import com.ailearn.platform.core.transfer.domain.TransferPage;
 import com.ailearn.platform.core.transfer.domain.TransferRepository;
 import com.ailearn.platform.core.transfer.domain.TransferStatus;
 import com.ailearn.platform.core.transfer.dto.TransferCreateRequest;
 import com.ailearn.platform.core.transfer.dto.TransferLineRequest;
+import com.ailearn.platform.core.transfer.dto.TransferPageQuery;
 import com.ailearn.platform.core.transfer.dto.TransferView;
+import com.ailearn.platform.core.masterdata.dto.MasterDataPageResult;
 import com.ailearn.platform.shared.context.RequestContextHolder;
 import com.ailearn.platform.shared.context.TenantContextHolder;
 import com.ailearn.platform.shared.context.UserContextHolder;
@@ -136,6 +139,37 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         return idempotencyExecutor.execute("transfer:confirm", actor.tenantId(), idempotencyKey,
                 digest("confirm", id),
                 TransferView.class, () -> confirmInternal(id, actor));
+    }
+
+    /**
+     * 查询当前租户调拨分页。
+     * 入参：页码、页大小、状态和单号关键词；出参：统一分页响应；流程：获取可信租户 -> 规范化查询 -> 租户范围读取。
+     */
+    @Override
+    @PreAuthorize("hasAuthority('inv:transfer:view')")
+    public MasterDataPageResult<TransferView> page(TransferPageQuery query) {
+        Actor actor = actor();
+        TransferPageQuery normalized = query == null ? new TransferPageQuery() : query.normalized();
+        int offset = (normalized.getPage() - 1) * normalized.getSize();
+        TransferPage page = repository.findPage(actor.tenantId(), offset, normalized.getSize(),
+                normalized.getStatus() == null ? null : normalized.getStatus().name(), normalized.getKeyword());
+        List<TransferView> views = page.records().stream()
+                .map(order -> new TransferView(order, List.of(), actions(order.status())))
+                .toList();
+        return new MasterDataPageResult<>(views, page.total(), normalized.getPage(), normalized.getSize());
+    }
+
+    /** 查询当前租户调拨详情；跨租户和不存在记录统一按不存在处理。 */
+    @Override
+    @PreAuthorize("hasAuthority('inv:transfer:view')")
+    public TransferView find(UUID id) {
+        Actor actor = actor();
+        if (id == null) {
+            throw new ValidationException("调拨单 ID 不能为空");
+        }
+        TransferOrder order = repository.findById(actor.tenantId(), id)
+                .orElseThrow(() -> new NotFoundException("调拨单不存在"));
+        return new TransferView(order, List.of(), actions(order.status()));
     }
 
     /**
@@ -288,6 +322,11 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
      */
     private List<AllowedActionVo> draftActions() {
         return List.of(new AllowedActionVo("confirm", true, null));
+    }
+
+    /** 根据调拨状态生成只读响应中的允许动作集合。 */
+    private List<AllowedActionVo> actions(TransferStatus status) {
+        return status == TransferStatus.Draft ? draftActions() : List.of();
     }
 
     /**

@@ -24,15 +24,15 @@ export type PurchaseOrderCompletionType = "Normal" | "Manual";
  * 采购订单明细行
  */
 export interface PurchaseOrderLine {
-  id: string | number;
-  poId: string | number;
+  id: string;
+  poId?: string;
   lineNo: number;
-  productId: string | number;
-  sku: string;
-  productName: string;
+  productId: string;
+  sku?: string;
+  productName?: string;
   spec?: string;
   uom: string;
-  targetWarehouseId: string | number;
+  targetWarehouseId: string;
   targetWarehouseName?: string;
   orderedQty: string;          // 采购要求总数量
   arrivedQty: string;          // 累计到货验收量
@@ -72,9 +72,9 @@ export interface PurchaseOrderEvent {
  */
 export interface PurchaseOrder extends BaseEntity {
   poNo: string;
-  supplierId: string | number;
-  supplierCode: string;
-  supplierName: string;
+  supplierId: string;
+  supplierCode?: string;
+  supplierName?: string;
   owner?: string;
   expectedArrivalDate: string;
   status: PurchaseOrderStatus;
@@ -84,13 +84,13 @@ export interface PurchaseOrder extends BaseEntity {
   completedSessionId?: string;
   completedAt?: string;
   priority?: string;
-  targetWarehouseId?: string | number;
+  targetWarehouseId?: string;
   warehouseName?: string;
-  qualityHoldLocationId?: string | number;
+  qualityHoldLocationId?: string;
   qualityHoldLocationCode?: string;
-  receivingStagingLocationId?: string | number;
+  receivingStagingLocationId?: string;
   receivingStagingLocationCode?: string;
-  storageLocationId?: string | number;
+  storageLocationId?: string;
   storageLocationCode?: string;
   lines: PurchaseOrderLine[];
   events?: PurchaseOrderEvent[];
@@ -111,10 +111,10 @@ export interface PurchaseOrderQuery extends PageQuery {
  * 采购订单创建行项
  */
 export interface PurchaseOrderCreateLine {
-  productId: string | number;
+  productId: string;
   orderedQty: string;
   uom: string;
-  targetWarehouseId: string | number;
+  targetWarehouseId: string;
   sourceWorkOrderId?: string;
 }
 
@@ -122,10 +122,11 @@ export interface PurchaseOrderCreateLine {
  * 采购订单创建载荷
  */
 export interface PurchaseOrderCreatePayload {
-  supplierId: string | number;
+  poNo?: string;
+  supplierId: string;
   expectedArrivalDate: string;
-  targetWarehouseId: string | number;
   remark?: string;
+  version?: number;
   lines: PurchaseOrderCreateLine[];
 }
 
@@ -139,12 +140,16 @@ export type PurchaseReceiptStatus = "Draft" | "Confirmed";
  */
 export interface PurchaseReceipt extends BaseEntity {
   receiptNo: string;
-  purchaseOrderId: string | number;
-  poNo: string;
+  purchaseOrderId: string;
+  poNo?: string;
   receiptTime: string;
-  qualityHoldLocationId: string | number;
-  qualityHoldLocationCode: string;
+  qualityHoldLocationId: string;
+  qualityHoldLocationCode?: string;
   status: PurchaseReceiptStatus;
+  version: number;
+  confirmedBy?: string;
+  confirmedSessionId?: string;
+  confirmedAt?: string;
   lines: PurchaseReceiptLine[];
   allowedActions?: AllowedAction[];
 }
@@ -153,12 +158,12 @@ export interface PurchaseReceipt extends BaseEntity {
  * 采购收货明细行
  */
 export interface PurchaseReceiptLine {
-  id: string | number;
-  purchaseReceiptId: string | number;
-  poLineId: string | number;
-  productId: string | number;
-  sku: string;
-  productName: string;
+  id: string;
+  purchaseReceiptId: string;
+  purchaseOrderLineId: string;
+  productId: string;
+  sku?: string;
+  productName?: string;
   uom: string;
   arrivedQty: string;       // 到货数量
   rejectedQty: string;      // 收货前外观拒收数量
@@ -171,8 +176,10 @@ export interface PurchaseReceiptLine {
  * 采购到货验收提交载荷行
  */
 export interface PurchaseReceiptConfirmLine {
-  poLineId: string | number;
-  productId: string | number;
+  purchaseOrderLineId: string;
+  poLineId?: string | number; // 视图兼容
+  productId: string;
+  uom: string;
   arrivedQty: string;
   rejectedQty: string;
   receivedQty: string;
@@ -184,9 +191,11 @@ export interface PurchaseReceiptConfirmLine {
  * 采购到货验收确认载荷
  */
 export interface PurchaseReceiptConfirmPayload {
-  purchaseOrderId: string | number;
+  receiptId?: string;
+  purchaseOrderId: string;
+  receiptNo: string;
   receiptTime: string;
-  qualityHoldLocationId: string | number;
+  qualityHoldLocationId: string;
   lines: PurchaseReceiptConfirmLine[];
 }
 
@@ -195,20 +204,21 @@ export interface PurchaseReceiptConfirmPayload {
  */
 export interface PurchaseQualityInspection extends BaseEntity {
   inspectionNo: string;
-  purchaseOrderId: string | number;
-  poNo: string;
-  purchaseReceiptId: string | number;
-  purchaseReceiptLineId: string | number;
-  productId: string | number;
-  sku: string;
-  productName: string;
+  purchaseOrderId: string;
+  purchaseOrderNo: string;
+  purchaseReceiptId: string;
+  purchaseReceiptLineId: string;
+  productId: string;
+  sku?: string;
+  productName?: string;
   inspectedQty: string;      // 本次检验数量
   qualifiedQty: string;      // 质检合格数量
   unqualifiedQty: string;    // 质检不合格数量
   unqualifiedReason?: string;
-  inspectedBy: string;
+  inspectedBy?: string;
   inspectedAt: string;
   inspectionRemark?: string;
+  status: "PendingDecision" | string;
 }
 
 /**
@@ -226,13 +236,14 @@ export type QualityDispositionStatus = "PendingDecision" | "PendingExecution" | 
  */
 export interface PurchaseQualityDisposition extends BaseEntity {
   dispositionNo: string;
-  inspectionId: string | number;
-  purchaseOrderId: string | number;
-  poNo: string;
-  purchaseReceiptId: string | number;
-  productId: string | number;
-  sku: string;
-  productName: string;
+  inspectionId: string;
+  purchaseOrderId: string;
+  purchaseOrderNo: string;
+  purchaseReceiptId: string;
+  purchaseReceiptLineId: string;
+  productId: string;
+  sku?: string;
+  productName?: string;
   dispositionType: QualityDispositionType;
   dispositionQty: string;
   reason?: string;
@@ -241,9 +252,9 @@ export interface PurchaseQualityDisposition extends BaseEntity {
   decidedAt?: string;
   executedBy?: string;
   executedAt?: string;
-  fromLocationId?: string | number;
+  fromLocationId?: string;
   fromLocationCode?: string;
-  toLocationId?: string | number;
+  toLocationId?: string;
   toLocationCode?: string;
   allowedActions?: AllowedAction[];
 }
@@ -252,10 +263,10 @@ export interface PurchaseQualityDisposition extends BaseEntity {
  * 采购质检录入载荷
  */
 export interface QualityInspectPayload {
-  purchaseOrderId: string | number;
-  purchaseReceiptId: string | number;
-  purchaseReceiptLineId: string | number;
-  productId: string | number;
+  purchaseOrderId: string;
+  purchaseReceiptId: string;
+  purchaseReceiptLineId: string;
+  productId: string;
   inspectedQty: string;
   qualifiedQty: string;
   unqualifiedQty: string;
@@ -267,7 +278,7 @@ export interface QualityInspectPayload {
  * 采购质量处置决定载荷
  */
 export interface QualityDispositionDecidePayload {
-  inspectionId: string | number;
+  inspectionId: string;
   dispositionType: QualityDispositionType;
   dispositionQty: string;
   reason?: string;
@@ -277,8 +288,9 @@ export interface QualityDispositionDecidePayload {
  * 质量处置仓库确认执行载荷
  */
 export interface QualityDispositionConfirmPayload {
-  dispositionId: string | number;
-  toLocationId?: string | number; // 放行时移至 ReceivingStaging 库位
+  dispositionId: string;
+  toLocationId?: string; // 放行时移至 ReceivingStaging 库位
+  putawayTargetLocationId?: string;
 }
 
 /**
@@ -291,22 +303,23 @@ export type PutawayTaskStatus = "Pending" | "Processing" | "Confirmed";
  */
 export interface PutawayTask extends BaseEntity {
   taskNo: string;
-  purchaseOrderId: string | number;
-  poNo: string;
-  purchaseReceiptId: string | number;
-  productId: string | number;
-  sku: string;
-  productName: string;
-  uom: string;
+  purchaseOrderId?: string;
+  poNo?: string;
+  purchaseReceiptId: string;
+  purchaseReceiptLineId?: string;
+  productId: string;
+  sku?: string;
+  productName?: string;
+  uom?: string;
   lotNo?: string;
-  fromWarehouseId: string | number;
+  fromWarehouseId?: string;
   fromWarehouseName?: string;
-  fromLocationId: string | number;
-  fromLocationCode: string;
-  toWarehouseId: string | number;
+  fromLocationId: string;
+  fromLocationCode?: string;
+  toWarehouseId?: string;
   toWarehouseName?: string;
-  toLocationId: string | number;
-  toLocationCode: string;
+  toLocationId?: string;
+  toLocationCode?: string;
   putawayQty: string;
   status: PutawayTaskStatus;
   confirmedBy?: string;
@@ -318,7 +331,7 @@ export interface PutawayTask extends BaseEntity {
  * 上架任务确认载荷
  */
 export interface PutawayConfirmPayload {
-  taskId: string | number;
-  toLocationId: string | number;
+  taskId: string;
+  toLocationId: string;
   putawayQty: string;
 }

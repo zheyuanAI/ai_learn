@@ -118,7 +118,7 @@ import QuantityText from "@/components/common/QuantityText.vue";
 import EmptyState from "@/components/common/EmptyState.vue";
 import ErrorState from "@/components/common/ErrorState.vue";
 import type { ViewState } from "@/types/common";
-import type { InventoryReservation } from "@/types/inventory";
+import { stringSub, type InventoryReservation, type InventoryReservationView } from "@/types/inventory";
 import { getInventoryReservations } from "@/api/inventory";
 
 const viewState = ref<ViewState>("loading");
@@ -157,7 +157,7 @@ async function fetchReservations() {
       sourceType: queryParams.sourceType,
       status: queryParams.status,
     });
-    reservationList.value = res.data.records;
+    reservationList.value = res.data.records.map(normalizeReservationRecord);
     totalCount.value = res.data.total;
     viewState.value = reservationList.value.length === 0 ? "empty" : "ready";
   } catch (err: any) {
@@ -165,6 +165,26 @@ async function fetchReservations() {
     errorMessage.value = err?.message || "网络请求异常";
     viewState.value = "error";
   }
+}
+
+/**
+ * 将后端正式的嵌套预留视图转换为列表展示模型。
+ * 入参：reservation 与 allocations 事实；出参：页面兼容的扁平预留行；流程：保留原始事实并补齐有效量、库位维度。
+ */
+function normalizeReservationRecord(record: InventoryReservationView): InventoryReservation {
+  const reservation = record.reservation;
+  const releasedQty = reservation.releasedQty || "0";
+  return {
+    ...reservation,
+    releasedQty,
+    activeReservedQty: stringSub(reservation.reservedQty, releasedQty),
+    allocations: record.allocations.map((allocation) => ({
+      ...allocation,
+      locationId: allocation.dimension?.locationId || allocation.locationId || "",
+      warehouseId: allocation.dimension?.warehouseId || allocation.warehouseId,
+      lotNo: allocation.dimension?.lotNo || allocation.lotNo,
+    })),
+  };
 }
 
 function handlePageChange(page: number) {

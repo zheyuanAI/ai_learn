@@ -51,7 +51,7 @@
         <template #inspectionNo="{ value }">
           <span class="mono-code">{{ value }}</span>
         </template>
-        <template #poNo="{ value }">
+        <template #purchaseOrderNo="{ value }">
           <span class="mono-text">{{ value }}</span>
         </template>
         <template #inspectedQty="{ row }">
@@ -130,8 +130,23 @@
         <form class="modal-body" @submit.prevent="submitInspect">
           <div class="form-item">
             <label>对应采购收货凭证 <span class="req">*</span></label>
-            <select v-model="inspectForm.purchaseReceiptId" class="form-select" required>
-              <option value="RCV-01">RCV-20260826-01 (定子转子组件 75件 在 QH-01)</option>
+            <input v-model="inspectForm.purchaseReceiptId" type="text" class="form-input" required placeholder="输入收货确认返回的 receiptId UUID" />
+          </div>
+          <div class="form-item">
+            <label>采购订单 UUID <span class="req">*</span></label>
+            <input v-model="inspectForm.purchaseOrderId" type="text" class="form-input" required placeholder="输入收货单所属 purchaseOrderId" />
+          </div>
+          <div class="form-item">
+            <label>收货明细 UUID <span class="req">*</span></label>
+            <input v-model="inspectForm.purchaseReceiptLineId" type="text" class="form-input" required placeholder="输入收货确认返回的收货明细 ID" />
+          </div>
+          <div class="form-item">
+            <label>物料 <span class="req">*</span></label>
+            <select v-model="inspectForm.productId" class="form-select" required>
+              <option value="">请选择物料</option>
+              <option v-for="product in products" :key="product.id" :value="product.id">
+                {{ product.sku }} - {{ product.name }}
+              </option>
             </select>
           </div>
           <div class="form-grid">
@@ -203,7 +218,28 @@
       :message="executeDialogMessage"
       :loading="submitting"
       @confirm="executeDisposition"
-    />
+    >
+      <template v-if="selectedDisp?.dispositionType === 'Release'">
+        <div class="form-item">
+          <label>放行至收货暂存位 <span class="req">*</span></label>
+          <select v-model="receivingStagingLocationId" class="form-select" required>
+            <option value="">请选择 ReceivingStaging 库位</option>
+            <option v-for="location in receivingStagingLocations" :key="location.id" :value="location.id">
+              {{ location.code }} - {{ location.name }}
+            </option>
+          </select>
+        </div>
+        <div class="form-item">
+          <label>后续上架目标库位（可选）</label>
+          <select v-model="putawayTargetLocationId" class="form-select">
+            <option value="">由后端选择默认 Storage 库位</option>
+            <option v-for="location in storageLocations" :key="location.id" :value="location.id">
+              {{ location.code }} - {{ location.name }}
+            </option>
+          </select>
+        </div>
+      </template>
+    </ConfirmDialog>
   </div>
 </template>
 
@@ -223,7 +259,8 @@ import type {
   PurchaseQualityInspection,
   PurchaseQualityDisposition,
 } from "@/types/purchasing";
-import { stringSub } from "@/types/inventory";
+import { stringSub, type Location, type Product } from "@/types/inventory";
+import { getLocations, getProducts } from "@/api/masterData";
 import {
   getQualityInspections,
   inspectQuality,
@@ -241,9 +278,8 @@ const dispositions = ref<PurchaseQualityDisposition[]>([]);
 
 const inspectionColumns: TableColumn[] = [
   { key: "inspectionNo", label: "检验编号", width: "150px" },
-  { key: "poNo", label: "采购单号", width: "140px" },
-  { key: "sku", label: "物料编码", width: "130px" },
-  { key: "productName", label: "物料名称", minWidth: "140px" },
+  { key: "purchaseOrderNo", label: "采购单号", width: "140px" },
+  { key: "productId", label: "物料 UUID", width: "220px" },
   { key: "inspectedQty", label: "检验总量", width: "100px", align: "right" },
   { key: "qualifiedQty", label: "合格数量", width: "100px", align: "right" },
   { key: "unqualifiedQty", label: "不合格量", width: "100px", align: "right" },
@@ -254,7 +290,7 @@ const inspectionColumns: TableColumn[] = [
 
 const dispositionColumns: TableColumn[] = [
   { key: "dispositionNo", label: "处置编号", width: "150px" },
-  { key: "poNo", label: "采购单号", width: "140px" },
+  { key: "purchaseOrderNo", label: "采购单号", width: "140px" },
   { key: "dispositionType", label: "处置决定", width: "130px", align: "center" },
   { key: "dispositionQty", label: "处置数量", width: "100px", align: "right" },
   { key: "status", label: "执行状态", width: "140px", align: "center" },
@@ -266,16 +302,19 @@ const dispositionColumns: TableColumn[] = [
 // 质检弹窗
 const isInspectOpen = ref(false);
 const inspectForm = reactive({
-  purchaseOrderId: "PO-20260826-001",
-  purchaseReceiptId: "RCV-01",
-  purchaseReceiptLineId: "RL-01",
-  productId: "3",
-  inspectedQty: "75",
-  qualifiedQty: "70",
-  unqualifiedQty: "5",
-  unqualifiedReason: "轴向尺寸公差超差 0.15mm",
-  inspectionRemark: "抽样全检合格率93.3%",
+  purchaseOrderId: "",
+  purchaseReceiptId: "",
+  purchaseReceiptLineId: "",
+  productId: "",
+  inspectedQty: "",
+  qualifiedQty: "",
+  unqualifiedQty: "",
+  unqualifiedReason: "",
+  inspectionRemark: "",
 });
+const products = ref<Product[]>([]);
+const receivingStagingLocations = ref<Location[]>([]);
+const storageLocations = ref<Location[]>([]);
 
 function calcUnqualified() {
   inspectForm.unqualifiedQty = stringSub(inspectForm.inspectedQty, inspectForm.qualifiedQty);
@@ -293,13 +332,15 @@ const decideForm = reactive({
 // 仓库执行弹窗
 const isExecuteOpen = ref(false);
 const selectedDisp = ref<PurchaseQualityDisposition | null>(null);
+const receivingStagingLocationId = ref("");
+const putawayTargetLocationId = ref("");
 
 const executeDialogMessage = computed(() => {
   if (!selectedDisp.value) return "";
   if (selectedDisp.value.dispositionType === "Release") {
-    return `确认将 ${selectedDisp.value.dispositionQty} 件合格品从 QualityHold 质量隔离位 (QH-01) 移动至 ReceivingStaging 收货暂存位 (RS-01) 吗？确认后将生成后续上架任务。`;
+    return `确认将 ${selectedDisp.value.dispositionQty} 件合格品从 QualityHold 质量隔离位移动至所选 ReceivingStaging 收货暂存位吗？确认后将生成后续上架任务。`;
   }
-  return `确认执行 ${selectedDisp.value.dispositionType === 'Scrap' ? '报废扣减' : '退回供应方'} 吗？将从 QualityHold (QH-01) 扣减 ${selectedDisp.value.dispositionQty} 件实物库存并生成不可篡改流水。`;
+  return `确认执行 ${selectedDisp.value.dispositionType === 'Scrap' ? '报废扣减' : '退回供应方'} 吗？将从 QualityHold 质量隔离位扣减 ${selectedDisp.value.dispositionQty} 件实物库存并生成不可篡改流水。`;
 });
 
 async function loadData() {
@@ -309,25 +350,46 @@ async function loadData() {
       getQualityInspections(),
       getQualityDispositions(),
     ]);
-    const rawI: any = resI.data;
-    const rawD: any = resD.data;
-    inspections.value = Array.isArray(rawI) ? rawI : (rawI?.records || []);
-    dispositions.value = Array.isArray(rawD) ? rawD : (rawD?.records || []);
+    inspections.value = resI.data;
+    dispositions.value = resD.data;
   } catch (err: any) {
     console.error("[QualityDispositionView] 加载失败:", err);
+    alert(err?.message || "加载质检与处置记录失败");
   } finally {
     loading.value = false;
   }
 }
 
-function openInspectModal() {
-  isInspectOpen.value = true;
+/**
+ * 加载质检与处置所需主数据，所有选择值使用后端返回的真实 UUID。
+ */
+async function loadReferenceOptions() {
+  const [productResponse, receivingResponse, storageResponse] = await Promise.all([
+    getProducts({ page: 1, size: 200, status: "ACTIVE" }),
+    getLocations({ page: 1, size: 200, type: "ReceivingStaging", status: "ACTIVE" }),
+    getLocations({ page: 1, size: 200, type: "Storage", status: "ACTIVE" }),
+  ]);
+  products.value = productResponse.data.records;
+  receivingStagingLocations.value = receivingResponse.data.records;
+  storageLocations.value = storageResponse.data.records;
+}
+
+/**
+ * 打开质检录入前刷新物料与合法处置库位。
+ */
+async function openInspectModal() {
+  try {
+    await loadReferenceOptions();
+    isInspectOpen.value = true;
+  } catch (error: any) {
+    alert(error?.message || "加载质检选项失败");
+  }
 }
 
 async function submitInspect() {
   submitting.value = true;
   try {
-    await inspectQuality({ ...inspectForm });
+    await inspectQuality(inspectForm.purchaseReceiptId, { ...inspectForm });
     isInspectOpen.value = false;
     await loadData();
   } catch (err: any) {
@@ -348,8 +410,8 @@ async function submitDecide() {
   if (!selectedInspect.value) return;
   submitting.value = true;
   try {
-    await decideQualityDisposition({
-      inspectionId: selectedInspect.value.id,
+    await decideQualityDisposition(selectedInspect.value.purchaseReceiptId, {
+      inspectionId: String(selectedInspect.value.id),
       dispositionType: decideForm.dispositionType,
       dispositionQty: decideForm.dispositionQty,
       reason: decideForm.reason,
@@ -365,16 +427,23 @@ async function submitDecide() {
 
 function openExecuteConfirm(row: PurchaseQualityDisposition) {
   selectedDisp.value = row;
+  receivingStagingLocationId.value = "";
+  putawayTargetLocationId.value = "";
   isExecuteOpen.value = true;
 }
 
 async function executeDisposition() {
   if (!selectedDisp.value) return;
+  if (selectedDisp.value.dispositionType === "Release" && !receivingStagingLocationId.value) {
+    alert("请选择真实的 ReceivingStaging 库位");
+    return;
+  }
   submitting.value = true;
   try {
-    await confirmQualityDisposition(selectedDisp.value.id, {
-      dispositionId: selectedDisp.value.id,
-      toLocationId: selectedDisp.value.dispositionType === "Release" ? "2" : undefined,
+    await confirmQualityDisposition(String(selectedDisp.value.id), {
+      dispositionId: String(selectedDisp.value.id),
+      toLocationId: selectedDisp.value.dispositionType === "Release" ? receivingStagingLocationId.value : undefined,
+      putawayTargetLocationId: putawayTargetLocationId.value || undefined,
     });
     isExecuteOpen.value = false;
     await loadData();
@@ -387,6 +456,7 @@ async function executeDisposition() {
 
 onMounted(() => {
   loadData();
+  loadReferenceOptions().catch((error) => console.error("[QualityDispositionView] 加载质检选项失败", error));
 });
 </script>
 

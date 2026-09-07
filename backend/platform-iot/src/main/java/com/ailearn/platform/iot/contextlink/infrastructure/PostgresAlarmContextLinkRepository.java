@@ -11,6 +11,8 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Set;
+import java.util.LinkedHashSet;
 import java.util.function.Supplier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -136,6 +138,22 @@ public class PostgresAlarmContextLinkRepository implements AlarmContextLinkRepos
                    SET status = 'Retry', retry_count = ?, next_retry_at = ?, last_error = ?, updated_at = ?
                  WHERE tenant_id = ? AND id = ?
                 """, retryCount, nextRetryAt, error, updatedAt, tenantId, taskId));
+    }
+
+    /** 查询到期任务租户集合，调度器随后以租户边界领取并处理任务。 */
+    @Override
+    public Set<UUID> findDueTenantIds(OffsetDateTime now, int limit) {
+        return db(() -> {
+            List<UUID> values = jdbc.query("""
+                    SELECT DISTINCT tenant_id
+                      FROM iot_alarm_context_task
+                     WHERE status IN ('Pending', 'Retry')
+                       AND (next_retry_at IS NULL OR next_retry_at <= ?)
+                     ORDER BY tenant_id
+                     LIMIT ?
+                    """, (rs, rowNum) -> rs.getObject("tenant_id", UUID.class), now, limit);
+            return Set.copyOf(new LinkedHashSet<>(values));
+        });
     }
 
     private AlarmContextCandidate alarmRow(ResultSet rs, int row) throws SQLException {

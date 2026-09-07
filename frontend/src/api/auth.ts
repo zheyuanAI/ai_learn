@@ -25,6 +25,7 @@ export interface UserInfo {
   email?: string;
   phone?: string;
   roles?: string[];
+  /** permissions 是规范字段；perms 仅用于兼容旧 DTO，不代表存在两套权限来源。 */
   permissions?: string[];
   perms?: string[];
   avatar?: string;
@@ -69,6 +70,7 @@ export interface MenuItem {
 /**
  * 用户登录接口
  * 入参为租户编码、账号与密码，出参为 Token 与用户信息。
+ * 租户编码只用于定位登录空间，凭据、会话和权限均由后端校验与签发，前端不在此处自行判权。
  * 请求路径：POST /api/auth/login
  */
 export function login(data: LoginRequest): Promise<ApiResponse<LoginResponse>> {
@@ -104,6 +106,7 @@ export function getMe(): Promise<ApiResponse<UserInfo>> {
 
 /**
  * 获取当前登录用户可访问的动态菜单树
+ * 菜单由后端按当前会话的角色、权限及菜单状态过滤，前端仅负责保存和展示返回结果。
  * 请求路径：GET /api/me/menus
  */
 export function getMyMenus(): Promise<ApiResponse<MenuItem[]>> {

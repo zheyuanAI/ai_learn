@@ -26,7 +26,12 @@
           </div>
           <div class="input-item">
             <label>入库隔离库位 (QualityHold) <span class="req">*</span></label>
-            <input :value="order.qualityHoldLocationCode || 'QH-01'" type="text" class="form-input" disabled />
+            <select v-model="qualityHoldLocationId" class="form-input" required>
+              <option value="">请选择质量隔离库位</option>
+              <option v-for="location in qualityHoldLocations" :key="location.id" :value="location.id">
+                {{ location.code }} - {{ location.name }}
+              </option>
+            </select>
           </div>
         </div>
 
@@ -122,7 +127,9 @@
 import { ref, watch } from "vue";
 import QuantityText from "@/components/common/QuantityText.vue";
 import { type PurchaseOrder } from "@/types/purchasing";
+import { type Location } from "@/types/inventory";
 import { stringSub, stringCompare } from "@/types/inventory";
+import { getLocations } from "@/api/masterData";
 
 interface EditableReceiptLine {
   poLineId: string | number;
@@ -160,18 +167,25 @@ const emit = defineEmits<{
 
 const receiptTime = ref(new Date().toISOString().slice(0, 16));
 const receiptLines = ref<EditableReceiptLine[]>([]);
+const receiptId = ref("");
+const receiptNo = ref("");
+const qualityHoldLocationId = ref("");
+const qualityHoldLocations = ref<Location[]>([]);
 
 watch(
   () => props.order,
   (val) => {
     if (val && val.lines) {
+      receiptId.value = crypto.randomUUID();
+      receiptNo.value = `RCV-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
+      qualityHoldLocationId.value = val.qualityHoldLocationId || "";
       receiptLines.value = val.lines.map((l) => {
         const pending = parseFloat(l.pendingQty || "0") > 0 ? l.pendingQty : l.orderedQty;
         return {
           poLineId: l.id,
           productId: l.productId,
-          sku: l.sku,
-          productName: l.productName,
+          sku: l.sku || l.productId,
+          productName: l.productName || l.productId,
           uom: l.uom,
           orderedQty: l.orderedQty,
           pendingQty: l.pendingQty,
@@ -185,6 +199,26 @@ watch(
     }
   },
   { immediate: true }
+);
+
+/**
+ * 加载启用的质量隔离库位，收货请求只提交后端返回的真实 UUID。
+ */
+async function loadQualityHoldLocations() {
+  try {
+    const response = await getLocations({ page: 1, size: 200, type: "QualityHold", status: "ACTIVE" });
+    qualityHoldLocations.value = response.data.records;
+  } catch (error) {
+    console.error("[ReceiptConfirmView] 加载质量隔离库位失败", error);
+  }
+}
+
+watch(
+  () => props.visible,
+  (visible) => {
+    if (visible) void loadQualityHoldLocations();
+  },
+  { immediate: true },
 );
 
 function onArrivedOrRejectedChange(line: EditableReceiptLine) {
@@ -226,12 +260,15 @@ function handleSubmit() {
   }
 
   const payload = {
+    receiptId: receiptId.value,
     purchaseOrderId: props.order.id,
-    receiptTime: receiptTime.value.replace("T", " ") + ":00",
-    qualityHoldLocationId: props.order.qualityHoldLocationId || "1",
+    receiptNo: receiptNo.value,
+    receiptTime: new Date(receiptTime.value).toISOString(),
+    qualityHoldLocationId: qualityHoldLocationId.value,
     lines: receiptLines.value.map((l) => ({
-      poLineId: l.poLineId,
+      purchaseOrderLineId: l.poLineId,
       productId: l.productId,
+      uom: l.uom,
       arrivedQty: l.arrivedQty,
       rejectedQty: l.rejectedQty,
       receivedQty: l.receivedQty,

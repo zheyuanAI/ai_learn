@@ -43,4 +43,15 @@ public interface GisConfigurationStore {
     List<SiteMapConfiguration> findMaps(UUID tenantId);
     List<MapPointConfiguration> findPoints(UUID tenantId, UUID mapId);
     Optional<MapPointConfiguration> findPoint(UUID tenantId, UUID pointId);
+
+    /** 更新同租户点位配置；默认实现兼容仅支持保存的 focused 存储。 */
+    default MapPointConfiguration updatePoint(UUID tenantId, UUID pointId,
+                                              MapPointConfiguration point) {
+        return savePoint(point);
+    }
+
+    /** 软删除同租户点位；返回是否实际删除一条记录。 */
+    default boolean deletePoint(UUID tenantId, UUID pointId) {
+        return false;
+    }
 }

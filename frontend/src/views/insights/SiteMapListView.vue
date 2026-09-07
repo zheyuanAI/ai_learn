@@ -60,15 +60,6 @@
             <option value="GRID">网格坐标 (GRID)</option>
           </select>
         </div>
-
-        <div class="filter-field">
-          <label class="filter-label">状态模拟</label>
-          <select v-model="simulateState" class="filter-select" @change="loadMapList">
-            <option value="normal">正常 (Ready)</option>
-            <option value="empty">空列表 (Empty)</option>
-            <option value="error">网络异常 (Error)</option>
-          </select>
-        </div>
       </FilterBar>
 
       <!-- 主表格数据区 -->
@@ -192,12 +183,27 @@
           </div>
 
           <div class="form-item">
-            <label class="form-label required">底图类型</label>
-            <select v-model="createFormData.backgroundType" class="form-select">
-              <option value="SVG">矢量矢量底图 (SVG 预设)</option>
-              <option value="IMAGE">静态图片资源 (IMAGE)</option>
-              <option value="GRID">工业网格底图 (GRID)</option>
+            <label class="form-label required">底图资源存储键</label>
+            <input v-model="createFormData.asset.storageKey" type="text" class="form-input" placeholder="例如: maps/workshop-01.png" />
+          </div>
+
+          <div class="form-item">
+            <label class="form-label required">底图 MIME 类型</label>
+            <select v-model="createFormData.asset.mimeType" class="form-select">
+              <option value="image/png">image/png</option>
+              <option value="image/jpeg">image/jpeg</option>
+              <option value="image/webp">image/webp</option>
             </select>
+          </div>
+
+          <div class="form-item">
+            <label class="form-label required">底图大小（字节）</label>
+            <input v-model.number="createFormData.asset.sizeBytes" type="number" min="1" max="5242880" class="form-input" />
+          </div>
+
+          <div class="form-item">
+            <label class="form-label required">底图 SHA-256</label>
+            <input v-model="createFormData.asset.sha256" type="text" maxlength="64" class="form-input font-mono" placeholder="64 位十六进制摘要" />
           </div>
 
           <div class="form-item">
@@ -253,7 +259,7 @@ const emit = defineEmits<{
 
 // 子模式：列表 (list)、空间监控 (viewer)、点位配置 (editor)
 const currentMode = ref<"list" | "viewer" | "editor">("list");
-const selectedMapId = ref<string | number>("MAP-001");
+const selectedMapId = ref<string | number>("");
 
 // 界面状态
 const viewState = ref<ViewState>("loading");
@@ -261,7 +267,6 @@ const errorMessage = ref<string>("");
 const mapList = ref<SiteMapItem[]>([]);
 const searchKeyword = ref<string>("");
 const bgFilter = ref<string>("");
-const simulateState = ref<"normal" | "empty" | "error">("normal");
 
 // 弹窗状态
 const showCreateModal = ref(false);
@@ -270,7 +275,12 @@ const formValidationError = ref("");
 const createFormData = reactive({
   mapCode: "",
   mapName: "",
-  backgroundType: "SVG" as "SVG" | "IMAGE" | "GRID",
+  asset: {
+    storageKey: "",
+    mimeType: "image/png" as "image/png" | "image/jpeg" | "image/webp",
+    sizeBytes: 0,
+    sha256: "",
+  },
   description: "",
 });
 
@@ -291,20 +301,12 @@ async function loadMapList() {
   viewState.value = "loading";
   errorMessage.value = "";
 
-  if (simulateState.value === "error") {
-    viewState.value = "error";
-    errorMessage.value = "GIS_QUERY_002: 二维空间地图配置库响应超时";
-    return;
-  }
-  if (simulateState.value === "empty") {
-    mapList.value = [];
-    viewState.value = "empty";
-    return;
-  }
-
   try {
     const list = await fetchSiteMapList();
     mapList.value = list;
+    if (list.length > 0 && !selectedMapId.value) {
+      selectedMapId.value = list[0].id;
+    }
     viewState.value = list.length === 0 ? "empty" : "ready";
   } catch (err: any) {
     viewState.value = "error";
@@ -337,7 +339,6 @@ function handleFilter() {
 function handleReset() {
   searchKeyword.value = "";
   bgFilter.value = "";
-  simulateState.value = "normal";
   loadMapList();
 }
 
@@ -346,9 +347,12 @@ function handleReset() {
  */
 function openCreateModal() {
   formValidationError.value = "";
-  createFormData.mapCode = `MAP_${Date.now().toString().slice(-5)}`;
+  createFormData.mapCode = "";
   createFormData.mapName = "";
-  createFormData.backgroundType = "SVG";
+  createFormData.asset.storageKey = "";
+  createFormData.asset.mimeType = "image/png";
+  createFormData.asset.sizeBytes = 0;
+  createFormData.asset.sha256 = "";
   createFormData.description = "";
   showCreateModal.value = true;
 }
@@ -365,6 +369,10 @@ async function submitCreateMap() {
     formValidationError.value = "请输入地图名称";
     return;
   }
+  if (!createFormData.asset.storageKey.trim() || createFormData.asset.sizeBytes <= 0 || !/^[0-9a-f]{64}$/i.test(createFormData.asset.sha256.trim())) {
+    formValidationError.value = "请填写有效的底图资源键、大小与 64 位 SHA-256 摘要";
+    return;
+  }
 
   isSubmitting.value = true;
   formValidationError.value = "";
@@ -373,8 +381,12 @@ async function submitCreateMap() {
     await createSiteMap({
       mapCode: createFormData.mapCode.trim(),
       mapName: createFormData.mapName.trim(),
-      backgroundType: createFormData.backgroundType,
-      description: createFormData.description.trim(),
+      asset: {
+        storageKey: createFormData.asset.storageKey.trim(),
+        mimeType: createFormData.asset.mimeType,
+        sizeBytes: createFormData.asset.sizeBytes,
+        sha256: createFormData.asset.sha256.trim(),
+      },
     });
     showCreateModal.value = false;
     await loadMapList();

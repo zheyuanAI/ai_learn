@@ -38,85 +38,16 @@
       :page="1"
       :size="10"
     >
-      <!-- 任务编号 -->
-      <template #taskNo="{ value }">
-        <span class="mono-code">{{ value }}</span>
-      </template>
-
       <!-- 销售单号 -->
       <template #soNo="{ value }">
         <span class="mono-text">{{ value }}</span>
       </template>
 
-      <!-- 拣货移位路径 -->
-      <template #route="{ row }">
-        <div class="route-cell">
-          <span class="loc-tag">{{ row.sourceLocationCode }}</span>
-          <span class="route-arrow">➔</span>
-          <span class="loc-tag target">{{ row.shippingLocationCode }}</span>
-        </div>
-      </template>
-
-      <!-- 拣货数量 -->
-      <template #pickQty="{ row }">
-        <QuantityText :value="row.pickQty" :unit="row.uom" />
-      </template>
-
-      <!-- 状态 -->
       <template #status="{ value }">
-        <StatusBadge
-          :type="value === 'Completed' ? 'success' : 'warning'"
-          :text="value === 'Completed' ? '拣货入暂存位' : '已退回原库位'"
-        />
+        <StatusBadge :type="value === 'Approved' ? 'info' : 'default'" :text="value" />
       </template>
     </DataTable>
 
-    <!-- 直接拣货执行弹窗 (供父组件调用或直接操作) -->
-    <div v-if="isPickModalOpen" class="modal-mask" @click.self="isPickModalOpen = false">
-      <div class="modal-panel">
-        <div class="modal-header">
-          <h3 class="modal-title">执行销售直接拣货</h3>
-          <button type="button" class="btn-close" @click="isPickModalOpen = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitDirectPick">
-          <div class="rule-hint">
-            <strong>底层事务规则：</strong>
-            <span>优先消耗当前行未拣预留；不足部分自动在来源库位建立预留，随后实物与预留同步移入发货暂存位（{{ pickForm.shippingLocationCode || 'SHP-01' }}）。</span>
-          </div>
-
-          <div class="info-card">
-            <span class="lbl">物料信息</span>
-            <strong>{{ currentLine?.productName }} ({{ currentLine?.sku }})</strong>
-            <span class="sub">订购量: {{ currentLine?.orderedQty }} | 已拣: {{ currentLine?.pickedQty }} | 可拣上限: {{ maxPickable }}</span>
-          </div>
-
-          <div class="form-item">
-            <label>来源拣选库位 (Source Location) <span class="req">*</span></label>
-            <select v-model="pickForm.sourceLocationId" class="form-select" required>
-              <option value="6">FG-A-01 (成品常规存储位01 - 可用 400)</option>
-              <option value="4">ST-B-02 (标准件存储位B02 - 可用 300)</option>
-            </select>
-          </div>
-
-          <div class="form-item">
-            <label>发货暂存库位 (ShippingStaging) <span class="req">*</span></label>
-            <input :value="pickForm.shippingLocationCode || 'SHP-01'" type="text" class="form-input" disabled />
-          </div>
-
-          <div class="form-item">
-            <label>本次拣货数量 <span class="req">*</span></label>
-            <input v-model="pickForm.pickedQty" type="text" class="form-input text-cyan font-bold" required />
-          </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn-secondary" @click="isPickModalOpen = false">取消</button>
-            <button type="submit" class="btn-primary" :disabled="submitting">
-              {{ submitting ? '拣货移位中...' : '确认直接拣货' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -134,24 +65,20 @@ import QuantityText from "@/components/common/QuantityText.vue";
 import EmptyState from "@/components/common/EmptyState.vue";
 import ErrorState from "@/components/common/ErrorState.vue";
 import type { ViewState } from "@/types/common";
-import type { PickTask, SalesOrderLine } from "@/types/sales";
-import { stringSub } from "@/types/inventory";
-import { getPickTasks, confirmDirectPick } from "@/api/sales";
+import type { SalesOrder } from "@/types/sales";
+import { getPickTasks } from "@/api/sales";
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
-const taskList = ref<PickTask[]>([]);
+const taskList = ref<SalesOrder[]>([]);
 const searchKeyword = ref("");
 
 const columns: TableColumn[] = [
   { key: "taskNo", label: "拣货任务号", width: "160px" },
   { key: "soNo", label: "销售订单号", width: "150px" },
-  { key: "sku", label: "物料编码", width: "130px" },
-  { key: "productName", label: "物料名称", minWidth: "140px" },
-  { key: "route", label: "移位路径 (来源 ➔ 发货暂存)", width: "230px" },
-  { key: "pickQty", label: "拣货数量", width: "110px", align: "right" },
+  { key: "fulfillmentStatus", label: "服务端履约进度", width: "160px" },
   { key: "status", label: "状态", width: "130px", align: "center" },
-  { key: "confirmedAt", label: "拣货确认时间", width: "160px" },
+  { key: "updatedAt", label: "订单更新时间", width: "160px" },
 ];
 
 const filteredTaskList = computed(() => {
@@ -159,29 +86,8 @@ const filteredTaskList = computed(() => {
   const kw = searchKeyword.value.toLowerCase();
   return taskList.value.filter(
     (t) =>
-      t.taskNo.toLowerCase().includes(kw) ||
-      t.soNo.toLowerCase().includes(kw) ||
-      t.sku.toLowerCase().includes(kw)
+      t.soNo.toLowerCase().includes(kw)
   );
-});
-
-// 弹窗表单状态
-const isPickModalOpen = ref(false);
-const submitting = ref(false);
-const currentOrderId = ref<string | number>("");
-const currentLine = ref<SalesOrderLine | null>(null);
-
-const pickForm = reactive({
-  sourceLocationId: "6",
-  sourceLocationCode: "FG-A-01",
-  shippingLocationId: "7",
-  shippingLocationCode: "SHP-01",
-  pickedQty: "20",
-});
-
-const maxPickable = computed(() => {
-  if (!currentLine.value) return "0";
-  return stringSub(currentLine.value.orderedQty, currentLine.value.pickedQty);
 });
 
 async function fetchTasks() {
@@ -189,7 +95,7 @@ async function fetchTasks() {
   errorMessage.value = "";
   try {
     const res = await getPickTasks();
-    taskList.value = res.data.records;
+    taskList.value = res.data.records || [];
     viewState.value = taskList.value.length === 0 ? "empty" : "ready";
   } catch (err: any) {
     console.error("[PickTaskView] 获取失败:", err);
@@ -203,41 +109,9 @@ function resetSearch() {
   fetchTasks();
 }
 
-/**
- * 供外部调用的直接拣货弹窗打开方法
- */
-function triggerDirectPickModal(orderId: string | number, line: SalesOrderLine) {
-  currentOrderId.value = orderId;
-  currentLine.value = line;
-  pickForm.pickedQty = stringSub(line.orderedQty, line.pickedQty);
-  isPickModalOpen.value = true;
-}
-
 defineExpose({
-  triggerDirectPickModal,
   fetchTasks,
 });
-
-async function submitDirectPick() {
-  if (!currentLine.value || !currentOrderId.value) return;
-  submitting.value = true;
-  try {
-    await confirmDirectPick({
-      salesOrderId: currentOrderId.value,
-      salesOrderLineId: currentLine.value.id,
-      productId: currentLine.value.productId,
-      pickedQty: pickForm.pickedQty,
-      sourceLocationId: pickForm.sourceLocationId,
-      shippingLocationId: pickForm.shippingLocationId,
-    });
-    isPickModalOpen.value = false;
-    await fetchTasks();
-  } catch (err: any) {
-    alert(err?.message || "拣货失败");
-  } finally {
-    submitting.value = false;
-  }
-}
 
 onMounted(() => {
   fetchTasks();

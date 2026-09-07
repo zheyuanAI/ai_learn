@@ -9,7 +9,7 @@
       <template #actions>
         <!-- 模块快捷互通导航 -->
         <div class="nav-sub-tabs">
-          <RouterLink to="/gis" class="tab-btn">
+          <RouterLink to="/dashboard" class="tab-btn">
             <span>📊 综合看板</span>
           </RouterLink>
           <button type="button" class="tab-btn is-active">
@@ -21,15 +21,15 @@
 
     <!-- 追溯检索控制栏 -->
     <FilterBar
-      v-model="queryParams.entryCode"
-      placeholder="输入单据/批次/设备编码 (如 SO-20260826-018)..."
+      v-model="queryParams.entityId"
+      placeholder="输入后端实体 UUID..."
       @search="loadTraceChain"
       @reset="handleReset"
     >
       <!-- 切入类型选择 -->
       <div class="filter-field">
         <label class="filter-label">切入实体类型</label>
-        <select v-model="queryParams.entryType" class="filter-select" @change="handleTypeChange">
+        <select v-model="queryParams.entryType" class="filter-select">
           <option value="SALES_ORDER">🛒 销售订单 (SO)</option>
           <option value="WORK_ORDER">📋 制造工单 (WO)</option>
           <option value="DEVICE_ALARM">🚨 设备告警 (ALARM)</option>
@@ -60,31 +60,6 @@
         </div>
       </div>
 
-      <!-- 四态模拟控制 (供验收验证) -->
-      <div class="filter-field">
-        <label class="filter-label">四态模式模拟</label>
-        <select v-model="queryParams.simulateState" class="filter-select" @change="loadTraceChain">
-          <option value="normal">正常事实 (Ready)</option>
-          <option value="empty">空链状态 (Empty)</option>
-          <option value="error">源服务故障 (Error)</option>
-        </select>
-      </div>
-
-      <template #right>
-        <!-- 快速示范填充预设 -->
-        <div class="preset-pills">
-          <span class="preset-label">快速切入示例:</span>
-          <button type="button" class="pill-btn" @click="applyPreset('SO-20260826-018', 'SALES_ORDER', 'FORWARD')">
-            销售单018
-          </button>
-          <button type="button" class="pill-btn" @click="applyPreset('ALM-20260826-033', 'DEVICE_ALARM', 'REVERSE')">
-            告警033
-          </button>
-          <button type="button" class="pill-btn" @click="applyPreset('WO-20260826-018', 'WORK_ORDER', 'FORWARD')">
-            工单018
-          </button>
-        </div>
-      </template>
     </FilterBar>
 
     <!-- 追溯诊断与指标汇总看板条 -->
@@ -157,14 +132,8 @@
         <EmptyState
           icon="⛓️"
           title="未检索到对应业务实体的关联事实链路"
-          description="输入的单据或批次编码暂无跨域关联事实，请检查单据号是否准确，或更换切入类型后重试。"
-        >
-          <template #action>
-            <button type="button" class="btn-retry-primary" @click="applyPreset('SO-20260826-018', 'SALES_ORDER', 'FORWARD')">
-              装载典型销售闭环示例
-            </button>
-          </template>
-        </EmptyState>
+            description="请输入后端已分配的实体 UUID，并选择对应实体类型后查询。"
+        />
       </div>
 
       <!-- 4. 就绪态 (Ready) 追溯链条拓扑流 -->
@@ -294,14 +263,12 @@ const selectedNode = ref<TraceNode | null>(null);
 // 查询参数
 const queryParams = reactive<{
   entryType: TraceNodeType;
-  entryCode: string;
+  entityId: string;
   direction: TraceDirection;
-  simulateState: "normal" | "empty" | "error";
 }>({
   entryType: "SALES_ORDER",
-  entryCode: "SO-20260826-018",
+  entityId: "",
   direction: "FORWARD",
-  simulateState: "normal",
 });
 
 // 追溯结果数据
@@ -311,15 +278,20 @@ const chainResult = ref<TraceabilityChainResult | null>(null);
  * 装载追溯拓扑关系链
  */
 async function loadTraceChain() {
+  if (!queryParams.entityId.trim()) {
+    chainResult.value = null;
+    viewState.value = "empty";
+    return;
+  }
+
   viewState.value = "loading";
   errorMessage.value = "";
 
   try {
     const result = await fetchTraceabilityChain({
-      entryType: queryParams.entryType,
-      entryCode: queryParams.entryCode.trim(),
+      entity_type: queryParams.entryType,
+      entity_id: queryParams.entityId.trim(),
       direction: queryParams.direction,
-      simulateState: queryParams.simulateState,
     });
 
     chainResult.value = result;
@@ -344,50 +316,14 @@ function setDirection(dir: TraceDirection) {
 }
 
 /**
- * 切换切入实体类型时自动填入适配默认编码
- */
-function handleTypeChange() {
-  switch (queryParams.entryType) {
-    case "SALES_ORDER":
-      queryParams.entryCode = "SO-20260826-018";
-      queryParams.direction = "FORWARD";
-      break;
-    case "WORK_ORDER":
-      queryParams.entryCode = "WO-20260826-018";
-      queryParams.direction = "FORWARD";
-      break;
-    case "DEVICE_ALARM":
-      queryParams.entryCode = "ALM-20260826-033";
-      queryParams.direction = "REVERSE";
-      break;
-    case "INVENTORY_BATCH":
-      queryParams.entryCode = "LOT-20260820-003";
-      queryParams.direction = "REVERSE";
-      break;
-  }
-  loadTraceChain();
-}
-
-/**
- * 应用快捷预设
- */
-function applyPreset(code: string, type: TraceNodeType, dir: TraceDirection) {
-  queryParams.entryCode = code;
-  queryParams.entryType = type;
-  queryParams.direction = dir;
-  queryParams.simulateState = "normal";
-  loadTraceChain();
-}
-
-/**
  * 重置检索条件
  */
 function handleReset() {
   queryParams.entryType = "SALES_ORDER";
-  queryParams.entryCode = "SO-20260826-018";
+  queryParams.entityId = "";
   queryParams.direction = "FORWARD";
-  queryParams.simulateState = "normal";
-  loadTraceChain();
+  chainResult.value = null;
+  viewState.value = "empty";
 }
 
 /**
@@ -406,7 +342,7 @@ function navigateToRoute(routePath: string) {
 }
 
 onMounted(() => {
-  loadTraceChain();
+  viewState.value = "empty";
 });
 </script>
 

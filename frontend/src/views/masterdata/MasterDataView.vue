@@ -114,7 +114,8 @@
  * 职责：聚合商品物料、库位、客户、供应商4类基础主数据，支持完整四态（loading, ready, empty, error）
  * 流程：通过 activeTab 切换不同主数据模型，调用 masterData.ts API 并自动回退
  */
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
+import { useRoute } from "vue-router";
 import PageHeader from "@/components/common/PageHeader.vue";
 import FilterBar from "@/components/common/FilterBar.vue";
 import EmptyState from "@/components/common/EmptyState.vue";
@@ -131,10 +132,16 @@ import {
   createProduct,
   updateProduct,
   createLocation,
+  updateLocation,
+  createCustomer,
+  updateCustomer,
+  createSupplier,
+  updateSupplier,
 } from "@/api/masterData";
 
 type TabKey = "products" | "locations" | "customers" | "suppliers";
 
+const route = useRoute();
 const activeTab = ref<TabKey>("products");
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
@@ -234,12 +241,28 @@ const isSaving = ref(false);
  * @param key 标签页键名
  */
 function switchTab(key: TabKey) {
+  // 修改：保持既有 tab 切换逻辑，直达路由的 query 只负责初始化当前 tab，不改变业务数据请求入口。
   activeTab.value = key;
   searchKeyword.value = "";
   selectedCategory.value = "";
   selectedLocationType.value = "";
   currentPage.value = 1;
   fetchCurrentTabData();
+}
+
+/**
+ * 用途：把地址栏中的主数据 tab 转换为当前页面支持的内部 tab。
+ * 入参：route.query.tab，兼容旧菜单使用的 warehouses 标识。
+ * 出参：现有 TabKey；未知或缺失值回退到商品主数据。
+ * 流程：仓库菜单映射到当前统一的 locations 视图，其余合法 tab 原样使用。
+ */
+function resolveRouteTab(tab: unknown): TabKey {
+  const value = String(tab || "");
+  if (value === "warehouses") return "locations";
+  if (value === "products" || value === "locations" || value === "customers" || value === "suppliers") {
+    return value;
+  }
+  return "products";
 }
 
 /**
@@ -270,18 +293,22 @@ async function fetchCurrentTabData() {
       totalCount.value = res.data.total;
       tabCounts.value.locations = res.data.total;
     } else if (activeTab.value === "customers") {
-      const res = await getCustomers({ keyword: searchKeyword.value });
-      const raw = res.data as any;
-      const list: any[] = Array.isArray(raw) ? raw : (raw?.records || []);
-      tableData.value = list;
-      totalCount.value = raw?.total ?? list.length;
+      const res = await getCustomers({
+        page: currentPage.value,
+        size: pageSize.value,
+        keyword: searchKeyword.value,
+      });
+      tableData.value = res.data.records;
+      totalCount.value = res.data.total;
       tabCounts.value.customers = totalCount.value;
     } else {
-      const res = await getSuppliers({ keyword: searchKeyword.value });
-      const raw = res.data as any;
-      const list: any[] = Array.isArray(raw) ? raw : (raw?.records || []);
-      tableData.value = list;
-      totalCount.value = raw?.total ?? list.length;
+      const res = await getSuppliers({
+        page: currentPage.value,
+        size: pageSize.value,
+        keyword: searchKeyword.value,
+      });
+      tableData.value = res.data.records;
+      totalCount.value = res.data.total;
       tabCounts.value.suppliers = totalCount.value;
     }
 
@@ -331,7 +358,23 @@ async function handleSave(data: any) {
         await createProduct(data);
       }
     } else if (activeTab.value === "locations") {
-      await createLocation(data);
+      if (data.id) {
+        await updateLocation(data.id, data);
+      } else {
+        await createLocation(data);
+      }
+    } else if (activeTab.value === "customers") {
+      if (data.id) {
+        await updateCustomer(data.id, data);
+      } else {
+        await createCustomer(data);
+      }
+    } else {
+      if (data.id) {
+        await updateSupplier(data.id, data);
+      } else {
+        await createSupplier(data);
+      }
     }
     closeEditor();
     await fetchCurrentTabData();
@@ -343,8 +386,25 @@ async function handleSave(data: any) {
 }
 
 onMounted(() => {
+  // 修改：首次加载按直达路由 query 选择业务 tab，避免旧菜单进入后仍停留在默认商品页。
+  activeTab.value = resolveRouteTab(route.query.tab);
   fetchCurrentTabData();
 });
+
+watch(
+  () => route.query.tab,
+  (tab) => {
+    const nextTab = resolveRouteTab(tab);
+    if (nextTab === activeTab.value) return;
+    // 修改：支持浏览器前进/后退或同组件 query 导航时同步业务 tab。
+    activeTab.value = nextTab;
+    searchKeyword.value = "";
+    selectedCategory.value = "";
+    selectedLocationType.value = "";
+    currentPage.value = 1;
+    fetchCurrentTabData();
+  }
+);
 </script>
 
 <style scoped>

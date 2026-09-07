@@ -4,6 +4,8 @@ import com.ailearn.platform.core.config.CoreIdempotencyExecutor;
 import com.ailearn.platform.core.manufacturing.dispatch.domain.DispatchOrder;
 import com.ailearn.platform.core.manufacturing.dispatch.domain.DispatchRepository;
 import com.ailearn.platform.core.manufacturing.dispatch.dto.DispatchCreateRequest;
+import com.ailearn.platform.core.manufacturing.dispatch.dto.DispatchPageQuery;
+import com.ailearn.platform.core.manufacturing.dispatch.domain.DispatchPage;
 import com.ailearn.platform.core.manufacturing.dispatch.exception.DispatchErrorCode;
 import com.ailearn.platform.core.manufacturing.dispatch.exception.DispatchException;
 import com.ailearn.platform.core.manufacturing.dispatch.port.WorkOrderReleasePort;
@@ -23,6 +25,8 @@ import java.time.OffsetDateTime;
 import java.util.HexFormat;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.List;
+import java.util.Locale;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -74,7 +78,10 @@ public class DispatchApplicationServiceImpl implements DispatchApplicationServic
         validate(request, idempotencyKey);
         return idempotency.execute("mes:dispatch:create", actor.tenantId(), idempotencyKey,
                 digest(request), DispatchOrder.class, () -> {
+                    workOrderReleasePort.lockWorkOrder(actor.tenantId(), request.workOrderId());
                     requireReleased(actor.tenantId(), request.workOrderId());
+                    requireOperationInRouting(actor, request.operationId(), request.workOrderId());
+                    checkCumulativeQuantity(actor.tenantId(), request.workOrderId(), request.dispatchQty());
                     return repository.saveIfAbsent(DispatchOrder.draft(UUID.randomUUID(), actor.tenantId(),
                             request.workOrderId(), request.operationId(), request.operatorId(), request.dispatchQty(),
                             request.deviceId(), actor.userId(), now()));
@@ -108,6 +115,26 @@ public class DispatchApplicationServiceImpl implements DispatchApplicationServic
         return repository.find(TenantContextHolder.requireTenantId(), dispatchId);
     }
 
+    @Override
+    @PreAuthorize("hasAuthority('mes:dispatch:manage')")
+    public DispatchPage page(DispatchPageQuery query) {
+        Actor actor = actor();
+        DispatchPageQuery normalized = query == null ? new DispatchPageQuery() : query.normalized();
+        List<DispatchOrder> filtered = repository.findAll(actor.tenantId()).stream()
+                .filter(value -> normalized.getWorkOrderId() == null
+                        || normalized.getWorkOrderId().equals(value.workOrderId()))
+                .filter(value -> normalized.getOperationId() == null
+                        || normalized.getOperationId().equals(value.operationId()))
+                .filter(value -> normalized.getOperatorId() == null
+                        || normalized.getOperatorId().equals(value.operatorId()))
+                .filter(value -> normalized.getStatus() == null
+                        || normalized.getStatus().equalsIgnoreCase(value.status().name()))
+                .toList();
+        int from = Math.min((normalized.getPage() - 1) * normalized.getSize(), filtered.size());
+        int to = Math.min(from + normalized.getSize(), filtered.size());
+        return new DispatchPage(filtered.subList(from, to), filtered.size(), normalized.getPage(), normalized.getSize());
+    }
+
     private DispatchOrder transition(UUID id, String key, String operation,
                                      Transition transition) {
         Actor actor = actor();
@@ -117,6 +144,7 @@ public class DispatchApplicationServiceImpl implements DispatchApplicationServic
         DispatchOrder current = required(actor.tenantId(), id);
         return idempotency.execute("mes:dispatch:" + operation, actor.tenantId(), key,
                 digest(id), DispatchOrder.class, () -> {
+                    requireOperationInRouting(actor, current.operationId(), current.workOrderId());
                     if (operation.equals("release") || operation.equals("start")) {
                         requireReleased(actor.tenantId(), current.workOrderId());
                     }
@@ -136,6 +164,26 @@ public class DispatchApplicationServiceImpl implements DispatchApplicationServic
             throw new DispatchException(DispatchErrorCode.MES_DISPATCH_002,
                     "工单必须处于 Released 状态");
         }
+    }
+
+    /** 校验派工工序属于工单冻结 Routing，避免把任意 UUID 写成生产安排。 */
+    private void requireOperationInRouting(Actor actor, UUID operationId, UUID workOrderId) {
+        if (!workOrderReleasePort.isOperationInRouting(actor.tenantId(), workOrderId, operationId)) {
+            throw new DispatchException(DispatchErrorCode.MES_DISPATCH_005,
+                    "派工工序不属于工单冻结 Routing");
+        }
+    }
+
+    /** 在工单行锁保护下校验所有有效派工的累计数量不超过工单计划数量。 */
+    private void checkCumulativeQuantity(UUID tenantId, UUID workOrderId, BigDecimal requested) {
+        workOrderReleasePort.plannedQty(tenantId, workOrderId).ifPresent(planned -> {
+            BigDecimal existing = repository.findByWorkOrder(tenantId, workOrderId).stream()
+                    .map(DispatchOrder::dispatchQty).reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (existing.add(requested).compareTo(planned) > 0) {
+                throw new DispatchException(DispatchErrorCode.MES_DISPATCH_006,
+                        "累计派工数量不能超过工单计划数量");
+            }
+        });
     }
 
     private Actor actor() {

@@ -116,6 +116,7 @@ public class MqttTelemetryMessageParser {
         assertClaim(root, "device_code", device.deviceCode(), false);
     }
 
+    /** 校验载荷中的可选身份断言；断言与主题/凭证恢复身份不一致时拒绝消息。 */
     private void assertClaim(JsonNode root, String field, String expected, boolean ignoreCase) {
         String claimed = text(root, field);
         if (claimed == null) {
@@ -166,6 +167,7 @@ public class MqttTelemetryMessageParser {
         }
     }
 
+    /** 读取 JSON 标量文本字段，数组、对象和缺失值统一视为未提供。 */
     private String text(JsonNode root, String field) {
         JsonNode value = root.get(field);
         return value == null || value.isNull() || !value.isValueNode() ? null : value.asText();
@@ -180,6 +182,7 @@ public class MqttTelemetryMessageParser {
         }
     }
 
+    /** 构造适配层格式错误，确保无效 MQTT 消息不会进入统一事实摄取服务。 */
     private TelemetryException invalid(String detail) {
         return new TelemetryException(TelemetryErrorCode.INVALID_MESSAGE, detail);
     }

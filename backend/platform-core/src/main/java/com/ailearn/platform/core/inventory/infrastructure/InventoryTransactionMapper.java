@@ -81,7 +81,7 @@ public interface InventoryTransactionMapper {
             </script>
             """)
     @Results(id = "transactionRowMap", value = {
-            @Result(property = "id", column = "id", id = true),
+            @Result(property = "id", column = "id", javaType = UUID.class, id = true),
             @Result(property = "tenantId", column = "tenant_id"),
             @Result(property = "transactionNo", column = "transaction_no"),
             @Result(property = "transactionType", column = "transaction_type"),

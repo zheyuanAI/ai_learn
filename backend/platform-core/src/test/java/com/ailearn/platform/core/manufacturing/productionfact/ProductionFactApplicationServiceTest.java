@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,9 +32,15 @@ import com.ailearn.platform.core.manufacturing.productionfact.exception.Producti
 import com.ailearn.platform.core.manufacturing.productionfact.infrastructure.InMemoryProductionFactRepository;
 import com.ailearn.platform.core.manufacturing.foundation.domain.WorkOrderFact;
 import com.ailearn.platform.core.manufacturing.foundation.domain.WorkOrderStatus;
+import com.ailearn.platform.core.manufacturing.foundation.domain.BomComponentFact;
+import com.ailearn.platform.core.manufacturing.foundation.domain.BomFact;
+import com.ailearn.platform.core.manufacturing.foundation.domain.BomStatus;
+import com.ailearn.platform.core.manufacturing.foundation.domain.port.BomFactsPort;
 import com.ailearn.platform.shared.context.RequestContextHolder;
 import com.ailearn.platform.shared.context.TenantContextHolder;
 import com.ailearn.platform.shared.context.UserContextHolder;
+import com.ailearn.platform.shared.idempotency.InMemoryIdempotencyStorage;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -73,6 +80,8 @@ class ProductionFactApplicationServiceTest {
     private InventoryCommandService inventoryCommandService;
     @Mock
     private WorkOrderExecutionService workOrderService;
+    @Mock
+    private BomFactsPort bomFactsPort;
 
     private InMemoryProductionFactRepository repository;
     private ProductionFactApplicationServiceImpl service;
@@ -192,6 +201,40 @@ class ProductionFactApplicationServiceTest {
 
         assertEquals("MES_TENANT_001", exception.getBusinessCode());
         verify(inventoryCommandService, never()).decrease(any());
+    }
+
+    /** 超出冻结 BOM 预计用量时必须带原因，并在确认阶段持有专用超额领料权限。 */
+    @Test
+    void overBomIssueRequiresReasonAndDedicatedPermissionAtConfirmation() {
+        when(bomFactsPort.findActiveBom(eq(TENANT_ID), any(UUID.class))).thenReturn(Optional.of(new BomFact(
+                UUID.randomUUID(), TENANT_ID, PRODUCT_ID, "BOM-1", "V1", BomStatus.ACTIVE,
+                List.of(new BomComponentFact(MATERIAL_ID, qty("1"), "PCS", BigDecimal.ZERO)),
+                false, USER_ID, TIME)));
+        ProductionFactApplicationServiceImpl bomAwareService = new ProductionFactApplicationServiceImpl(
+                repository, inventoryCommandService, workOrderService, bomFactsPort,
+                new InMemoryIdempotencyStorage(), new ObjectMapper().findAndRegisterModules());
+
+        MaterialIssueCreateRequest missingReason = new MaterialIssueCreateRequest("MI-OVER-1", WORK_ORDER_ID,
+                List.of(new MaterialItemRequest(MATERIAL_ID, WAREHOUSE_ID, LOCATION_ID, qty("11"))));
+        ProductionFactException missingReasonException = assertThrows(ProductionFactException.class,
+                () -> bomAwareService.createMaterialIssue(missingReason, "over-create-missing-reason"));
+        assertEquals("MES_FACT_002", missingReasonException.getBusinessCode());
+
+        MaterialIssue draft = bomAwareService.createMaterialIssue(new MaterialIssueCreateRequest(
+                "MI-OVER-2", WORK_ORDER_ID,
+                List.of(new MaterialItemRequest(MATERIAL_ID, WAREHOUSE_ID, LOCATION_ID, qty("11"))),
+                "现场换料"), "over-create-with-reason");
+        when(inventoryCommandService.decrease(any())).thenReturn(mutation("MATERIAL_ISSUE_OVER"));
+
+        ProductionFactException permissionException = assertThrows(ProductionFactException.class,
+                () -> bomAwareService.confirmMaterialIssue(draft.id(), "over-confirm-without-permission"));
+        assertEquals("MES_FACT_002", permissionException.getBusinessCode());
+
+        RequestContextHolder.getContext().setPermissions(Set.of("mes:material:overage"));
+        MaterialIssue confirmed = (MaterialIssue) bomAwareService
+                .confirmMaterialIssue(draft.id(), "over-confirm-with-permission").fact();
+        assertEquals(MaterialDocumentStatus.Confirmed, confirmed.status());
+        verify(inventoryCommandService).decrease(any());
     }
 
     private WorkOrderLifecycle workOrder(UUID tenantId, WorkOrderStatus status) {

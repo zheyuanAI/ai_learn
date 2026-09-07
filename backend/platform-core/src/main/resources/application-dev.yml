@@ -1,0 +1,11 @@
+# 本地练习 profile：统一连接当前机器的 PostgreSQL 12.1，并打开阶段 7 的只读 Facts 联调。
+# 生产或其他环境仍使用 application.yml 的默认关闭策略，并通过外部密钥注入。
+core:
+  facts:
+    iot:
+      enabled: true
+      base-url: http://127.0.0.1:10004
+      hmac-secret: stage07-local-s7-secret
+  context:
+    iot:
+      hmac-secret: stage07-local-context-secret

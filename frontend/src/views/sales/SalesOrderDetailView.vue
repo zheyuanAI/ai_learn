@@ -286,9 +286,15 @@
           <div class="form-item">
             <label>来源库位 <span class="req">*</span></label>
             <select v-model="pickSourceLocationId" class="form-select" required>
-              <option value="6">FG-A-01 (成品常规存储位01)</option>
-              <option value="4">ST-B-02 (标准件存储位B02)</option>
+              <option value="">请选择真实来源库位</option>
+              <option v-for="location in sourceLocations" :key="location.id" :value="String(location.id)">
+                {{ location.code }} ({{ location.name }})
+              </option>
             </select>
+          </div>
+          <div class="form-item">
+            <label>后端履约操作 UUID <span class="req">*</span></label>
+            <input v-model="pickOperationId" type="text" class="form-input font-mono" placeholder="输入真实 operationId" required />
           </div>
           <div class="form-item">
             <label>本次拣货数量 <span class="req">*</span></label>
@@ -316,8 +322,15 @@
           <div class="form-item">
             <label>退回目标库位 <span class="req">*</span></label>
             <select v-model="returnToLocationId" class="form-select" required>
-              <option value="6">FG-A-01 (原成品常规存储位01)</option>
+              <option value="">请选择真实退回库位</option>
+              <option v-for="location in sourceLocations" :key="location.id" :value="String(location.id)">
+                {{ location.code }} ({{ location.name }})
+              </option>
             </select>
+          </div>
+          <div class="form-item">
+            <label>后端履约操作 UUID <span class="req">*</span></label>
+            <input v-model="returnOperationId" type="text" class="form-input font-mono" placeholder="输入真实 operationId" required />
           </div>
           <div class="form-item">
             <label>退回数量 (最大: {{ selectedLineForReturn.shippingStagedQty }}) <span class="req">*</span></label>
@@ -388,7 +401,8 @@ import ReservationDetailView from "./ReservationDetailView.vue";
 import ShipmentConfirmView from "./ShipmentConfirmView.vue";
 import type { ViewState } from "@/types/common";
 import type { SalesOrder, SalesOrderLine } from "@/types/sales";
-import { stringSub } from "@/types/inventory";
+import { stringSub, type Location } from "@/types/inventory";
+import { getLocations } from "@/api/masterData";
 import {
   getSalesOrderById,
   submitSalesOrder,
@@ -421,17 +435,21 @@ const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 const order = ref<SalesOrder | null>(null);
 const actionLoading = ref(false);
+const sourceLocations = ref<Location[]>([]);
+const shippingLocationId = ref("");
 
 // 弹窗状态
 const isPickModalOpen = ref(false);
 const selectedLineForPick = ref<SalesOrderLine | null>(null);
-const pickSourceLocationId = ref("6");
-const pickQtyInput = ref("20");
+const pickSourceLocationId = ref("");
+const pickOperationId = ref("");
+const pickQtyInput = ref("");
 
 const isReturnModalOpen = ref(false);
 const selectedLineForReturn = ref<SalesOrderLine | null>(null);
-const returnToLocationId = ref("6");
-const returnQtyInput = ref("10");
+const returnToLocationId = ref("");
+const returnOperationId = ref("");
+const returnQtyInput = ref("");
 const returnReason = ref("");
 
 const isShipmentOpen = ref(false);
@@ -441,17 +459,14 @@ const isManualCompleteOpen = ref(false);
 const manualCompleteReason = ref("");
 
 watch(
-  () => props.orderId,
-  (val) => {
-    if (val && props.visible) fetchDetail();
-  }
-);
-
-watch(
-  () => props.visible,
-  (val) => {
-    if (val && props.orderId) fetchDetail();
-  }
+  () => [props.orderId, props.visible] as const,
+  ([orderId, visible]) => {
+    // 修改：合并 props 监听并立即执行，确保直达/刷新路由主动加载详情，列表抽屉仍可复用同一组件。
+    if (orderId && visible) {
+      void fetchDetail();
+    }
+  },
+  { immediate: true }
 );
 
 async function fetchDetail() {
@@ -461,6 +476,7 @@ async function fetchDetail() {
   try {
     const res = await getSalesOrderById(props.orderId);
     order.value = res.data;
+    await loadLocations();
     viewState.value = "ready";
   } catch (err: any) {
     console.error("[SalesOrderDetailView] 获取失败:", err);
@@ -554,20 +570,23 @@ function openDirectPick(line?: SalesOrderLine) {
   if (!line) return;
   selectedLineForPick.value = line;
   pickQtyInput.value = stringSub(line.orderedQty, line.pickedQty);
+  pickSourceLocationId.value = "";
+  pickOperationId.value = "";
   isPickModalOpen.value = true;
 }
 
 async function submitPick() {
-  if (!order.value || !selectedLineForPick.value) return;
+  if (!order.value || !selectedLineForPick.value || !pickOperationId.value || !pickSourceLocationId.value || !shippingLocationId.value) return;
   actionLoading.value = true;
   try {
-    await confirmDirectPick({
-      salesOrderId: order.value.id,
-      salesOrderLineId: selectedLineForPick.value.id,
-      productId: selectedLineForPick.value.productId,
-      pickedQty: pickQtyInput.value,
-      sourceLocationId: pickSourceLocationId.value,
-      shippingLocationId: "7",
+    await confirmDirectPick(pickOperationId.value, {
+      salesOrderId: String(order.value.id),
+      lines: [{
+        salesOrderLineId: String(selectedLineForPick.value.id),
+        pickedQty: pickQtyInput.value,
+        sourceLocationId: pickSourceLocationId.value,
+        shippingLocationId: shippingLocationId.value,
+      }],
     });
     isPickModalOpen.value = false;
     await fetchDetail();
@@ -586,19 +605,22 @@ function openReturnPickModal(line?: SalesOrderLine) {
   if (!line) return;
   selectedLineForReturn.value = line;
   returnQtyInput.value = line.shippingStagedQty;
+  returnToLocationId.value = "";
+  returnOperationId.value = "";
   isReturnModalOpen.value = true;
 }
 
 async function submitReturnPick() {
-  if (!order.value || !selectedLineForReturn.value) return;
+  if (!order.value || !selectedLineForReturn.value || !returnOperationId.value || !returnToLocationId.value) return;
   actionLoading.value = true;
   try {
-    await returnPick({
-      salesOrderId: order.value.id,
-      salesOrderLineId: selectedLineForReturn.value.id,
-      returnQty: returnQtyInput.value,
-      toLocationId: returnToLocationId.value,
-      reason: returnReason.value,
+    await returnPick(returnOperationId.value, {
+      salesOrderId: String(order.value.id),
+      lines: [{
+        salesOrderLineId: String(selectedLineForReturn.value.id),
+        returnQty: returnQtyInput.value,
+        toLocationId: returnToLocationId.value,
+      }],
     });
     isReturnModalOpen.value = false;
     await fetchDetail();
@@ -613,7 +635,7 @@ async function submitReturnPick() {
 async function handleConfirmShipment(payload: any) {
   actionLoading.value = true;
   try {
-    await confirmShipment(payload);
+    await confirmShipment(payload.operationId, payload);
     isShipmentOpen.value = false;
     await fetchDetail();
     emit("refresh");
@@ -622,6 +644,17 @@ async function handleConfirmShipment(payload: any) {
   } finally {
     actionLoading.value = false;
   }
+}
+
+/** 加载当前订单仓库下的真实库位 UUID，供拣货与退回命令引用。 */
+async function loadLocations() {
+  if (!order.value?.warehouseId) {
+    sourceLocations.value = [];
+    return;
+  }
+  const response = await getLocations({ warehouseId: order.value.warehouseId, status: "ACTIVE", page: 1, size: 200 });
+  sourceLocations.value = response.data.records || [];
+  shippingLocationId.value = String(sourceLocations.value.find((location) => location.type === "ShippingStaging")?.id || "");
 }
 
 async function handleReleaseReservation(payload: any) {

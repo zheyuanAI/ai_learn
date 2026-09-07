@@ -4,14 +4,12 @@ import com.ailearn.platform.core.masterdata.domain.entity.Warehouse;
 import com.ailearn.platform.core.masterdata.domain.port.WarehouseReferencePort;
 import com.ailearn.platform.core.masterdata.infrastructure.repository.WarehouseRepository;
 import java.util.UUID;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.stereotype.Component;
 
 /**
  * 基于仓库主数据 Repository 的引用校验适配器。
  */
 @Component
-@ConditionalOnMissingBean(WarehouseReferencePort.class)
 public class WarehouseReferenceAdapter implements WarehouseReferencePort {
 
     private final WarehouseRepository warehouseRepository;

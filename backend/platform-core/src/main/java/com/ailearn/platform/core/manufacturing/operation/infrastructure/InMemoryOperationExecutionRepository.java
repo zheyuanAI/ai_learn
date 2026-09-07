@@ -44,5 +44,17 @@ public class InMemoryOperationExecutionRepository implements OperationExecutionR
                 .toList();
     }
 
+    /** 返回当前租户工序执行快照，供列表查询复用。 */
+    @Override
+    public List<OperationExecution> findAll(UUID tenantId) {
+        return store.entrySet().stream()
+                .filter(entry -> tenantId.equals(entry.getKey().tenantId()))
+                .map(java.util.Map.Entry::getValue)
+                .sorted(java.util.Comparator.<OperationExecution, java.time.OffsetDateTime>comparing(value -> value.events().isEmpty()
+                        ? java.time.OffsetDateTime.MIN : value.events().getFirst().occurredAt())
+                        .thenComparing(OperationExecution::id))
+                .toList();
+    }
+
     private record Key(UUID tenantId, UUID id) { }
 }

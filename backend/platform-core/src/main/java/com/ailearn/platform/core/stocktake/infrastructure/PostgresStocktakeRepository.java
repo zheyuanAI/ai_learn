@@ -2,6 +2,7 @@ package com.ailearn.platform.core.stocktake.infrastructure;
 
 import com.ailearn.platform.core.stocktake.domain.StocktakeLine;
 import com.ailearn.platform.core.stocktake.domain.StocktakeOrder;
+import com.ailearn.platform.core.stocktake.domain.StocktakePage;
 import com.ailearn.platform.core.stocktake.domain.StocktakeRepository;
 import com.ailearn.platform.core.stocktake.domain.StocktakeStatus;
 import com.ailearn.platform.shared.exception.BaseException;
@@ -56,6 +57,20 @@ public class PostgresStocktakeRepository implements StocktakeRepository {
             }
             List<StocktakeLineRow> lineRows = mapper.findLines(tenantId, id);
             return Optional.of(toOrder(row, lineRows == null ? List.of() : lineRows));
+        });
+    }
+
+    /**
+     * 按租户读取盘点分页并重建当前页聚合。
+     * 入参：可信租户、零基分页和白名单筛选；出参：当前页及总数；流程：读取表头后读取每单快照明细。
+     */
+    @Override
+    public StocktakePage findPage(UUID tenantId, int offset, int limit, String status, String keyword) {
+        return database(() -> {
+            List<StocktakeOrder> orders = mapper.findPage(tenantId, offset, limit, status, keyword).stream()
+                    .map(row -> toOrder(row, mapper.findLines(tenantId, row.getId())))
+                    .toList();
+            return new StocktakePage(orders, mapper.count(tenantId, status, keyword));
         });
     }
 

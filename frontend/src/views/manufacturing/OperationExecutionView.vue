@@ -184,7 +184,7 @@
               v-model="createForm.dispatchOrderId"
               type="text"
               class="form-input font-mono"
-              placeholder="例如 disp-003 或 DSP-20260902-01"
+              placeholder="输入真实派工 UUID"
               required
             />
           </div>
@@ -194,7 +194,7 @@
               v-model="createForm.deviceId"
               type="text"
               class="form-input font-mono"
-              placeholder="例如 dev-glue-01"
+              placeholder="输入真实设备 UUID（可选）"
             />
           </div>
           <div class="modal-footer">
@@ -357,8 +357,8 @@ const columns: TableColumn[] = [
 const createModalVisible = ref(false);
 const isSubmitting = ref(false);
 const createForm = reactive<OperationExecutionCreateRequest>({
-  dispatchOrderId: "disp-003",
-  deviceId: "dev-glue-01",
+  dispatchOrderId: "",
+  deviceId: "",
 });
 
 const activeExec = ref<OperationExecutionItem | null>(null);
@@ -441,8 +441,8 @@ function handlePageChange(page: number) {
 }
 
 function openCreateModal() {
-  createForm.dispatchOrderId = "disp-003";
-  createForm.deviceId = "dev-glue-01";
+  createForm.dispatchOrderId = "";
+  createForm.deviceId = "";
   createModalVisible.value = true;
 }
 
@@ -540,9 +540,11 @@ async function submitWorkReport() {
   try {
     await createWorkReport({
       operationExecutionId: activeExec.value.id as string,
+      workOrderId: activeExec.value.workOrderId,
+      operationId: activeExec.value.operationId,
       qualifiedQty: reportForm.qualifiedQty,
       defectQty: reportForm.defectQty,
-      reportTime: reportForm.reportTime,
+      reportTime: new Date(reportForm.reportTime).toISOString(),
       remark: reportForm.remark,
     });
     reportModalVisible.value = false;

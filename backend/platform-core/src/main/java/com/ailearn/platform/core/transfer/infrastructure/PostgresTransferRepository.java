@@ -2,6 +2,7 @@ package com.ailearn.platform.core.transfer.infrastructure;
 
 import com.ailearn.platform.core.transfer.domain.TransferLine;
 import com.ailearn.platform.core.transfer.domain.TransferOrder;
+import com.ailearn.platform.core.transfer.domain.TransferPage;
 import com.ailearn.platform.core.transfer.domain.TransferRepository;
 import com.ailearn.platform.core.transfer.domain.TransferStatus;
 import com.ailearn.platform.shared.exception.BaseException;
@@ -67,6 +68,20 @@ public class PostgresTransferRepository implements TransferRepository {
                 return Optional.empty();
             }
             return Optional.of(toOrder(row, mapper.findLines(tenantId, id)));
+        });
+    }
+
+    /**
+     * 按租户读取调拨分页并重建当前页聚合。
+     * 入参：可信租户、零基分页和白名单筛选；出参：当前页及总数；流程：先读表头，再按表头逐单读取明细。
+     */
+    @Override
+    public TransferPage findPage(UUID tenantId, int offset, int limit, String status, String keyword) {
+        return database(() -> {
+            List<TransferOrder> orders = mapper.findPage(tenantId, offset, limit, status, keyword).stream()
+                    .map(row -> toOrder(row, mapper.findLines(tenantId, row.getId())))
+                    .toList();
+            return new TransferPage(orders, mapper.count(tenantId, status, keyword));
         });
     }
 

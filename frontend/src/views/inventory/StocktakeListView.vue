@@ -113,29 +113,20 @@
           <div class="form-item">
             <label>目标仓库 <span class="req">*</span></label>
             <select v-model="createForm.warehouseId" class="form-select" required>
-              <option value="1">原料一仓 (WH-RM-01)</option>
-              <option value="2">成品一仓 (WH-FG-01)</option>
+              <option value="">请选择仓库</option>
+              <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">
+                {{ warehouse.code }} - {{ warehouse.name }}
+              </option>
             </select>
           </div>
           <div class="form-item">
-            <label>盘点范围 <span class="req">*</span></label>
-            <select v-model="createForm.scopeType" class="form-select" required>
-              <option value="LOCATION">指定库位盘点</option>
-              <option value="FULL">全仓全量盘点</option>
-            </select>
-          </div>
-          <div v-if="createForm.scopeType === 'LOCATION'" class="form-item">
             <label>指定盘点库位 <span class="req">*</span></label>
             <select v-model="createForm.locationId" class="form-select" required>
-              <option value="3">ST-A-01 (原料常规存储位A01)</option>
-              <option value="4">ST-B-02 (标准件存储位B02)</option>
-              <option value="2">RS-01 (采购收货暂存位01)</option>
-              <option value="6">FG-A-01 (成品常规存储位01)</option>
+              <option value="">请选择库位</option>
+              <option v-for="location in availableLocations" :key="location.id" :value="location.id">
+                {{ location.code }} - {{ location.name }}
+              </option>
             </select>
-          </div>
-          <div class="form-item">
-            <label>盘点备注说明</label>
-            <textarea v-model="createForm.remark" class="form-textarea" rows="2" placeholder="填写盘点目的或批次..."></textarea>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn-secondary" @click="isCreateVisible = false">取消</button>
@@ -154,7 +145,7 @@
  * 差异盘点控制台列表视图 (StocktakeListView)
  * 职责：展示盘点任务，支持冻结系统快照、进入实盘录入与调整流水生成
  */
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, onMounted, computed, watch } from "vue";
 import PageHeader from "@/components/common/PageHeader.vue";
 import FilterBar from "@/components/common/FilterBar.vue";
 import DataTable, { type TableColumn } from "@/components/common/DataTable.vue";
@@ -163,11 +154,13 @@ import EmptyState from "@/components/common/EmptyState.vue";
 import ErrorState from "@/components/common/ErrorState.vue";
 import StocktakeDetailView from "./StocktakeDetailView.vue";
 import type { ViewState } from "@/types/common";
-import type { StocktakeOrder } from "@/types/inventory";
+import type { StocktakeOrder, Warehouse, Location } from "@/types/inventory";
+import { getLocations, getWarehouses } from "@/api/masterData";
 import {
   getStocktakes,
   createStocktake,
-  recordStocktakeLines,
+  getStocktakeById,
+  startStocktake,
   confirmStocktake,
 } from "@/api/inventory";
 
@@ -175,6 +168,8 @@ const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 const stocktakeList = ref<StocktakeOrder[]>([]);
 const totalCount = ref(0);
+const warehouses = ref<Warehouse[]>([]);
+const locations = ref<Location[]>([]);
 
 const queryParams = reactive({
   page: 1,
@@ -200,11 +195,20 @@ const isSubmitting = ref(false);
 const isCreateVisible = ref(false);
 const isCreating = ref(false);
 const createForm = reactive({
-  warehouseId: "1",
-  scopeType: "LOCATION" as "FULL" | "LOCATION" | "CATEGORY",
-  locationId: "3",
-  remark: "例行业务盘点",
+  stocktakeNo: "",
+  warehouseId: "",
+  locationId: "",
 });
+const availableLocations = computed(() => locations.value.filter(
+  (location) => location.warehouseId === createForm.warehouseId,
+));
+
+watch(
+  () => createForm.warehouseId,
+  () => {
+    createForm.locationId = "";
+  },
+);
 
 async function fetchStocktakes() {
   viewState.value = "loading";
@@ -237,23 +241,21 @@ function resetFilter() {
   fetchStocktakes();
 }
 
-function openDetail(row: StocktakeOrder) {
-  selectedStocktake.value = row;
-  isDetailVisible.value = true;
+/**
+ * 打开盘点详情前重新读取后端聚合，确保展示真实明细、状态、版本和允许动作。
+ */
+async function openDetail(row: StocktakeOrder) {
+  try {
+    const response = await getStocktakeById(String(row.id));
+    selectedStocktake.value = response.data;
+    isDetailVisible.value = true;
+  } catch (error: any) {
+    alert(error?.message || "读取盘点详情失败");
+  }
 }
 
-async function handleRecordLines(lines: any[]) {
-  if (!selectedStocktake.value) return;
-  isSubmitting.value = true;
-  try {
-    const res = await recordStocktakeLines(selectedStocktake.value.id, lines);
-    selectedStocktake.value = res.data;
-    await fetchStocktakes();
-  } catch (err: any) {
-    alert(err?.message || "录入暂存失败");
-  } finally {
-    isSubmitting.value = false;
-  }
+async function handleRecordLines(_lines: any[]) {
+  // 实盘数据在 confirm 时整体提交
 }
 
 async function handleConfirmAdjustment(payload: any) {
@@ -274,14 +276,16 @@ async function handleConfirmAdjustment(payload: any) {
 async function handleCreateSubmit() {
   isCreating.value = true;
   try {
-    await createStocktake({
+    const created = await createStocktake({
+      stocktakeNo: createForm.stocktakeNo.trim() || undefined,
       warehouseId: createForm.warehouseId,
-      scopeType: createForm.scopeType,
-      locationId: createForm.scopeType === "LOCATION" ? createForm.locationId : undefined,
-      remark: createForm.remark,
+      locationId: createForm.locationId,
     });
+    const started = await startStocktake(String(created.data.id));
+    selectedStocktake.value = (await getStocktakeById(String(started.data.id))).data;
     isCreateVisible.value = false;
     await fetchStocktakes();
+    isDetailVisible.value = true;
   } catch (err: any) {
     alert(err?.message || "创建盘点单失败");
   } finally {
@@ -289,8 +293,25 @@ async function handleCreateSubmit() {
   }
 }
 
+/**
+ * 加载盘点表单所需的仓库和库位，所有选项值均为后端真实 UUID。
+ */
+async function loadMasterData() {
+  try {
+    const [warehouseResponse, locationResponse] = await Promise.all([
+      getWarehouses({ page: 1, size: 200, status: "ACTIVE" }),
+      getLocations({ page: 1, size: 200, status: "ACTIVE" }),
+    ]);
+    warehouses.value = warehouseResponse.data.records;
+    locations.value = locationResponse.data.records;
+  } catch (error) {
+    console.error("[StocktakeListView] 加载仓库库位失败", error);
+  }
+}
+
 onMounted(() => {
   fetchStocktakes();
+  loadMasterData();
 });
 </script>
 

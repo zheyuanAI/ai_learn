@@ -1,0 +1,109 @@
+- generic [ref=f26e3]:
+  - complementary [ref=f26e4]:
+    - generic [ref=f26e5]:
+      - paragraph [ref=f26e6]: AI Learn
+      - heading "制造与仓储协同执行平台" [level=1] [ref=f26e7]
+      - paragraph [ref=f26e8]: 一期壳层按黄金业务闭环组织；动态挂载当前角色授权菜单。
+    - navigation [ref=f26e9]:
+      - link "DashboardOutlined 控制台看板" [ref=f26e10] [cursor=pointer]:
+        - /url: /dashboard
+        - generic [ref=f26e11]:
+          - generic [ref=f26e12]: DashboardOutlined
+          - strong [ref=f26e14]: 控制台看板
+      - button "DatabaseOutlined 主数据管理 ▼" [ref=f26e16] [cursor=pointer]:
+        - generic [ref=f26e17]:
+          - generic [ref=f26e18]: DatabaseOutlined
+          - strong [ref=f26e20]: 主数据管理
+        - generic [ref=f26e21]: ▼
+      - generic [ref=f26e22]:
+        - button "ShopOutlined 销售出库 ▼" [ref=f26e23] [cursor=pointer]:
+          - generic [ref=f26e24]:
+            - generic [ref=f26e25]: ShopOutlined
+            - strong [ref=f26e27]: 销售出库
+          - generic [ref=f26e28]: ▼
+        - link "销售订单" [ref=f26e30] [cursor=pointer]:
+          - /url: /sales/orders
+      - link "CompassOutlined 厂区二维地图" [ref=f26e34] [cursor=pointer]:
+        - /url: /gis/site-maps
+        - generic [ref=f26e35]:
+          - generic [ref=f26e36]: CompassOutlined
+          - strong [ref=f26e38]: 厂区二维地图
+      - button "RobotOutlined AI助手与追溯 ▼" [ref=f26e40] [cursor=pointer]:
+        - generic [ref=f26e41]:
+          - generic [ref=f26e42]: RobotOutlined
+          - strong [ref=f26e44]: AI助手与追溯
+        - generic [ref=f26e45]: ▼
+    - generic [ref=f26e46]: 系统认证状态：在线
+  - generic [ref=f26e49]:
+    - banner [ref=f26e50]:
+      - generic [ref=f26e51]:
+        - generic [ref=f26e52]: AI-LEARN / WORKSPACE
+        - generic [ref=f26e53]: 🏢 tenant_demo_a
+      - generic [ref=f26e54]:
+        - generic [ref=f26e55]:
+          - generic [ref=f26e56]: 👤
+          - generic [ref=f26e57]:
+            - generic [ref=f26e58]: 刘销售
+            - generic [ref=f26e59]: sales.rep
+        - button "退出登录" [ref=f26e60] [cursor=pointer]:
+          - generic [aria-hidden] [ref=f26e62]: ➔
+    - main [ref=f26e63]:
+      - generic [ref=f26e165]:
+        - generic [ref=f26e167]:
+          - generic [ref=f26e168]:
+            - generic [ref=f26e169]: CORE / SALES / OUTBOUND
+            - heading "销售履约控制台" [level=2] [ref=f26e170]
+            - paragraph [ref=f26e171]: 销售订单采用生命周期与履约进度双轴模型。正常路径只保留【直接拣货】与【发货确认】；直接拣货在同一事务内自动补足来源库位预留并移入发货暂存位（ShippingStaging），发货出库正式扣减实物库存并释放业务预留。
+          - button "＋ 新建销售订单" [ref=f26e173] [cursor=pointer]
+        - generic [ref=f26e174]:
+          - generic [ref=f26e175]:
+            - generic [ref=f26e176]: 生命周期 (Status)：
+            - generic [ref=f26e177]:
+              - button "全部生命周期" [ref=f26e178] [cursor=pointer]
+              - button "履约中 (Approved)" [ref=f26e179] [cursor=pointer]
+              - button "已完成 (Completed)" [ref=f26e180] [cursor=pointer]
+          - generic [ref=f26e181]:
+            - generic [ref=f26e182]: 履约进度 (Fulfillment)：
+            - generic [ref=f26e183]:
+              - button "全部进度" [ref=f26e184] [cursor=pointer]
+              - button "尚未开始 (NotStarted)" [ref=f26e185] [cursor=pointer]
+              - button "履约处理中 (InProgress)" [ref=f26e186] [cursor=pointer]
+              - button "全部发货 (FullyShipped)" [ref=f26e187] [cursor=pointer]
+        - generic [ref=f26e189]:
+          - generic [ref=f26e190]:
+            - generic: 🔍
+            - textbox "搜索销售单号、客户全称或物料..." [ref=f26e191]
+          - generic [ref=f26e192]:
+            - button "查询" [ref=f26e193] [cursor=pointer]
+            - button "重置" [ref=f26e194] [cursor=pointer]
+        - generic [ref=f26e195]:
+          - table [ref=f26e197]:
+            - rowgroup [ref=f26e198]:
+              - row [ref=f26e199]:
+                - columnheader "销售订单号" [ref=f26e200]
+                - columnheader "客户信息" [ref=f26e201]
+                - columnheader "计划发货日" [ref=f26e202]
+                - columnheader "生命周期状态" [ref=f26e203]
+                - columnheader "履约进度" [ref=f26e204]
+                - columnheader "完成方式" [ref=f26e205]
+                - columnheader "首行履约概览" [ref=f26e206]
+                - columnheader "操作" [ref=f26e207]
+            - rowgroup [ref=f26e208]:
+              - row [ref=f26e209]:
+                - cell "STG7SO20260905082754978" [ref=f26e210]
+                - cell [ref=f26e211]
+                - cell "2026-09-12" [ref=f26e213]
+                - cell "已完成" [ref=f26e214]
+                - cell "全部发货" [ref=f26e218]
+                - cell "全部发货" [ref=f26e222]
+                - 'cell "发货: 4.000000 / 订购: 4.000000 STG7PC0905081531" [ref=f26e223]'
+                - cell [ref=f26e226]:
+                  - button "详情 / 履约" [ref=f26e228] [cursor=pointer]
+          - generic [ref=f26e229]:
+            - generic [ref=f26e230]:
+              - text: 共
+              - strong [ref=f26e231]: "1"
+              - text: 条记录，当前第 1 / 1 页
+            - generic [ref=f26e232]:
+              - button "上一页" [disabled] [ref=f26e233]
+              - button "下一页" [disabled] [ref=f26e234]

@@ -12,6 +12,7 @@ import com.ailearn.platform.core.manufacturing.productionfact.dto.MaterialIssueC
 import com.ailearn.platform.core.manufacturing.productionfact.dto.MaterialReturnCreateRequest;
 import com.ailearn.platform.core.manufacturing.productionfact.dto.QualityInspectionCreateRequest;
 import com.ailearn.platform.core.manufacturing.productionfact.dto.QualityInspectionSubmitRequest;
+import com.ailearn.platform.core.manufacturing.productionfact.dto.QualityInspectionCloseRequest;
 import com.ailearn.platform.core.manufacturing.productionfact.dto.WorkReportCreateRequest;
 import com.ailearn.platform.shared.api.ApiResponse;
 import java.util.List;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Task16 生产事实 REST 控制器；不接收客户端租户字段。 */
@@ -48,7 +50,7 @@ public class ProductionFactController {
     /** 确认生产领料。 */
     @PostMapping("/material-issues/{id}/confirm")
     @PreAuthorize("hasAuthority('mes:material:confirm')")
-    public ApiResponse<ProductionFactSummary> confirmIssue(@PathVariable UUID id,
+    public ApiResponse<ProductionFactSummary> confirmIssue(@PathVariable("id") UUID id,
                                                             @RequestHeader("Idempotency-Key") String key) {
         return ApiResponse.success(service.confirmMaterialIssue(id, key));
     }
@@ -64,7 +66,7 @@ public class ProductionFactController {
     /** 确认生产退料。 */
     @PostMapping("/material-returns/{id}/confirm")
     @PreAuthorize("hasAuthority('mes:material:confirm')")
-    public ApiResponse<ProductionFactSummary> confirmReturn(@PathVariable UUID id,
+    public ApiResponse<ProductionFactSummary> confirmReturn(@PathVariable("id") UUID id,
                                                              @RequestHeader("Idempotency-Key") String key) {
         return ApiResponse.success(service.confirmMaterialReturn(id, key));
     }
@@ -77,10 +79,18 @@ public class ProductionFactController {
         return ApiResponse.success(service.createWorkReport(request, key));
     }
 
+    /** 查询当前租户指定工单的报工集合；work_order_id 是正式查询条件。 */
+    @GetMapping("/work-reports")
+    @PreAuthorize("hasAuthority('mes:report:manage')")
+    public ApiResponse<List<WorkReport>> reportCollection(
+            @RequestParam(name = "work_order_id") UUID workOrderId) {
+        return ApiResponse.success(service.findWorkReports(workOrderId));
+    }
+
     /** 查询当前租户工单报工。 */
     @GetMapping("/work-reports/{workOrderId}")
     @PreAuthorize("hasAuthority('mes:report:manage')")
-    public ApiResponse<List<WorkReport>> reports(@PathVariable UUID workOrderId) {
+    public ApiResponse<List<WorkReport>> reports(@PathVariable("workOrderId") UUID workOrderId) {
         return ApiResponse.success(service.findWorkReports(workOrderId));
     }
 
@@ -96,16 +106,34 @@ public class ProductionFactController {
     /** 提交质检结果。 */
     @PostMapping("/quality-inspections/{id}/submit")
     @PreAuthorize("hasAuthority('mes:quality:inspect')")
-    public ApiResponse<QualityInspection> submitInspection(@PathVariable UUID id,
+    public ApiResponse<QualityInspection> submitInspection(@PathVariable("id") UUID id,
                                                             @RequestBody QualityInspectionSubmitRequest request,
                                                             @RequestHeader("Idempotency-Key") String key) {
         return ApiResponse.success(service.submitQualityInspection(id, request, key));
     }
 
+    /** 关闭 Failed 质检的不合格处置；质量决定与仓储执行分离。 */
+    @PostMapping("/quality-inspections/{id}/close")
+    @PreAuthorize("hasAuthority('mes:quality:inspect')")
+    public ApiResponse<QualityInspection> closeInspection(
+            @PathVariable("id") UUID id,
+            @RequestBody QualityInspectionCloseRequest request,
+            @RequestHeader("Idempotency-Key") String key) {
+        return ApiResponse.success(service.closeQualityInspection(id, request, key));
+    }
+
     /** 查询当前租户工单质检。 */
     @GetMapping("/quality-inspections/{workOrderId}")
     @PreAuthorize("hasAuthority('mes:quality:inspect')")
-    public ApiResponse<List<QualityInspection>> inspections(@PathVariable UUID workOrderId) {
+    public ApiResponse<List<QualityInspection>> inspections(@PathVariable("workOrderId") UUID workOrderId) {
+        return ApiResponse.success(service.findQualityInspections(workOrderId));
+    }
+
+    /** 查询当前租户指定工单的质检集合；work_order_id 是正式查询条件。 */
+    @GetMapping("/quality-inspections")
+    @PreAuthorize("hasAuthority('mes:quality:inspect')")
+    public ApiResponse<List<QualityInspection>> inspectionCollection(
+            @RequestParam(name = "work_order_id") UUID workOrderId) {
         return ApiResponse.success(service.findQualityInspections(workOrderId));
     }
 
@@ -121,7 +149,7 @@ public class ProductionFactController {
     /** 确认成品入库。 */
     @PostMapping("/finished-goods-receipts/{id}/confirm")
     @PreAuthorize("hasAuthority('mes:finished:confirm')")
-    public ApiResponse<ProductionFactSummary> confirmReceipt(@PathVariable UUID id,
+    public ApiResponse<ProductionFactSummary> confirmReceipt(@PathVariable("id") UUID id,
                                                               @RequestHeader("Idempotency-Key") String key) {
         return ApiResponse.success(service.confirmFinishedGoodsReceipt(id, key));
     }
@@ -129,7 +157,15 @@ public class ProductionFactController {
     /** 查询当前租户工单成品入库。 */
     @GetMapping("/finished-goods-receipts/{workOrderId}")
     @PreAuthorize("hasAuthority('mes:finished:receipt')")
-    public ApiResponse<List<FinishedGoodsReceipt>> receipts(@PathVariable UUID workOrderId) {
+    public ApiResponse<List<FinishedGoodsReceipt>> receipts(@PathVariable("workOrderId") UUID workOrderId) {
+        return ApiResponse.success(service.findFinishedGoodsReceipts(workOrderId));
+    }
+
+    /** 查询当前租户指定工单的成品入库集合；work_order_id 是正式查询条件。 */
+    @GetMapping("/finished-goods-receipts")
+    @PreAuthorize("hasAuthority('mes:finished:receipt')")
+    public ApiResponse<List<FinishedGoodsReceipt>> receiptCollection(
+            @RequestParam(name = "work_order_id") UUID workOrderId) {
         return ApiResponse.success(service.findFinishedGoodsReceipts(workOrderId));
     }
 }

@@ -72,6 +72,9 @@ public class AlarmContextLinkApplicationServiceImpl implements AlarmContextLinkA
         this.idempotency = idempotency;
     }
 
+    /**
+     * 自动补链一条告警：先建立/领取重试任务，再查询 Core 活动工序上下文；未匹配或依赖不可用只进入重试，不改写告警原始时间线。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ContextLinkResult link(UUID tenantId, UUID alarmId) {
@@ -93,15 +96,18 @@ public class AlarmContextLinkApplicationServiceImpl implements AlarmContextLinkA
                         null, 0, "补链任务已存在且尚未到重试时间"));
     }
 
+    /**
+     * 在人工用户和幂等键约束下补充指定业务上下文；请求给出的 operation/workOrder 必须与告警时刻的 Core 上下文一致。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     @PreAuthorize("hasAuthority('iot:alarm:context')")
     public ContextLinkResult linkManually(UUID tenantId, UUID alarmId, UUID operationExecutionId,
                                            UUID workOrderId, String idempotencyKey) {
         requireIds(tenantId, alarmId);
-        if (operationExecutionId == null || workOrderId == null) {
+        if (operationExecutionId == null && workOrderId == null) {
             throw new IotException(IotErrorCode.CONTEXT_INVALID,
-                    "人工补链必须同时提供 operation_execution_id 与 work_order_id");
+                    "人工补链至少需要提供 operation_execution_id 或 work_order_id");
         }
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 128) {
             throw new IotException(IotErrorCode.CONTEXT_INVALID,
@@ -118,19 +124,38 @@ public class AlarmContextLinkApplicationServiceImpl implements AlarmContextLinkA
     /** 执行一次人工上下文更新；只改写 IoT 告警的关联字段。 */
     private ContextLinkResult doManualLink(UUID tenantId, UUID alarmId, UUID operationExecutionId,
                                            UUID workOrderId) {
-        if (repository.findAlarm(tenantId, alarmId).isEmpty()) {
+        AlarmContextCandidate alarm = repository.findAlarm(tenantId, alarmId).orElse(null);
+        if (alarm == null) {
             return new ContextLinkResult(alarmId, ContextLinkResult.Status.NOT_FOUND, null, 0,
                     "告警不存在或不属于当前租户");
         }
-        boolean linked = repository.linkManually(tenantId, alarmId, operationExecutionId, workOrderId, now());
+        if (isLinked(alarm)) {
+            return new ContextLinkResult(alarmId, ContextLinkResult.Status.ALREADY_LINKED, null, 0,
+                    "告警已有业务上下文");
+        }
+        ProductionContextView context = contextQuery.findActive(tenantId, alarm.deviceId(), alarm.alarmTime())
+                .map(value -> validateContextForManualLink(alarm, value))
+                .orElseThrow(() -> new IotException(IotErrorCode.CONTEXT_INVALID,
+                        "Core 未返回与告警租户、设备和时间一致的生产上下文"));
+        if (operationExecutionId != null && !operationExecutionId.equals(context.operationExecutionId())) {
+            throw new IotException(IotErrorCode.CONTEXT_INVALID,
+                    "operation_execution_id 与告警时刻的生产上下文不一致");
+        }
+        if (workOrderId != null && !workOrderId.equals(context.workOrderId())) {
+            throw new IotException(IotErrorCode.CONTEXT_INVALID,
+                    "work_order_id 与告警时刻的生产上下文不一致");
+        }
+        boolean linked = repository.linkManually(tenantId, alarmId, context.operationExecutionId(),
+                context.workOrderId(), now());
         if (!linked) {
             return new ContextLinkResult(alarmId, ContextLinkResult.Status.NOT_FOUND, null, 0,
                     "告警不存在或不属于当前租户");
         }
-        return new ContextLinkResult(alarmId, ContextLinkResult.Status.LINKED, null, 0,
+        return new ContextLinkResult(alarmId, ContextLinkResult.Status.LINKED, context, 0,
                 "人工生产上下文已补充");
     }
 
+    /** 扫描当前租户到期补链任务并逐条尝试，达到 limit 后停止，避免重试任务占满遥测处理资源。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int retryDue(UUID tenantId, int limit) {
@@ -158,6 +183,7 @@ public class AlarmContextLinkApplicationServiceImpl implements AlarmContextLinkA
         return attempted;
     }
 
+    /** 执行一次自动补链尝试；成功标记完成，Core 无匹配/不一致/异常统一记录下一次退避重试。 */
     private ContextLinkResult attempt(AlarmContextCandidate alarm, ContextLinkTask task) {
         try {
             Optional<ProductionContextView> context = contextQuery.findActive(
@@ -184,6 +210,7 @@ public class AlarmContextLinkApplicationServiceImpl implements AlarmContextLinkA
         }
     }
 
+    /** 校验 Core 返回上下文与告警租户、设备及发生时间一致，防止错误上下文写入 IoT 告警。 */
     private ProductionContextView validateContext(AlarmContextCandidate alarm, ProductionContextView value) {
         if (!alarm.tenantId().equals(value.tenantId()) || !alarm.deviceId().equals(value.deviceId())
                 || value.startedAt().isAfter(alarm.alarmTime()) || value.eventAt().isAfter(alarm.alarmTime())) {
@@ -192,6 +219,17 @@ public class AlarmContextLinkApplicationServiceImpl implements AlarmContextLinkA
         return value;
     }
 
+    /** 将人工补链的跨域事实不一致转换为正式 IoT 错误码，避免把 IllegalArgumentException 泄漏到 HTTP 层。 */
+    private ProductionContextView validateContextForManualLink(AlarmContextCandidate alarm,
+                                                                 ProductionContextView value) {
+        try {
+            return validateContext(alarm, value);
+        } catch (IllegalArgumentException exception) {
+            throw new IotException(IotErrorCode.CONTEXT_INVALID, exception.getMessage());
+        }
+    }
+
+    /** 记录失败原因并按指数退避安排下一次补链，最长等待不超过一小时。 */
     private ContextLinkResult retry(UUID alarmId, ContextLinkTask task, String error) {
         int retryCount = task.retryCount() + 1;
         OffsetDateTime next = now().plus(backoff(retryCount));
@@ -200,16 +238,19 @@ public class AlarmContextLinkApplicationServiceImpl implements AlarmContextLinkA
                 null, retryCount, error);
     }
 
+    /** 根据重试次数计算受上限保护的退避时长。 */
     private Duration backoff(int retryCount) {
         long seconds = Math.min(3600L, 5L * (1L << Math.min(9, Math.max(0, retryCount - 1))));
         return Duration.ofSeconds(seconds);
     }
 
+    /** 判断告警是否已同时具备工序和工单上下文，避免重复补链。 */
     private boolean isLinked(AlarmContextCandidate candidate) {
         return LINKED_STATUS.equals(candidate.contextStatus())
                 && candidate.operationExecutionId() != null && candidate.workOrderId() != null;
     }
 
+    /** 将依赖异常压缩为可持久化、可审计且不超过字段上限的重试原因。 */
     private String safeMessage(RuntimeException exception) {
         String message = exception.getMessage();
         if (message == null || message.isBlank()) {
@@ -218,10 +259,12 @@ public class AlarmContextLinkApplicationServiceImpl implements AlarmContextLinkA
         return message.length() <= MAX_ERROR_LENGTH ? message : message.substring(0, MAX_ERROR_LENGTH);
     }
 
+    /** 使用注入时钟生成 UTC 时间，保证生产与测试的任务截止时间口径一致。 */
     private OffsetDateTime now() {
         return OffsetDateTime.now(clock).withOffsetSameInstant(ZoneOffset.UTC);
     }
 
+    /** 校验自动/人工补链所需的租户和告警标识。 */
     private void requireIds(UUID tenantId, UUID alarmId) {
         if (tenantId == null || alarmId == null) {
             throw new IllegalArgumentException("tenantId 和 alarmId 不能为空");

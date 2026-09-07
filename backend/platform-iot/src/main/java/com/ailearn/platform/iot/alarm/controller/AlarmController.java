@@ -34,26 +34,29 @@ public class AlarmController {
         this.contextLinkService = contextLinkService;
     }
 
+    /** 查询当前租户可见告警；时间、状态、上下文筛选和分页边界由应用服务处理。 */
     @GetMapping
     public ApiResponse<AlarmPageResult> page(
             @RequestParam(name = "device_id", required = false) UUID deviceId,
-            @RequestParam(required = false) AlarmStatus status,
+            @RequestParam(name = "status", required = false) AlarmStatus status,
             @RequestParam(name = "alarm_level", required = false) String alarmLevel,
             @RequestParam(name = "date_from", required = false) OffsetDateTime from,
             @RequestParam(name = "date_to", required = false) OffsetDateTime to,
             @RequestParam(name = "context_status", required = false) String contextStatus,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size) {
         return ApiResponse.success(service.page(deviceId, status, alarmLevel, from, to, contextStatus, page, size));
     }
 
+    /** 查询告警详情；不存在、跨租户或不可见记录统一由应用服务拒绝。 */
     @GetMapping("/{id}")
-    public ApiResponse<AlarmView> detail(@PathVariable UUID id) {
+    public ApiResponse<AlarmView> detail(@PathVariable("id") UUID id) {
         return ApiResponse.success(service.detail(id));
     }
 
+    /** 幂等执行人工告警确认，不在 Controller 层推进告警状态。 */
     @PostMapping("/{id}/ack")
-    public ApiResponse<AlarmView> ack(@PathVariable UUID id, @RequestBody AckAlarmRequest request,
+    public ApiResponse<AlarmView> ack(@PathVariable("id") UUID id, @RequestBody AckAlarmRequest request,
                                       @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(service.ack(id, request == null ? null : request.ackComment(), idempotencyKey));
     }
@@ -68,7 +71,7 @@ public class AlarmController {
      */
     @org.springframework.web.bind.annotation.PutMapping("/{id}/business-context")
     public ApiResponse<ContextLinkResult> businessContext(
-            @PathVariable UUID id,
+            @PathVariable("id") UUID id,
             @RequestBody ManualBusinessContextRequest request,
             @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(contextLinkService.linkManually(TenantContextHolder.requireTenantId(), id,

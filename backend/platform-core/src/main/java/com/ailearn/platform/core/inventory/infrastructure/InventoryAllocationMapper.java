@@ -52,7 +52,7 @@ public interface InventoryAllocationMapper {
             </script>
             """)
     @Results(id = "allocationRowMap", value = {
-            @Result(property = "id", column = "id", id = true),
+            @Result(property = "id", column = "id", javaType = UUID.class, id = true),
             @Result(property = "tenantId", column = "tenant_id"),
             @Result(property = "reservationId", column = "reservation_id"),
             @Result(property = "productId", column = "product_id"),

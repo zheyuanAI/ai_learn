@@ -14,16 +14,19 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,8 +38,9 @@ import org.springframework.transaction.annotation.Transactional;
  * </p>
  */
 @Repository
-@ConditionalOnBean(JdbcTemplate.class)
 public class PostgresGisConfigurationStore implements GisConfigurationStore {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(PostgresGisConfigurationStore.class);
 
     private static final String MAP_SELECT = """
             SELECT m.id, m.tenant_id, m.map_code, m.map_name, m.background_type,
@@ -99,9 +103,9 @@ public class PostgresGisConfigurationStore implements GisConfigurationStore {
                     INSERT INTO gis_site_map
                         (id, tenant_id, map_code, map_name, background_type,
                          isdel, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, 0, ?, ?)
-                    """, map.id(), map.tenantId(), map.mapCode(), map.mapName(),
-                    backgroundType(map.asset()), map.createdAt(), map.updatedAt());
+            VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+            """, map.id(), map.tenantId(), map.mapCode(), map.mapName(),
+                    backgroundType(map.asset()), jdbcTime(map.createdAt()), jdbcTime(map.updatedAt()));
             if (mapRows != 1) {
                 throw new ServiceUnavailableException("GIS 地图配置写入失败");
             }
@@ -112,7 +116,7 @@ public class PostgresGisConfigurationStore implements GisConfigurationStore {
                     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
                     """, UUID.randomUUID(), map.tenantId(), map.id(), map.asset().storageKey(),
                     map.asset().mimeType(), map.asset().sizeBytes(), map.asset().sha256(),
-                    map.createdAt(), map.updatedAt());
+                    jdbcTime(map.createdAt()), jdbcTime(map.updatedAt()));
             if (assetRows != 1) {
                 throw new ServiceUnavailableException("GIS 底图元数据写入失败");
             }
@@ -120,6 +124,8 @@ public class PostgresGisConfigurationStore implements GisConfigurationStore {
         } catch (DuplicateKeyException exception) {
             throw new GisException(GisErrorCode.GIS_CONFIG_001, "当前租户地图编码已存在");
         } catch (DataAccessException exception) {
+            // 修改用途：记录地图或底图写入的数据库根因，便于本地练习环境定位 schema/连接问题。
+            LOGGER.warn("GIS 地图配置写入失败，已转换为统一服务不可用响应", exception);
             throw unavailable("GIS 地图配置数据库暂时不可用", exception);
         }
     }
@@ -160,7 +166,7 @@ public class PostgresGisConfigurationStore implements GisConfigurationStore {
                     ON CONFLICT (tenant_id, idempotency_key) WHERE isdel = 0 DO NOTHING
                     """, point.id(), point.tenantId(), point.siteMapId(), point.entityType().name(),
                     point.entityId(), point.xPercent(), point.yPercent(), point.rotation(),
-                    point.linkedPage(), key, digest, point.createdAt(), point.updatedAt());
+                    point.linkedPage(), key, digest, jdbcTime(point.createdAt()), jdbcTime(point.updatedAt()));
             if (rows == 1) {
                 return point;
             }
@@ -220,7 +226,41 @@ public class PostgresGisConfigurationStore implements GisConfigurationStore {
                                                                           String idempotencyKey) {
         String key = requireText(idempotencyKey, "点位幂等键不能为空");
         return database(() -> jdbcTemplate.query(POINT_BY_IDEMPOTENCY, this::mapIdempotencyRecord,
-                        tenantId, key).stream().findFirst());
+                tenantId, key).stream().findFirst());
+    }
+
+    /** 更新当前租户点位配置；地图与实体租户约束由应用层和数据库复合外键共同保证。 */
+    @Override
+    public MapPointConfiguration updatePoint(UUID tenantId, UUID pointId, MapPointConfiguration point) {
+        try {
+            int rows = jdbcTemplate.update("""
+                    UPDATE gis_map_point
+                       SET site_map_id = ?, entity_type = ?, entity_id = ?, x_percent = ?,
+                           y_percent = ?, rotation = ?, linked_page = ?, updated_at = ?
+                    WHERE tenant_id = ? AND id = ? AND isdel = 0
+                    """, point.siteMapId(), point.entityType().name(), point.entityId(), point.xPercent(),
+                    point.yPercent(), point.rotation(), point.linkedPage(), jdbcTime(point.updatedAt()), tenantId, pointId);
+            if (rows != 1) {
+                throw new GisException(GisErrorCode.GIS_POINT_001, null);
+            }
+            return point;
+        } catch (DataAccessException exception) {
+            throw unavailable("GIS 点位更新数据库暂时不可用", exception);
+        }
+    }
+
+    /** 在当前租户范围内软删除点位，保留历史配置行以便审计。 */
+    @Override
+    public boolean deletePoint(UUID tenantId, UUID pointId) {
+        try {
+            return jdbcTemplate.update("""
+                    UPDATE gis_map_point
+                       SET isdel = 1, updated_at = CURRENT_TIMESTAMP
+                     WHERE tenant_id = ? AND id = ? AND isdel = 0
+                    """, tenantId, pointId) == 1;
+        } catch (DataAccessException exception) {
+            throw unavailable("GIS 点位删除数据库暂时不可用", exception);
+        }
     }
 
     private MapPointIdempotencyRecord mapIdempotencyRecord(ResultSet resultSet, int rowNum)
@@ -267,6 +307,11 @@ public class PostgresGisConfigurationStore implements GisConfigurationStore {
         };
     }
 
+    /** 将领域层 Instant 显式转换为 JDBC 可识别的带时区时间，兼容 PostgreSQL 12.1 驱动。 */
+    private static OffsetDateTime jdbcTime(Instant value) {
+        return OffsetDateTime.ofInstant(value, ZoneOffset.UTC);
+    }
+
     private static String requireText(String value, String message) {
         if (value == null || value.isBlank()) {
             throw new GisException(GisErrorCode.GIS_CONFIG_001, message);
@@ -296,6 +341,8 @@ public class PostgresGisConfigurationStore implements GisConfigurationStore {
         } catch (BaseException exception) {
             throw exception;
         } catch (DataAccessException exception) {
+            // 修改用途：保留数据库根因供本地练习环境排查，同时对外仍只返回统一的 503 业务错误。
+            LOGGER.warn("GIS 配置数据库访问失败，已转换为统一服务不可用响应", exception);
             throw unavailable("GIS 配置数据库暂时不可用", exception);
         }
     }

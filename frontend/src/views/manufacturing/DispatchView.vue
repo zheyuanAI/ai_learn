@@ -136,7 +136,7 @@
                 v-model="createForm.workOrderId"
                 type="text"
                 class="form-input font-mono"
-                placeholder="例如 wo-001 或 WO-20260901-001"
+                placeholder="输入真实工单 UUID"
                 required
               />
             </div>
@@ -146,7 +146,7 @@
                 v-model="createForm.operationId"
                 type="text"
                 class="form-input font-mono"
-                placeholder="例如 op-101"
+                placeholder="输入真实工序 UUID"
                 required
               />
             </div>
@@ -159,7 +159,7 @@
                 v-model="createForm.operatorId"
                 type="text"
                 class="form-input"
-                placeholder="例如 user-op-01 (王小华)"
+                placeholder="输入真实操作员 UUID"
                 required
               />
             </div>
@@ -181,7 +181,7 @@
               v-model="createForm.deviceId"
               type="text"
               class="form-input font-mono"
-              placeholder="例如 dev-burn-01 (高速烧录机 1 号台)"
+              placeholder="输入真实设备 UUID（可选）"
             />
           </div>
 
@@ -252,11 +252,11 @@ const columns: TableColumn[] = [
 const createModalVisible = ref(false);
 const isSubmitting = ref(false);
 const createForm = reactive<DispatchOrderCreateRequest>({
-  workOrderId: "wo-001",
-  operationId: "op-101",
-  operatorId: "user-op-01",
-  dispatchQty: "50.00",
-  deviceId: "dev-burn-01",
+  workOrderId: "",
+  operationId: "",
+  operatorId: "",
+  dispatchQty: "",
+  deviceId: "",
 });
 
 const releaseConfirm = reactive({
@@ -324,16 +324,16 @@ function handlePageChange(page: number) {
 }
 
 function openCreateModal() {
-  createForm.workOrderId = "wo-001";
-  createForm.operationId = "op-101";
-  createForm.operatorId = "user-op-01";
-  createForm.dispatchQty = "50.00";
+  createForm.workOrderId = "";
+  createForm.operationId = "";
+  createForm.operatorId = "";
+  createForm.dispatchQty = "";
   createForm.deviceId = "";
   createModalVisible.value = true;
 }
 
 async function submitCreateDispatch() {
-  if (!createForm.workOrderId || !createForm.dispatchQty) return;
+  if (!createForm.workOrderId || !createForm.operationId || !createForm.operatorId || !createForm.dispatchQty) return;
   isSubmitting.value = true;
   try {
     await createDispatchOrder(createForm);

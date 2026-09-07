@@ -96,6 +96,9 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
         this.webClient = WebClient.builder().build();
     }
 
+    /**
+     * 初始化网关验签公钥；配置公钥解析失败时只记录错误，真正请求会在密钥未就绪时按认证基础设施不可用处理。
+     */
     @PostConstruct
     public void initPublicKey() {
         String keyPem = StringUtils.hasText(properties.getPublicKey())
@@ -118,6 +121,11 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
         this.publicKey = publicKey;
     }
 
+    /**
+     * 执行网关入口认证与可信上下文注入。
+     * 预检和白名单请求只清理伪造 Header；受保护请求必须完成 JWT 验签及 Redis 会话校验后才能转发，
+     * 会话缺失返回 401，会话中心异常返回 503，下游权限和业务规则仍由目标服务再次判断。
+     */
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
@@ -466,6 +474,7 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
         return response.writeWith(Mono.just(buffer));
     }
 
+    /** 网关认证过滤器必须早于大多数内置过滤器执行，以便先清除客户端伪造的身份上下文。 */
     @Override
     public int getOrder() {
         // 确保在绝大多数内置过滤器之前执行认证拦截

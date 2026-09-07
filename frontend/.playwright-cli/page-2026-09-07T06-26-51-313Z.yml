@@ -1,0 +1,131 @@
+- generic [ref=f4e106]:
+  - complementary [ref=f4e107]:
+    - generic [ref=f4e108]:
+      - paragraph [ref=f4e109]: AI Learn
+      - heading "制造与仓储协同执行平台" [level=1] [ref=f4e110]
+      - paragraph [ref=f4e111]: 一期壳层按黄金业务闭环组织；动态挂载当前角色授权菜单。
+    - navigation [ref=f4e112]:
+      - link "DashboardOutlined 控制台看板" [ref=f4e113] [cursor=pointer]:
+        - /url: /dashboard
+        - generic [ref=f4e114]:
+          - generic [ref=f4e115]: DashboardOutlined
+          - strong [ref=f4e117]: 控制台看板
+      - button "DatabaseOutlined 主数据管理 ▼" [ref=f4e119] [cursor=pointer]:
+        - generic [ref=f4e120]:
+          - generic [ref=f4e121]: DatabaseOutlined
+          - strong [ref=f4e123]: 主数据管理
+        - generic [ref=f4e124]: ▼
+      - generic [ref=f4e125]:
+        - button "ShoppingOutlined 采购入库 ▼" [ref=f4e126] [cursor=pointer]:
+          - generic [ref=f4e127]:
+            - generic [ref=f4e128]: ShoppingOutlined
+            - strong [ref=f4e130]: 采购入库
+          - generic [ref=f4e131]: ▼
+        - generic [ref=f4e132]:
+          - link "采购订单" [ref=f4e133] [cursor=pointer]:
+            - /url: /purchasing/orders
+          - link "到货收货与质检" [ref=f4e137] [cursor=pointer]:
+            - /url: /purchasing/receipts
+      - link "CompassOutlined 厂区二维地图" [ref=f4e141] [cursor=pointer]:
+        - /url: /gis/site-maps
+        - generic [ref=f4e142]:
+          - generic [ref=f4e143]: CompassOutlined
+          - strong [ref=f4e145]: 厂区二维地图
+      - button "RobotOutlined AI助手与追溯 ▼" [ref=f4e147] [cursor=pointer]:
+        - generic [ref=f4e148]:
+          - generic [ref=f4e149]: RobotOutlined
+          - strong [ref=f4e151]: AI助手与追溯
+        - generic [ref=f4e152]: ▼
+    - generic [ref=f4e153]: 系统认证状态：在线
+  - generic [ref=f4e156]:
+    - banner [ref=f4e157]:
+      - generic [ref=f4e158]:
+        - generic [ref=f4e159]: AI-LEARN / WORKSPACE
+        - generic [ref=f4e160]: 🏢 tenant_demo_a
+      - generic [ref=f4e161]:
+        - generic [ref=f4e162]:
+          - generic [ref=f4e163]: 👤
+          - generic [ref=f4e164]:
+            - generic [ref=f4e165]: 陈采购
+            - generic [ref=f4e166]: purchase.agent
+        - button "退出登录" [ref=f4e167] [cursor=pointer]:
+          - generic [aria-hidden] [ref=f4e169]: ➔
+    - main [ref=f4e170]:
+      - generic [ref=f4e173]:
+        - generic [ref=f4e174]:
+          - generic [ref=f4e175]:
+            - generic [ref=f4e176]: PURCHASE ORDER
+            - generic [ref=f4e177]:
+              - heading "STG7PO20260905082453888" [level=2] [ref=f4e178]
+              - generic [ref=f4e179]: 已完成
+          - button "✕" [ref=f4e182] [cursor=pointer]
+        - generic [ref=f4e183]:
+          - generic [ref=f4e184]: 可用业务动作：
+          - generic [ref=f4e186]:
+            - generic [ref=f4e187]:
+              - generic [ref=f4e188]: 供应商
+              - strong
+            - generic [ref=f4e189]:
+              - generic [ref=f4e190]: 计划到货日期
+              - strong [ref=f4e191]: 2026-09-10
+              - generic [ref=f4e192]: "采购员:"
+            - generic [ref=f4e193]:
+              - generic [ref=f4e194]: 质量隔离库位
+              - generic [ref=f4e195]: QH-01
+              - generic [ref=f4e196]: 实际到货接管进入此库位
+            - generic [ref=f4e197]:
+              - generic [ref=f4e198]: 收货暂存过渡位
+              - generic [ref=f4e199]: RS-01
+              - generic [ref=f4e200]: 质检放行后上架前库位
+          - generic [ref=f4e201]:
+            - heading "采购订单行项与履约事实" [level=3] [ref=f4e202]
+            - table [ref=f4e204]:
+              - rowgroup [ref=f4e205]:
+                - row [ref=f4e206]:
+                  - columnheader "物料 SKU / 名称" [ref=f4e207]
+                  - columnheader "规格型号" [ref=f4e208]
+                  - columnheader "采购要求" [ref=f4e209]
+                  - columnheader "累计到货" [ref=f4e210]
+                  - columnheader "外观拒收" [ref=f4e211]
+                  - columnheader "实际接收(QH)" [ref=f4e212]
+                  - columnheader "质检合格" [ref=f4e213]
+                  - columnheader "放行移位(RS)" [ref=f4e214]
+                  - columnheader "已上架" [ref=f4e215]
+                  - columnheader "待收余量" [ref=f4e216]
+              - rowgroup [ref=f4e217]:
+                - row [ref=f4e218]:
+                  - cell [ref=f4e219]
+                  - cell "-" [ref=f4e221]
+                  - cell "10.000000 STG7PC0905081531" [ref=f4e222]:
+                    - generic [ref=f4e223]:
+                      - generic [ref=f4e224]: "10.000000"
+                      - generic [ref=f4e225]: STG7PC0905081531
+                  - cell "0 STG7PC0905081531" [ref=f4e226]:
+                    - generic [ref=f4e227]:
+                      - generic [ref=f4e228]: "0"
+                      - generic [ref=f4e229]: STG7PC0905081531
+                  - cell "0 STG7PC0905081531" [ref=f4e230]:
+                    - generic [ref=f4e232]:
+                      - generic [ref=f4e233]: "0"
+                      - generic [ref=f4e234]: STG7PC0905081531
+                  - cell "10.000000 STG7PC0905081531" [ref=f4e235]:
+                    - generic [ref=f4e236]:
+                      - generic [ref=f4e237]: "10.000000"
+                      - generic [ref=f4e238]: STG7PC0905081531
+                  - cell "0 STG7PC0905081531" [ref=f4e239]:
+                    - generic [ref=f4e241]:
+                      - generic [ref=f4e242]: "0"
+                      - generic [ref=f4e243]: STG7PC0905081531
+                  - cell "0 STG7PC0905081531" [ref=f4e244]:
+                    - generic [ref=f4e245]:
+                      - generic [ref=f4e246]: "0"
+                      - generic [ref=f4e247]: STG7PC0905081531
+                  - cell "0 STG7PC0905081531" [ref=f4e248]:
+                    - generic [ref=f4e249]:
+                      - generic [ref=f4e250]: "0"
+                      - generic [ref=f4e251]: STG7PC0905081531
+                  - cell "0.000000 STG7PC0905081531" [ref=f4e252]:
+                    - generic [ref=f4e254]:
+                      - generic [ref=f4e255]: "0.000000"
+                      - generic [ref=f4e256]: STG7PC0905081531
+        - button "关闭抽屉" [ref=f4e258] [cursor=pointer]

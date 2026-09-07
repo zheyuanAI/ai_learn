@@ -2,7 +2,9 @@ package com.ailearn.platform.core.stocktake.application;
 
 import com.ailearn.platform.core.stocktake.dto.StocktakeConfirmRequest;
 import com.ailearn.platform.core.stocktake.dto.StocktakeCreateRequest;
+import com.ailearn.platform.core.stocktake.dto.StocktakePageQuery;
 import com.ailearn.platform.core.stocktake.dto.StocktakeView;
+import com.ailearn.platform.core.masterdata.dto.MasterDataPageResult;
 import java.util.UUID;
 
 /**
@@ -37,4 +39,10 @@ public interface StocktakeApplicationService {
      * @return 已确认视图
      */
     StocktakeView confirm(UUID id, StocktakeConfirmRequest request, String idempotencyKey);
+
+    /** 查询当前租户盘点分页。 */
+    MasterDataPageResult<StocktakeView> page(StocktakePageQuery query);
+
+    /** 查询当前租户盘点详情。 */
+    StocktakeView find(UUID id);
 }

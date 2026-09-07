@@ -16,12 +16,15 @@ import com.ailearn.platform.core.masterdata.domain.port.WarehouseReferencePort;
 import com.ailearn.platform.core.inventory.domain.InventoryTransaction;
 import com.ailearn.platform.core.stocktake.domain.StocktakeLine;
 import com.ailearn.platform.core.stocktake.domain.StocktakeOrder;
+import com.ailearn.platform.core.stocktake.domain.StocktakePage;
 import com.ailearn.platform.core.stocktake.domain.StocktakeRepository;
 import com.ailearn.platform.core.stocktake.domain.StocktakeStatus;
 import com.ailearn.platform.core.stocktake.dto.StocktakeConfirmRequest;
 import com.ailearn.platform.core.stocktake.dto.StocktakeCountLineRequest;
 import com.ailearn.platform.core.stocktake.dto.StocktakeCreateRequest;
+import com.ailearn.platform.core.stocktake.dto.StocktakePageQuery;
 import com.ailearn.platform.core.stocktake.dto.StocktakeView;
+import com.ailearn.platform.core.masterdata.dto.MasterDataPageResult;
 import com.ailearn.platform.core.stocktake.exception.StocktakeErrorCode;
 import com.ailearn.platform.core.stocktake.exception.StocktakeException;
 import com.ailearn.platform.shared.context.RequestContextHolder;
@@ -177,6 +180,36 @@ public class StocktakeApplicationServiceImpl implements StocktakeApplicationServ
     }
 
     /**
+     * 查询当前租户盘点分页。
+     * 入参：页码、页大小、状态和单号关键词；出参：统一分页响应；流程：可信上下文 -> 规范化 -> 租户范围查询。
+     */
+    @Override
+    @PreAuthorize("hasAuthority('inv:stocktake:view')")
+    public MasterDataPageResult<StocktakeView> page(StocktakePageQuery query) {
+        Actor actor = actor();
+        StocktakePageQuery normalized = query == null ? new StocktakePageQuery() : query.normalized();
+        int offset = (normalized.getPage() - 1) * normalized.getSize();
+        StocktakePage page = repository.findPage(actor.tenantId(), offset, normalized.getSize(),
+                normalized.getStatus() == null ? null : normalized.getStatus().name(), normalized.getKeyword());
+        List<StocktakeView> views = page.records().stream()
+                .map(order -> new StocktakeView(order, List.of(), actions(order.status())))
+                .toList();
+        return new MasterDataPageResult<>(views, page.total(), normalized.getPage(), normalized.getSize());
+    }
+
+    /** 查询当前租户盘点详情；跨租户和不存在记录统一按不存在处理。 */
+    @Override
+    @PreAuthorize("hasAuthority('inv:stocktake:view')")
+    public StocktakeView find(UUID id) {
+        Actor actor = actor();
+        if (id == null) {
+            throw new ValidationException("盘点单 ID 不能为空");
+        }
+        StocktakeOrder order = findOrder(actor.tenantId(), id);
+        return new StocktakeView(order, List.of(), actions(order.status()));
+    }
+
+    /**
      * 创建盘点聚合。
      */
     private StocktakeView createInternal(StocktakeCreateRequest request, Actor actor) {
@@ -240,7 +273,12 @@ public class StocktakeApplicationServiceImpl implements StocktakeApplicationServ
             StocktakeCountLineRequest countRequest = requestByLine.get(line.id());
             BigDecimal countedQty = parseCountedQty(countRequest.getCountedQty());
             String reason = normalizeReason(countRequest.getVarianceReason());
-            InventoryBalance current = currentBalance(actor.tenantId(), line);
+            InventoryBalance current = inventoryCommandService.assertBalanceVersion(line.dimension(),
+                    line.systemBalanceVersion());
+            if (current == null) {
+                // focused mock/旧适配器没有锁定查询能力时保持查询兼容；生产实现必定返回已锁定余额。
+                current = currentBalance(actor.tenantId(), line);
+            }
             if (current == null || current.version() != line.systemBalanceVersion()
                     || current.onHandQty().compareTo(line.systemQty()) != 0) {
                 throw new com.ailearn.platform.core.inventory.exception.InventoryException(

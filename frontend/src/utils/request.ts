@@ -79,6 +79,7 @@ service.interceptors.request.use(
     // 注入当前选择的租户标识
     const tenant = localStorage.getItem(TENANT_KEY);
     if (tenant) {
+      // 该 Header 只是当前前端上下文的提示，不能作为越权切换租户的依据；后端必须以 JWT 会话绑定的可信租户为准。
       config.headers.set("X-Tenant-Id", tenant);
     }
 
@@ -189,7 +190,8 @@ function handleUnauthorized(message: string) {
 }
 
 /**
- * 通用请求包装函数
+ * 通用请求包装函数。
+ * 入参为 Axios 请求配置，出参为后端统一 ApiResponse；认证失败、业务错误和网络错误已由响应拦截器统一转为 rejected Promise，调用方不应重复解析 HTTP 外壳。
  */
 export async function request<T = any>(config: AxiosRequestConfig): Promise<ApiResponse<T>> {
   const response = await service.request<ApiResponse<T>>(config);

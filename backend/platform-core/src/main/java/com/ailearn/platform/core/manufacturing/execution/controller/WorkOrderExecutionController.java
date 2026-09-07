@@ -3,6 +3,10 @@ package com.ailearn.platform.core.manufacturing.execution.controller;
 import com.ailearn.platform.core.manufacturing.execution.application.WorkOrderExecutionService;
 import com.ailearn.platform.core.manufacturing.execution.domain.WorkOrderLifecycle;
 import com.ailearn.platform.core.manufacturing.foundation.dto.WorkOrderCreateRequest;
+import com.ailearn.platform.core.manufacturing.foundation.application.ManufacturingFoundationService;
+import com.ailearn.platform.core.manufacturing.foundation.dto.ManufacturingPageQuery;
+import com.ailearn.platform.core.manufacturing.foundation.domain.WorkOrderFact;
+import com.ailearn.platform.core.masterdata.dto.MasterDataPageResult;
 import com.ailearn.platform.shared.api.ApiResponse;
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -11,10 +15,13 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 工单生命周期 REST Controller。
@@ -27,14 +34,40 @@ import org.springframework.web.bind.annotation.RestController;
 public class WorkOrderExecutionController {
 
     private final WorkOrderExecutionService service;
+    private final ManufacturingFoundationService foundationService;
 
     /**
      * 注入工单生命周期应用端口。
      *
      * @param service 工单生命周期应用端口
      */
-    public WorkOrderExecutionController(WorkOrderExecutionService service) {
+    @Autowired
+    public WorkOrderExecutionController(WorkOrderExecutionService service,
+                                        ManufacturingFoundationService foundationService) {
         this.service = service;
+        this.foundationService = foundationService;
+    }
+
+    /** 保留旧 focused tests 的单依赖构造器；生产 Spring 使用完整双依赖构造器。 */
+    public WorkOrderExecutionController(WorkOrderExecutionService service) {
+        this(service, null);
+    }
+
+    /** 查询当前租户工单基础事实分页；详情仍返回生命周期聚合。 */
+    @GetMapping
+    @PreAuthorize("hasAuthority('mes:workorder:view')")
+    public ApiResponse<MasterDataPageResult<WorkOrderFact>> page(
+            @ModelAttribute ManufacturingPageQuery query) {
+        return ApiResponse.success(foundationService.listWorkOrders(query));
+    }
+
+    /** 修改 Draft/Rejected 工单。 */
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('mes:workorder:update')")
+    public ApiResponse<WorkOrderLifecycle> update(@PathVariable("id") UUID id,
+                                                  @RequestBody WorkOrderCreateRequest request,
+                                                  @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        return ApiResponse.success(service.update(id, request, idempotencyKey));
     }
 
     /**

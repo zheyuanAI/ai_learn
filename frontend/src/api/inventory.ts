@@ -11,6 +11,7 @@ import type {
   InventoryBalance,
   InventoryBalanceQuery,
   InventoryReservation,
+  InventoryReservationView,
   InventoryReservationQuery,
   InventoryTransaction,
   InventoryTransactionQuery,
@@ -19,20 +20,37 @@ import type {
   TransferQuery,
   StocktakeOrder,
   StocktakeCreatePayload,
-  StocktakeRecordLinePayload,
   StocktakeConfirmPayload,
   StocktakeQuery,
 } from "../types/inventory";
 
 /**
+ * 转换查询对象中的驼峰命名为后端统一要求之下划线 snake_case
+ */
+function normalizeQueryParams(query: Record<string, any>): Record<string, any> {
+  const normalized: Record<string, any> = {};
+  for (const [key, val] of Object.entries(query)) {
+    if (val === undefined || val === null || val === "") continue;
+    // 保持标准分页参数 page, size, keyword 不变
+    if (key === "page" || key === "size" || key === "keyword" || key.includes("_")) {
+      normalized[key] = val;
+    } else {
+      const snakeKey = key.replace(/([A-Z])/g, "_$1").toLowerCase();
+      normalized[snakeKey] = val;
+    }
+  }
+  return normalized;
+}
+
+/**
  * 分页查询实时库存余额
- * 接口路径：GET /api/inventory/balances
+ * 接口路径：GET /api/inventory/balances?product_id=&warehouse_id=&location_id=&lot_no=&page=1&size=50
  */
 export async function getInventoryBalances(query: InventoryBalanceQuery = {}): Promise<ApiResponse<PageResult<InventoryBalance>>> {
   return await request<PageResult<InventoryBalance>>({
     url: "/api/inventory/balances",
     method: "GET",
-    params: query,
+    params: normalizeQueryParams(query),
   });
 }
 
@@ -40,11 +58,11 @@ export async function getInventoryBalances(query: InventoryBalanceQuery = {}): P
  * 分页查询销售预留与分配明细
  * 接口路径：GET /api/inventory/reservations
  */
-export async function getInventoryReservations(query: InventoryReservationQuery = {}): Promise<ApiResponse<PageResult<InventoryReservation>>> {
-  return await request<PageResult<InventoryReservation>>({
+export async function getInventoryReservations(query: InventoryReservationQuery = {}): Promise<ApiResponse<PageResult<InventoryReservationView>>> {
+  return await request<PageResult<InventoryReservationView>>({
     url: "/api/inventory/reservations",
     method: "GET",
-    params: query,
+    params: normalizeQueryParams(query),
   });
 }
 
@@ -56,7 +74,7 @@ export async function getInventoryTransactions(query: InventoryTransactionQuery 
   return await request<PageResult<InventoryTransaction>>({
     url: "/api/inventory/transactions",
     method: "GET",
-    params: query,
+    params: normalizeQueryParams(query),
   });
 }
 
@@ -69,6 +87,17 @@ export async function getTransfers(query: TransferQuery = {}): Promise<ApiRespon
     url: "/api/transfers",
     method: "GET",
     params: query,
+  });
+}
+
+/**
+ * 获取调拨单详情
+ * 接口路径：GET /api/transfers/{id}
+ */
+export async function getTransferById(id: string | number): Promise<ApiResponse<TransferOrder>> {
+  return await request<TransferOrder>({
+    url: `/api/transfers/${id}`,
+    method: "GET",
   });
 }
 
@@ -132,19 +161,18 @@ export async function createStocktake(payload: StocktakeCreatePayload): Promise<
 }
 
 /**
- * 录入盘点实盘数量与差异原因
- * 接口路径：POST /api/stocktakes/{id}/record
+ * 开始盘点
+ * 接口路径：POST /api/stocktakes/{id}/start
  */
-export async function recordStocktakeLines(id: string | number, lines: StocktakeRecordLinePayload[]): Promise<ApiResponse<StocktakeOrder>> {
+export async function startStocktake(id: string | number): Promise<ApiResponse<StocktakeOrder>> {
   return await request<StocktakeOrder>({
-    url: `/api/stocktakes/${id}/record`,
+    url: `/api/stocktakes/${id}/start`,
     method: "POST",
-    data: { lines },
   });
 }
 
 /**
- * 确认盘点并调整库存余额
+ * 确认盘点并调整库存余额（嵌入实盘数量与差异原因提交）
  * 接口路径：POST /api/stocktakes/{id}/confirm
  * 要求携带 Idempotency-Key，后端校验差异原因必填性，更新余额并追加差异流水
  */

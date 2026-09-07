@@ -1,5 +1,7 @@
 package com.ailearn.platform.core.inventory.domain;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -25,7 +27,9 @@ public record InventoryReservation(
         String sourceType,
         UUID sourceId,
         UUID sourceLineId,
+        @JsonSerialize(using = ToStringSerializer.class)
         BigDecimal reservedQty,
+        @JsonSerialize(using = ToStringSerializer.class)
         BigDecimal releasedQty,
         String status,
         long version,

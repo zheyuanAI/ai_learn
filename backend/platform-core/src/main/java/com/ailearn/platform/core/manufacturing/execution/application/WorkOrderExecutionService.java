@@ -12,6 +12,9 @@ public interface WorkOrderExecutionService {
     /** 创建 Draft 工单并登记其必需工序集合。 */
     WorkOrderLifecycle createWorkOrder(WorkOrderCreateRequest request, String idempotencyKey);
 
+    /** 修改 Draft/Rejected 工单并同步基础事实与生命周期快照。 */
+    WorkOrderLifecycle update(UUID workOrderId, WorkOrderCreateRequest request, String idempotencyKey);
+
     /** 提交 Draft 或 Rejected 工单进入 PendingApproval。 */
     WorkOrderLifecycle submit(UUID workOrderId, String idempotencyKey);
 

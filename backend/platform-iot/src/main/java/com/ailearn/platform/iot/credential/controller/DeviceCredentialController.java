@@ -25,21 +25,25 @@ public class DeviceCredentialController {
         this.service = service;
     }
 
+    /** 创建设备接入凭证；明文 secret 仅由应用服务在首次创建响应中返回。 */
     @PostMapping
-    public ApiResponse<CredentialCreatedView> create(@PathVariable UUID deviceId,
+    public ApiResponse<CredentialCreatedView> create(@PathVariable("deviceId") UUID deviceId,
                                                      @RequestBody(required = false) CredentialCreateRequest request,
                                                      @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(service.create(deviceId, request == null ? new CredentialCreateRequest() : request,
                 idempotencyKey));
     }
 
+    /** 查询设备凭证管理视图，不返回任何 secret 明文或摘要。 */
     @GetMapping
-    public ApiResponse<List<CredentialView>> list(@PathVariable UUID deviceId) {
+    public ApiResponse<List<CredentialView>> list(@PathVariable("deviceId") UUID deviceId) {
         return ApiResponse.success(service.list(deviceId));
     }
 
+    /** 撤销设备凭证；幂等和 Active 状态校验由应用服务负责。 */
     @PostMapping("/{credentialId}/revoke")
-    public ApiResponse<CredentialView> revoke(@PathVariable UUID deviceId, @PathVariable UUID credentialId,
+    public ApiResponse<CredentialView> revoke(@PathVariable("deviceId") UUID deviceId,
+                                             @PathVariable("credentialId") UUID credentialId,
                                               @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(service.revoke(deviceId, credentialId, idempotencyKey));
     }

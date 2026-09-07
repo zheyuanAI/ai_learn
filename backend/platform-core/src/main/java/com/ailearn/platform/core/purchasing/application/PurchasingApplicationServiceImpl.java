@@ -407,21 +407,15 @@ public class PurchasingApplicationServiceImpl implements PurchaseOrderApplicatio
         if (request == null) {
             throw new PurchasingException(PurchasingErrorCode.PO_004, "收货明细不能为空");
         }
-        if (request.getPurchaseOrderLineId() != null) {
-            return order.lines().stream()
-                    .filter(line -> line.id().equals(request.getPurchaseOrderLineId()))
-                    .findFirst()
-                    .orElseThrow(() -> new PurchasingException(PurchasingErrorCode.PO_004,
-                            "收货明细不属于当前采购订单"));
-        }
-        List<PurchaseOrderLine> matches = order.lines().stream()
-                .filter(line -> line.productId().equals(request.getProductId()) && line.pendingQty().signum() > 0)
-                .toList();
-        if (matches.size() != 1) {
+        if (request.getPurchaseOrderLineId() == null) {
             throw new PurchasingException(PurchasingErrorCode.PO_004,
-                    "收货明细必须携带唯一 purchaseOrderLineId");
+                    "收货明细必须携带 purchaseOrderLineId");
         }
-        return matches.get(0);
+        return order.lines().stream()
+                .filter(line -> line.id().equals(request.getPurchaseOrderLineId()))
+                .findFirst()
+                .orElseThrow(() -> new PurchasingException(PurchasingErrorCode.PO_004,
+                        "收货明细不属于当前采购订单"));
     }
 
     private void validateSaveRequest(PurchaseOrderSaveRequest request, boolean creating) {

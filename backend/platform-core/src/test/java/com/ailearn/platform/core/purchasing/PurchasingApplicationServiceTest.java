@@ -1,6 +1,7 @@
 package com.ailearn.platform.core.purchasing;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
@@ -198,6 +199,29 @@ class PurchasingApplicationServiceTest {
         assertEquals("jti-purchasing-test", persisted.completedSessionId());
         assertEquals(new BigDecimal("3.000000"), persisted.lines().get(0).receivedQty());
         verify(inventoryCommandService, times(1)).increase(any(InventoryIncreaseCommand.class));
+    }
+
+    /** 同一采购订单允许拆分多张到货单；每张到货单保留独立标识，累计足量后才完成采购单。 */
+    @Test
+    void splitReceiptsKeepIndependentReceiptIdsAndCompleteAtAggregateQuantity() {
+        PurchaseOrderView approved = approvedOrder("PO-003-SPLIT", "10");
+        UUID firstReceiptId = UUID.fromString("33333333-3333-3333-3333-333333333331");
+        UUID secondReceiptId = UUID.fromString("33333333-3333-3333-3333-333333333332");
+
+        PurchaseReceiptConfirmRequest firstRequest = receiptRequest(approved, "4", "0", "4", null);
+        firstRequest.setReceiptNo("PR-SPLIT-1");
+        PurchaseReceiptConfirmRequest secondRequest = receiptRequest(approved, "6", "0", "6", null);
+        secondRequest.setReceiptNo("PR-SPLIT-2");
+
+        PurchaseReceiptView first = service.confirmReceipt(firstReceiptId, firstRequest, "receipt-split-1");
+        PurchaseReceiptView second = service.confirmReceipt(secondReceiptId, secondRequest, "receipt-split-2");
+
+        assertNotEquals(first.getId(), second.getId());
+        assertEquals(2, repository.receipts.size());
+        assertEquals("Completed", repository.orders.get(approved.getId()).status().name());
+        assertEquals(new BigDecimal("10.000000"),
+                repository.orders.get(approved.getId()).lines().get(0).receivedQty());
+        verify(inventoryCommandService, times(2)).increase(any(InventoryIncreaseCommand.class));
     }
 
     @Test

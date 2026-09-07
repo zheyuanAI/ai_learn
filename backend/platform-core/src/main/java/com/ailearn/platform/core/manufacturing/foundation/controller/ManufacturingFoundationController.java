@@ -4,9 +4,14 @@ import com.ailearn.platform.core.manufacturing.foundation.application.Manufactur
 import com.ailearn.platform.core.manufacturing.foundation.domain.BomFact;
 import com.ailearn.platform.core.manufacturing.foundation.domain.RoutingFact;
 import com.ailearn.platform.core.manufacturing.foundation.dto.BomCreateRequest;
+import com.ailearn.platform.core.manufacturing.foundation.dto.ManufacturingPageQuery;
 import com.ailearn.platform.core.manufacturing.foundation.dto.RoutingCreateRequest;
 import com.ailearn.platform.shared.api.ApiResponse;
+import java.util.UUID;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -60,5 +65,31 @@ public class ManufacturingFoundationController {
     public ApiResponse<RoutingFact> createRouting(@RequestBody RoutingCreateRequest request,
                                                   @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(service.createRouting(request, idempotencyKey));
+    }
+
+    /** 查询当前租户 BOM 分页。 */
+    @GetMapping("/boms")
+    public ApiResponse<com.ailearn.platform.core.masterdata.dto.MasterDataPageResult<BomFact>> listBoms(
+            @ModelAttribute ManufacturingPageQuery query) {
+        return ApiResponse.success(service.listBoms(query));
+    }
+
+    /** 查询当前租户单个 BOM，跨租户对象按不可见处理。 */
+    @GetMapping("/boms/{id}")
+    public ApiResponse<BomFact> findBom(@PathVariable("id") UUID id) {
+        return ApiResponse.success(service.findBom(id).orElse(null));
+    }
+
+    /** 查询当前租户 Routing 分页。 */
+    @GetMapping("/routings")
+    public ApiResponse<com.ailearn.platform.core.masterdata.dto.MasterDataPageResult<RoutingFact>> listRoutings(
+            @ModelAttribute ManufacturingPageQuery query) {
+        return ApiResponse.success(service.listRoutings(query));
+    }
+
+    /** 查询当前租户单个 Routing，跨租户对象按不可见处理。 */
+    @GetMapping("/routings/{id}")
+    public ApiResponse<RoutingFact> findRouting(@PathVariable("id") UUID id) {
+        return ApiResponse.success(service.findRouting(id).orElse(null));
     }
 }

@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Result;
+import org.apache.ibatis.annotations.ResultMap;
 import org.apache.ibatis.annotations.Results;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
@@ -29,7 +30,7 @@ public interface StocktakeOrderMapper {
              LIMIT 1
             """)
     @Results(id = "stocktakeOrderRowMap", value = {
-            @Result(property = "id", column = "id", id = true),
+            @Result(property = "id", column = "id", javaType = UUID.class, id = true),
             @Result(property = "tenantId", column = "tenant_id"),
             @Result(property = "stocktakeNo", column = "stocktake_no"),
             @Result(property = "warehouseId", column = "warehouse_id"),
@@ -47,6 +48,41 @@ public interface StocktakeOrderMapper {
     })
     StocktakeOrderRow findById(@Param("tenantId") UUID tenantId, @Param("id") UUID id);
 
+    /** 按租户查询盘点表头分页。 */
+    @Select("""
+            <script>
+            SELECT id, tenant_id, stocktake_no, warehouse_id, location_id, status, version,
+                   started_by, started_at, confirmed_by, confirmed_at, created_by, created_at,
+                   updated_by, updated_at
+              FROM inv_stocktake_order
+             WHERE tenant_id = #{tenantId} AND isdel = 0
+            <if test="status != null and status != ''"> AND status = #{status}</if>
+            <if test="keyword != null and keyword != ''"> AND stocktake_no ILIKE CONCAT('%', #{keyword}, '%')</if>
+             ORDER BY created_at DESC, id DESC
+             LIMIT #{limit} OFFSET #{offset}
+            </script>
+            """)
+    @ResultMap("stocktakeOrderRowMap")
+    List<StocktakeOrderRow> findPage(@Param("tenantId") UUID tenantId,
+                                     @Param("offset") int offset,
+                                     @Param("limit") int limit,
+                                     @Param("status") String status,
+                                     @Param("keyword") String keyword);
+
+    /** 统计当前租户盘点总数，筛选条件与分页查询保持一致。 */
+    @Select("""
+            <script>
+            SELECT COUNT(1)
+              FROM inv_stocktake_order
+             WHERE tenant_id = #{tenantId} AND isdel = 0
+            <if test="status != null and status != ''"> AND status = #{status}</if>
+            <if test="keyword != null and keyword != ''"> AND stocktake_no ILIKE CONCAT('%', #{keyword}, '%')</if>
+            </script>
+            """)
+    long count(@Param("tenantId") UUID tenantId,
+               @Param("status") String status,
+               @Param("keyword") String keyword);
+
     /**
      * 按租户读取盘点系统快照明细。
      */
@@ -60,7 +96,7 @@ public interface StocktakeOrderMapper {
              ORDER BY line_no, id
             """)
     @Results(id = "stocktakeLineRowMap", value = {
-            @Result(property = "id", column = "id", id = true),
+            @Result(property = "id", column = "id", javaType = UUID.class, id = true),
             @Result(property = "tenantId", column = "tenant_id"),
             @Result(property = "stocktakeOrderId", column = "stocktake_order_id"),
             @Result(property = "lineNo", column = "line_no"),

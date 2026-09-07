@@ -25,7 +25,15 @@
           </div>
           <div class="meta-card">
             <span class="lbl">系统数量快照时点</span>
-            <span class="mono-text">{{ stocktake.systemSnapshotAt || stocktake.createdAt }}</span>
+            <span class="mono-text">{{ stocktake.systemSnapshotAt || stocktake.startedAt || '-' }}</span>
+          </div>
+          <div class="meta-card">
+            <span class="lbl">单据版本</span>
+            <span class="mono-text">v{{ stocktake.version }}</span>
+          </div>
+          <div class="meta-card">
+            <span class="lbl">后端允许动作</span>
+            <span class="mono-text">{{ allowedActionText }}</span>
           </div>
           <div v-if="stocktake.confirmedAt" class="meta-card">
             <span class="lbl">调整完成时点</span>
@@ -94,7 +102,7 @@
 
       <div class="dialog-footer">
         <button type="button" class="btn btn-secondary" @click="handleClose">关闭</button>
-        <template v-if="stocktake.status === 'Counting'">
+        <template v-if="canConfirm">
           <button type="button" class="btn btn-secondary" :disabled="submitting" @click="saveDraftCount">
             暂存实盘数量
           </button>
@@ -122,7 +130,7 @@
  * 职责：支持实盘录入、自动计算 variance = counted - system、必填差异原因及调整确认
  * 规则：无差异时不生成调整流水；有差异时生成不可篡改流水并更新库存
  */
-import { ref, watch } from "vue";
+import { ref, watch, computed } from "vue";
 import StatusBadge from "@/components/common/StatusBadge.vue";
 import QuantityText from "@/components/common/QuantityText.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
@@ -150,6 +158,16 @@ const emit = defineEmits<{
 
 const editableLines = ref<StocktakeLine[]>([]);
 const isConfirmOpen = ref(false);
+const canConfirm = computed(() => props.stocktake?.allowedActions?.some(
+  (action) => action.action === "confirm" && action.enabled,
+) ?? false);
+const allowedActionText = computed(() => {
+  const actions = props.stocktake?.allowedActions || [];
+  return actions.length === 0 ? "无" : actions
+    .filter((action) => action.enabled)
+    .map((action) => action.action)
+    .join(", ") || "无";
+});
 
 watch(
   () => props.stocktake,
@@ -181,7 +199,7 @@ function handleClose() {
 
 function saveDraftCount() {
   const payload = editableLines.value.map((l) => ({
-    lineId: l.id,
+    lineId: l.id || l.lineId || "",
     countedQty: l.countedQty || l.systemQty,
     varianceReason: l.varianceReason,
   }));
@@ -203,7 +221,7 @@ function handleOpenConfirm() {
 function executeConfirmAdjustment() {
   isConfirmOpen.value = false;
   const linesPayload = editableLines.value.map((l) => ({
-    lineId: l.id,
+    lineId: l.id || l.lineId || "",
     countedQty: l.countedQty || l.systemQty,
     varianceReason: l.varianceReason,
   }));

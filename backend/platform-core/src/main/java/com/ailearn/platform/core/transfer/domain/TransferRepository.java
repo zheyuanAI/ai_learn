@@ -1,6 +1,7 @@
 package com.ailearn.platform.core.transfer.domain;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -25,6 +26,18 @@ public interface TransferRepository {
      * @return 调拨聚合或空
      */
     Optional<TransferOrder> findById(UUID tenantId, UUID id);
+
+    /**
+     * 查询当前租户的调拨分页；实现必须在表头和统计 SQL 中同时带租户与逻辑删除条件。
+     *
+     * @param tenantId 可信租户
+     * @param offset 零基偏移量
+     * @param limit 当前页大小
+     * @param status 可选状态
+     * @param keyword 可选调拨单号关键词
+     * @return 当前页聚合和总数
+     */
+    TransferPage findPage(UUID tenantId, int offset, int limit, String status, String keyword);
 
     /**
      * 用版本条件将草稿推进为已确认。

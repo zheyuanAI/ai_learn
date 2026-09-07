@@ -1,9 +1,55 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
+import {
+  createRouter,
+  createWebHistory,
+  type RouteLocationGeneric,
+  type RouteLocationRaw,
+  type RouteRecordRaw,
+} from "vue-router";
 import AppLayout from "../components/Layout/AppLayout.vue";
 import LoginView from "../views/LoginView.vue";
 import PrototypeHome from "../views/PrototypeHome.vue";
 import DomainView from "../views/DomainView.vue";
+import NotFoundView from "../views/NotFoundView.vue";
 import { useAuthStore } from "../stores/auth";
+
+/**
+ * 用途：构造旧地址到正式业务地址的重定向结果。
+ * 入参：正式 pathname 和当前路由。
+ * 出参：保留原 query/hash 的路由位置，避免旧链接丢失筛选条件或返回上下文。
+ * 流程：替换 pathname，原样携带 query/hash；详情路由由调用方先拼接业务 ID。
+ */
+function redirectWithNavigation(targetPath: string, to: RouteLocationGeneric): RouteLocationRaw {
+  return {
+    path: targetPath,
+    query: to.query,
+    hash: to.hash,
+  };
+}
+
+/**
+ * 用途：把旧主数据子路由转换为主数据页的指定 tab。
+ * 入参：主数据 tab 标识和当前路由。
+ * 出参：带 tab query 的主数据页路由，并保留其他 query/hash。
+ * 流程：用正式 tab 覆盖旧地址可能携带的 tab，确保直达结果稳定。
+ */
+function redirectToMasterDataTab(tab: string, to: RouteLocationGeneric): RouteLocationRaw {
+  return {
+    path: "/master-data",
+    query: { ...to.query, tab },
+    hash: to.hash,
+  };
+}
+
+/**
+ * 用途：把旧详情地址的业务 ID 迁移到正式详情宿主。
+ * 入参：正式详情 pathname 前缀和当前旧详情路由。
+ * 出参：保留 query/hash 的正式详情地址。
+ * 流程：读取 route.params.id 并进行 URL 编码，避免业务 ID 中的特殊字符破坏路径。
+ */
+function redirectToDetail(targetPath: string, to: RouteLocationGeneric): RouteLocationRaw {
+  const id = encodeURIComponent(String(to.params.id || ""));
+  return redirectWithNavigation(`${targetPath}/${id}`, to);
+}
 
 /**
  * 路由配置表
@@ -94,8 +140,48 @@ const routes: RouteRecordRaw[] = [
         },
         meta: { requiresAuth: true, title: "AI 只读助手" },
       },
+      {
+        path: "ai/chat",
+        name: "AiChat",
+        component: DomainView,
+        props: {
+          title: "AI 对话查询",
+          summary: "当前入口承载 AI 只读助手的对话能力说明，具体工具调用仍以权限约束和审计记录为准。",
+          specPath: "docs/specs/50-ai-assistant",
+          prototypePath: "docs/prototype/pages/ai-assistant.html",
+        },
+        meta: { requiresAuth: true, title: "AI 对话查询" },
+      },
+      {
+        path: "ai/trace",
+        redirect: (to) => redirectWithNavigation("/traceability", to),
+      },
+      {
+        path: "ai/audit",
+        name: "AiAudit",
+        component: DomainView,
+        props: {
+          title: "AI 工具审计",
+          summary: "当前入口承载 AI 工具调用审计能力说明，查询结果必须展示来源并受当前用户权限约束。",
+          specPath: "docs/specs/50-ai-assistant",
+          prototypePath: "docs/prototype/pages/tool-audit.html",
+        },
+        meta: { requiresAuth: true, title: "AI 工具审计" },
+      },
 
       // ====== 阶段 2：主数据与库存 (ERP/WMS) ======
+      {
+        path: "master-data/products",
+        redirect: (to) => redirectToMasterDataTab("products", to),
+      },
+      {
+        path: "master-data/warehouses",
+        redirect: (to) => redirectToMasterDataTab("warehouses", to),
+      },
+      {
+        path: "master-data/inventory",
+        redirect: (to) => redirectWithNavigation("/inventory/balances", to),
+      },
       {
         path: "master-data",
         name: "MasterData",
@@ -129,7 +215,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: "inventory/transfers/:id",
         name: "InventoryTransferDetail",
-        component: () => import("../views/inventory/TransferDetailView.vue"),
+        component: () => import("../views/inventory/TransferDetailPage.vue"),
         meta: { requiresAuth: true, title: "调拨单执行详情" },
       },
       {
@@ -147,6 +233,22 @@ const routes: RouteRecordRaw[] = [
 
       // ====== 阶段 3：采购进货与质检上架 ======
       {
+        path: "purchase/orders/:id",
+        redirect: (to) => redirectToDetail("/purchasing/orders", to),
+      },
+      {
+        path: "purchase/orders",
+        redirect: (to) => redirectWithNavigation("/purchasing/orders", to),
+      },
+      {
+        path: "purchase/inbound",
+        redirect: (to) => redirectWithNavigation("/purchasing/receipts", to),
+      },
+      {
+        path: "purchase/putaway",
+        redirect: (to) => redirectWithNavigation("/purchasing/putaway", to),
+      },
+      {
         path: "purchasing/orders",
         name: "PurchaseOrderList",
         component: () => import("../views/purchasing/PurchaseOrderListView.vue"),
@@ -155,13 +257,14 @@ const routes: RouteRecordRaw[] = [
       {
         path: "purchasing/orders/:id",
         name: "PurchaseOrderDetail",
-        component: () => import("../views/purchasing/PurchaseOrderDetailView.vue"),
+        component: () => import("../views/purchasing/PurchaseOrderDetailPage.vue"),
         meta: { requiresAuth: true, title: "采购单执行详情" },
       },
       {
         path: "purchasing/receipts",
         name: "PurchaseReceiptConfirm",
-        component: () => import("../views/purchasing/ReceiptConfirmView.vue"),
+        // ReceiptConfirmView 是采购订单详情中的弹窗组件，路由入口复用订单控制台承载收货动作。
+        component: () => import("../views/purchasing/PurchaseOrderListView.vue"),
         meta: { requiresAuth: true, title: "采购到货验收" },
       },
       {
@@ -179,6 +282,10 @@ const routes: RouteRecordRaw[] = [
 
       // ====== 阶段 4：销售履约与直接拣发 ======
       {
+        path: "sales/outbound",
+        redirect: (to) => redirectWithNavigation("/sales/picks", to),
+      },
+      {
         path: "sales/orders",
         name: "SalesOrderList",
         component: () => import("../views/sales/SalesOrderListView.vue"),
@@ -187,13 +294,14 @@ const routes: RouteRecordRaw[] = [
       {
         path: "sales/orders/:id",
         name: "SalesOrderDetail",
-        component: () => import("../views/sales/SalesOrderDetailView.vue"),
+        component: () => import("../views/sales/SalesOrderDetailPage.vue"),
         meta: { requiresAuth: true, title: "销售单履约详情" },
       },
       {
         path: "sales/reservations",
         name: "SalesReservationDetail",
-        component: () => import("../views/sales/ReservationDetailView.vue"),
+        // ReservationDetailView 是销售订单详情中的弹窗组件，路由入口复用订单控制台承载预留审计。
+        component: () => import("../views/sales/SalesOrderListView.vue"),
         meta: { requiresAuth: true, title: "销售预留分配" },
       },
       {
@@ -205,11 +313,16 @@ const routes: RouteRecordRaw[] = [
       {
         path: "sales/shipments",
         name: "SalesShipmentConfirm",
-        component: () => import("../views/sales/ShipmentConfirmView.vue"),
+        // ShipmentConfirmView 是销售订单详情中的弹窗组件，路由入口复用订单控制台承载发货动作。
+        component: () => import("../views/sales/SalesOrderListView.vue"),
         meta: { requiresAuth: true, title: "发货出库确认" },
       },
 
       // ====== 阶段 5：MES 制造执行 ======
+      {
+        path: "mes/execution",
+        redirect: (to) => redirectWithNavigation("/mes/dispatch", to),
+      },
       {
         path: "mes/boms",
         name: "MesBomList",
@@ -276,6 +389,7 @@ const routes: RouteRecordRaw[] = [
         path: "iot/devices/:id",
         name: "IotDeviceDetail",
         component: () => import("../views/iot/DeviceDetailView.vue"),
+        props: (route) => ({ deviceId: route.params.id as string }),
         meta: { requiresAuth: true, title: "设备运行状态详情" },
       },
       {
@@ -294,10 +408,19 @@ const routes: RouteRecordRaw[] = [
         path: "iot/alarms/:id",
         name: "IotAlarmDetail",
         component: () => import("../views/iot/AlarmDetailView.vue"),
+        props: (route) => ({ alarmId: route.params.id as string }),
         meta: { requiresAuth: true, title: "告警处理详情" },
       },
 
       // ====== 阶段 7：追溯、二维 GIS 与综合看板 ======
+      {
+        path: "gis/map/:id",
+        redirect: (to) => redirectToDetail("/gis/site-maps", to),
+      },
+      {
+        path: "gis/map",
+        redirect: (to) => redirectWithNavigation("/gis/site-maps", to),
+      },
       {
         path: "traceability",
         name: "Traceability",
@@ -314,12 +437,14 @@ const routes: RouteRecordRaw[] = [
         path: "gis/site-maps/:id",
         name: "SiteMapView",
         component: () => import("../views/insights/SiteMapView.vue"),
+        props: (route) => ({ mapId: route.params.id as string }),
         meta: { requiresAuth: true, title: "空间点位画布" },
       },
       {
         path: "gis/site-maps/:id/edit",
         name: "SiteMapEditor",
         component: () => import("../views/insights/SiteMapEditorView.vue"),
+        props: (route) => ({ mapId: route.params.id as string }),
         meta: { requiresAuth: true, title: "站点地图点位配置" },
       },
       {
@@ -327,6 +452,12 @@ const routes: RouteRecordRaw[] = [
         name: "InsightsDashboard",
         component: () => import("../views/insights/DashboardView.vue"),
         meta: { requiresAuth: true, title: "七类综合监控看板" },
+      },
+      {
+        path: "exception-center",
+        name: "ExceptionCenter",
+        component: () => import("../views/insights/ExceptionCenterView.vue"),
+        meta: { requiresAuth: true, title: "跨域异常中心" },
       },
       {
         path: "system/tenant",
@@ -377,7 +508,12 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: "/:pathMatch(.*)*",
-    redirect: "/",
+    name: "NotFound",
+    component: NotFoundView,
+    meta: {
+      requiresAuth: false,
+      title: "页面不存在",
+    },
   },
 ];
 

@@ -422,7 +422,7 @@ function handleCredentialIssued() {
 
 function promptToggleStatus(item: DeviceItem) {
   toggleConfirm.targetDevice = item;
-  const isCurrentlyActive = item.lifecycleStatus === "ACTIVE";
+  const isCurrentlyActive = item.lifecycleStatus.toLowerCase() === "active";
   toggleConfirm.title = isCurrentlyActive ? "停用设备接入确认" : "启用设备接入确认";
   toggleConfirm.message = isCurrentlyActive
     ? `确认停用设备【${item.deviceCode}】？停用后该设备持有的 MQTT 接入凭证将无法继续建立连接。`
@@ -435,7 +435,7 @@ async function handleConfirmToggle() {
   if (!toggleConfirm.targetDevice) return;
   toggleConfirm.loading = true;
   try {
-    const nextStatus = toggleConfirm.targetDevice.lifecycleStatus === "ACTIVE" ? "DISABLED" : "ACTIVE";
+    const nextStatus = toggleConfirm.targetDevice.lifecycleStatus.toLowerCase() === "active" ? "Disabled" : "Active";
     await toggleDeviceLifecycleStatus(toggleConfirm.targetDevice.id as string, nextStatus);
     toggleConfirm.visible = false;
     await fetchDeviceList();

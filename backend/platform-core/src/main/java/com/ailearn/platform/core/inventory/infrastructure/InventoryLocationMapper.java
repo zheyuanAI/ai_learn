@@ -29,7 +29,7 @@ public interface InventoryLocationMapper {
              LIMIT 1
             """)
     @Results(id = "locationRowMap", value = {
-            @Result(property = "id", column = "id", id = true),
+            @Result(property = "id", column = "id", javaType = UUID.class, id = true),
             @Result(property = "tenantId", column = "tenant_id"),
             @Result(property = "warehouseId", column = "warehouse_id"),
             @Result(property = "locationType", column = "type"),

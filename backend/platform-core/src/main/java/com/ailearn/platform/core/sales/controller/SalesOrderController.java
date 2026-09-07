@@ -59,7 +59,7 @@ public class SalesOrderController {
      * @return 订单详情
      */
     @GetMapping("/{id}")
-    public ApiResponse<SalesOrderView> detail(@PathVariable UUID id) {
+    public ApiResponse<SalesOrderView> detail(@PathVariable("id") UUID id) {
         return ApiResponse.success(applicationService.detail(id));
     }
 
@@ -85,7 +85,7 @@ public class SalesOrderController {
      * @return 修改后的订单
      */
     @PutMapping("/{id}")
-    public ApiResponse<SalesOrderView> update(@PathVariable UUID id, @RequestBody SalesOrderSaveRequest request,
+    public ApiResponse<SalesOrderView> update(@PathVariable("id") UUID id, @RequestBody SalesOrderSaveRequest request,
                                               @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(applicationService.update(id, request, idempotencyKey));
     }
@@ -94,7 +94,7 @@ public class SalesOrderController {
      * 提交订单。
      */
     @PostMapping("/{id}/submit")
-    public ApiResponse<SalesOrderView> submit(@PathVariable UUID id,
+    public ApiResponse<SalesOrderView> submit(@PathVariable("id") UUID id,
                                               @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(applicationService.submit(id, idempotencyKey));
     }
@@ -103,7 +103,7 @@ public class SalesOrderController {
      * 审核订单；审核不自动预留库存。
      */
     @PostMapping("/{id}/approve")
-    public ApiResponse<SalesOrderView> approve(@PathVariable UUID id,
+    public ApiResponse<SalesOrderView> approve(@PathVariable("id") UUID id,
                                                @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(applicationService.approve(id, idempotencyKey));
     }
@@ -112,7 +112,7 @@ public class SalesOrderController {
      * 人工完成订单；原因由请求提交，账号、会话和时间由可信上下文生成。
      */
     @PostMapping("/{id}/complete")
-    public ApiResponse<SalesFulfillmentResult> manuallyComplete(@PathVariable UUID id,
+    public ApiResponse<SalesFulfillmentResult> manuallyComplete(@PathVariable("id") UUID id,
                                                                 @RequestBody SalesOrderCompleteRequest request,
                                                                 @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(fulfillmentService.manuallyComplete(id, request, idempotencyKey));

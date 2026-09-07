@@ -123,14 +123,13 @@
         <form class="modal-body" @submit.prevent="submitCreateReceipt">
           <div class="form-grid two-col">
             <div class="form-item">
-              <label>生产工单编号/ID <span class="req">*</span></label>
-              <input
-                v-model="createForm.workOrderId"
-                type="text"
-                class="form-input font-mono"
-                placeholder="例如 wo-001 或 WO-20260901-001"
-                required
-              />
+              <label>生产工单 <span class="req">*</span></label>
+              <select v-model="createForm.workOrderId" class="form-input" required @change="fetchReceiptList">
+                <option value="">请选择真实工单</option>
+                <option v-for="workOrder in workOrders" :key="workOrder.id" :value="String(workOrder.id)">
+                  {{ workOrder.workOrderNo }}
+                </option>
+              </select>
             </div>
             <div class="form-item">
               <label>成品入库数量 <span class="req">*</span></label>
@@ -147,23 +146,21 @@
           <div class="form-grid two-col">
             <div class="form-item">
               <label>目标入库仓库 <span class="req">*</span></label>
-              <input
-                v-model="createForm.warehouseId"
-                type="text"
-                class="form-input"
-                placeholder="例如 wh-fg (成品主仓库)"
-                required
-              />
+              <select v-model="createForm.warehouseId" class="form-input" required @change="loadLocations">
+                <option value="">请选择真实仓库</option>
+                <option v-for="warehouse in warehouses" :key="warehouse.id" :value="String(warehouse.id)">
+                  {{ warehouse.name }} ({{ warehouse.code }})
+                </option>
+              </select>
             </div>
             <div class="form-item">
               <label>目标货架库位 <span class="req">*</span></label>
-              <input
-                v-model="createForm.locationId"
-                type="text"
-                class="form-input font-mono"
-                placeholder="例如 FG-A-01"
-                required
-              />
+              <select v-model="createForm.locationId" class="form-input" required>
+                <option value="">请选择真实库位</option>
+                <option v-for="location in locations" :key="location.id" :value="String(location.id)">
+                  {{ location.code }} ({{ location.name }})
+                </option>
+              </select>
             </div>
           </div>
 
@@ -211,13 +208,20 @@ import {
   getFinishedGoodsReceipts,
   createFinishedGoodsReceipt,
   confirmFinishedGoodsReceipt,
+  getWorkOrders,
 } from "../../api/manufacturing";
+import { getLocations, getWarehouses } from "../../api/masterData";
+import type { Location, Warehouse } from "../../types/inventory";
+import type { WorkOrderItem } from "../../types/manufacturing";
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 
 const receiptList = ref<FinishedGoodsReceiptItem[]>([]);
 const total = ref(0);
+const workOrders = ref<WorkOrderItem[]>([]);
+const warehouses = ref<Warehouse[]>([]);
+const locations = ref<Location[]>([]);
 const queryParams = reactive({
   page: 1,
   size: 10,
@@ -238,10 +242,10 @@ const columns: TableColumn[] = [
 const createModalVisible = ref(false);
 const isSubmitting = ref(false);
 const createForm = reactive<FinishedGoodsReceiptCreateRequest>({
-  workOrderId: "wo-001",
-  receiptQty: "50.00",
-  warehouseId: "wh-fg",
-  locationId: "FG-A-01",
+  workOrderId: "",
+  receiptQty: "",
+  warehouseId: "",
+  locationId: "",
 });
 
 const confirmDialog = reactive({
@@ -262,16 +266,18 @@ function getActionDisabledReason(item: FinishedGoodsReceiptItem, action: string)
 }
 
 async function fetchReceiptList() {
+  if (!createForm.workOrderId) {
+    receiptList.value = [];
+    total.value = 0;
+    viewState.value = "empty";
+    return;
+  }
   viewState.value = "loading";
   errorMessage.value = "";
   try {
-    const res = await getFinishedGoodsReceipts({
-      page: queryParams.page,
-      size: queryParams.size,
-      status: queryParams.status || undefined,
-    });
+    const res = await getFinishedGoodsReceipts(createForm.workOrderId);
     if (res.data) {
-      let list = res.data.records || [];
+      let list = res.data || [];
       if (queryParams.keyword.trim()) {
         const kw = queryParams.keyword.toLowerCase();
         list = list.filter(
@@ -282,7 +288,7 @@ async function fetchReceiptList() {
         );
       }
       receiptList.value = list;
-      total.value = res.data.total || list.length;
+      total.value = list.length;
       viewState.value = receiptList.value.length === 0 ? "empty" : "ready";
     }
   } catch (err: any) {
@@ -309,15 +315,15 @@ function handlePageChange(page: number) {
 }
 
 function openCreateModal() {
-  createForm.workOrderId = "wo-001";
-  createForm.receiptQty = "50.00";
-  createForm.warehouseId = "wh-fg";
-  createForm.locationId = "FG-A-01";
+  createForm.workOrderId = "";
+  createForm.receiptQty = "";
+  createForm.warehouseId = "";
+  createForm.locationId = "";
   createModalVisible.value = true;
 }
 
 async function submitCreateReceipt() {
-  if (!createForm.workOrderId || !createForm.receiptQty) return;
+  if (!createForm.workOrderId || !createForm.receiptQty || !createForm.warehouseId || !createForm.locationId) return;
   isSubmitting.value = true;
   try {
     await createFinishedGoodsReceipt(createForm);
@@ -350,8 +356,34 @@ async function handleExecuteConfirm() {
 }
 
 onMounted(() => {
-  fetchReceiptList();
+  loadMasterData();
 });
+
+/** 加载 FGR 创建和查询所需真实 UUID，并按工单作为后端必填查询条件。 */
+async function loadMasterData() {
+  try {
+    const [workOrderRes, warehouseRes] = await Promise.all([
+      getWorkOrders({ page: 1, size: 200 }),
+      getWarehouses({ page: 1, size: 200, status: "ACTIVE" }),
+    ]);
+    workOrders.value = workOrderRes.data.records || [];
+    warehouses.value = warehouseRes.data.records || [];
+  } catch (err: any) {
+    errorMessage.value = err?.message || "加载成品入库主数据失败";
+    viewState.value = "error";
+  }
+}
+
+/** 按已选仓库读取真实库位 UUID，避免仓库与库位跨仓引用。 */
+async function loadLocations() {
+  createForm.locationId = "";
+  if (!createForm.warehouseId) {
+    locations.value = [];
+    return;
+  }
+  const response = await getLocations({ warehouseId: createForm.warehouseId, page: 1, size: 200, status: "ACTIVE" });
+  locations.value = response.data.records || [];
+}
 </script>
 
 <style scoped>

@@ -21,15 +21,15 @@
         <div class="info-grid">
           <div class="info-card">
             <span class="card-label">调拨商品物料</span>
-            <strong class="card-val">{{ transfer.productName }}</strong>
-            <span class="card-sub">{{ transfer.sku }} ({{ transfer.uom }})</span>
-            <span v-if="transfer.lotNo" class="card-tag">批次: {{ transfer.lotNo }}</span>
+            <strong class="card-val">{{ displayProductName }}</strong>
+            <span class="card-sub">{{ displaySku }} ({{ displayUom }})</span>
+            <span v-if="displayLotNo" class="card-tag">批次: {{ displayLotNo }}</span>
           </div>
 
           <div class="info-card">
             <span class="card-label">调拨数量</span>
             <div class="qty-highlight">
-              <QuantityText :value="transfer.qty" :unit="transfer.uom" />
+              <QuantityText :value="displayQty" :unit="displayUom" />
             </div>
             <span class="card-sub">企业总实物库存保持不变</span>
           </div>
@@ -38,14 +38,14 @@
         <div class="route-box">
           <div class="route-point">
             <span class="point-badge from">来源 (FROM)</span>
-            <strong class="point-name">{{ transfer.fromWarehouseName }}</strong>
-            <span class="point-loc">{{ transfer.fromLocationCode }}</span>
+            <strong class="point-name">{{ displayFromWarehouse }}</strong>
+            <span class="point-loc">{{ displayFromLocation }}</span>
           </div>
           <div class="route-arrow-icon">➔ 移位 ➔</div>
           <div class="route-point">
             <span class="point-badge to">目标 (TO)</span>
-            <strong class="point-name">{{ transfer.toWarehouseName }}</strong>
-            <span class="point-loc">{{ transfer.toLocationCode }}</span>
+            <strong class="point-name">{{ displayToWarehouse }}</strong>
+            <span class="point-loc">{{ displayToLocation }}</span>
           </div>
         </div>
 
@@ -83,7 +83,7 @@
     <ConfirmDialog
       v-model:visible="isConfirmOpen"
       title="确认执行库位调拨"
-      :message="`确定将 ${transfer.qty} ${transfer.uom} 的物料 ${transfer.productName} 从 ${transfer.fromLocationCode} 调拨至 ${transfer.toLocationCode} 吗？确认后将同步更新库存余额并追加不可篡改流水。`"
+      :message="`确定将 ${displayQty} ${displayUom} 的物料 ${displayProductName} 从 ${displayFromLocation} 调拨至 ${displayToLocation} 吗？确认后将同步更新库存余额并追加不可篡改流水。`"
       :loading="confirming"
       @confirm="executeConfirm"
     />
@@ -122,6 +122,18 @@ const emit = defineEmits<{
 }>();
 
 const isConfirmOpen = ref(false);
+
+// 修改：后端详情以 lines 为权威数量来源，兼容列表展示字段未投影时仍显示真实调拨明细。
+const primaryLine = computed(() => props.transfer?.lines?.[0]);
+const displayProductName = computed(() => props.transfer?.productName || primaryLine.value?.productName || "未提供物料名称");
+const displaySku = computed(() => props.transfer?.sku || primaryLine.value?.sku || props.transfer?.productId || primaryLine.value?.productId || "-");
+const displayUom = computed(() => props.transfer?.uom || primaryLine.value?.uom || "-");
+const displayQty = computed(() => props.transfer?.qty ?? primaryLine.value?.quantity ?? "0");
+const displayLotNo = computed(() => props.transfer?.lotNo || primaryLine.value?.lotNo || "");
+const displayFromWarehouse = computed(() => props.transfer?.fromWarehouseName || props.transfer?.fromWarehouseId || "-");
+const displayFromLocation = computed(() => props.transfer?.fromLocationCode || props.transfer?.fromLocationId || "-");
+const displayToWarehouse = computed(() => props.transfer?.toWarehouseName || props.transfer?.toWarehouseId || "-");
+const displayToLocation = computed(() => props.transfer?.toLocationCode || props.transfer?.toLocationId || "-");
 
 const canConfirm = computed(() => {
   if (!props.transfer) return false;

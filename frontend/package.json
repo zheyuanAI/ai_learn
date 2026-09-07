@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "powershell -NoProfile -ExecutionPolicy Bypass -File e2e/menu-regression.ps1"
   },
   "dependencies": {
     "axios": "^1.20.0",
@@ -18,6 +19,7 @@
     "vue-router": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/cli": "^0.1.19",
     "@vitejs/plugin-vue": "^5.1.2",
     "typescript": "^5.5.4",
     "vite": "^5.4.2",

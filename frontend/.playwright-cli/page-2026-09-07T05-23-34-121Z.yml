@@ -1,0 +1,103 @@
+- generic [ref=e4]:
+  - banner [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - generic [ref=e8]: AUTH / PLATFORM LOGIN & SESSION
+        - generic [ref=e9]: 租户与单会话
+      - heading "系统登录与认证上下文" [level=1] [ref=e11]
+      - paragraph [ref=e12]: 承接租户识别、用户鉴权、角色权限与菜单加载。执行“后登录替换前登录”的单会话规则，旧 JWT 再次调用返回 401。
+  - region "登录与会话工作台" [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - text: 用户登录
+        - heading "统一身份认证" [level=2] [ref=e16]
+      - generic [ref=e17]:
+        - generic [ref=e18]:
+          - generic [ref=e19]: 企业租户编码 (Tenant Code) *
+          - combobox "企业租户编码 (Tenant Code) *" [ref=e20] [cursor=pointer]:
+            - option "tenant_demo_a (华北智能工厂示范租户)" [selected]
+            - option "tenant_demo_b (华东高精装备制造租户)"
+        - generic [ref=e21]:
+          - generic [ref=e22]: 账号用户名 (Username) *
+          - textbox "账号用户名 (Username) *" [ref=e23]:
+            - /placeholder: 请输入用户名
+            - text: admin.zhang
+        - generic [ref=e24]:
+          - generic [ref=e25]: 登录密码 (Password) *
+          - textbox "登录密码 (Password) *" [ref=e26]:
+            - /placeholder: 请输入登录密码
+        - button "登录进入系统 POST /api/auth/login" [ref=e27] [cursor=pointer]:
+          - generic [ref=e28]: 登录进入系统
+          - generic [ref=e29]: POST /api/auth/login
+      - generic [ref=e30]:
+        - generic [ref=e31]: 快速切换演示角色登录（6 类正式角色）：
+        - generic [ref=e32]:
+          - button "租户管理员 admin.zhang" [ref=e33] [cursor=pointer]:
+            - generic [ref=e34]: 租户管理员
+            - generic [ref=e35]: admin.zhang
+          - button "销售人员 sales.liu" [ref=e36] [cursor=pointer]:
+            - generic [ref=e37]: 销售人员
+            - generic [ref=e38]: sales.liu
+          - button "采购人员 buyer.chen" [ref=e39] [cursor=pointer]:
+            - generic [ref=e40]: 采购人员
+            - generic [ref=e41]: buyer.chen
+          - button "仓库人员 wh.operator" [ref=e42] [cursor=pointer]:
+            - generic [ref=e43]: 仓库人员
+            - generic [ref=e44]: wh.operator
+          - button "生产质检人员 mes.inspector" [ref=e45] [cursor=pointer]:
+            - generic [ref=e46]: 生产质检人员
+            - generic [ref=e47]: mes.inspector
+          - button "IoT人员 iot.engineer" [ref=e48] [cursor=pointer]:
+            - generic [ref=e49]: IoT人员
+            - generic [ref=e50]: iot.engineer
+    - complementary [ref=e51]:
+      - generic [ref=e52]:
+        - generic [ref=e53]:
+          - generic [ref=e54]: SECURITY & JWT SESSION
+          - generic [ref=e55]: 会话正常 (Active)
+        - heading "当前认证上下文与会话事实" [level=2] [ref=e56]
+        - paragraph [ref=e57]: 服务端在 Redis 维护最新 jti，当同一账号在另一设备登录时，新 jti 替换旧 jti。
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - generic [ref=e60]: 当前生效租户
+          - generic [ref=e61]: tenant_demo_a
+        - generic [ref=e62]:
+          - generic [ref=e63]: 当前登录用户
+          - generic [ref=e64]: 张管理员 (admin.zhang)
+        - generic [ref=e65]:
+          - generic [ref=e66]: 生效角色
+          - generic [ref=e67]: 租户管理员
+        - generic [ref=e68]:
+          - generic [ref=e69]: 当前 JWT 会话标识 (jti)
+          - generic [ref=e70]: jti_9901aa48f712
+      - generic [ref=e71]:
+        - generic [ref=e72]:
+          - strong [ref=e73]: 单会话顶替机制模拟演示
+          - button "⚠️ 模拟新设备登录（踢出当前会话）" [ref=e74] [cursor=pointer]
+        - paragraph [ref=e75]: 模拟另一个客户端使用相同账号成功登录并获取新 jti。当前页面下一次请求将被服务端 401 拦截并弹出失效警告。
+      - generic [ref=e76]:
+        - generic [ref=e77]:
+          - heading "已加载菜单与功能权限树 (Menu Permissions)" [level=3] [ref=e78]
+          - text: 根据 Auth 服务加载当前用户权限点
+        - generic [ref=e79]:
+          - generic [ref=e80]:
+            - text: 🔑
+            - code [ref=e81]: dashboard:view (全域综合看板查看)
+          - generic [ref=e82]:
+            - text: 🔑
+            - code [ref=e83]: site-map:view (厂区二维空间地图)
+          - generic [ref=e84]:
+            - text: 🔑
+            - code [ref=e85]: master-data:manage (主数据管理)
+          - generic [ref=e86]:
+            - text: 🔑
+            - code [ref=e87]: ai:chat (AI 受控智能问答)
+          - generic [ref=e88]:
+            - text: 🔑
+            - code [ref=e89]: ai:audit:view (AI 工具调用审计日志)
+          - generic [ref=e90]:
+            - text: 🔑
+            - code [ref=e91]: system:tenant:manage (租户与权限管理)
+  - contentinfo [ref=e92]:
+    - generic [ref=e93]: PRODUCTION / AUTHENTICATED WORKSPACE
+    - paragraph [ref=e94]: 基于 Vue 3 + Pinia + Axios 真实前后端链路，承载 6 类正式角色鉴权与动态菜单流转。

@@ -98,78 +98,73 @@ export async function completePurchaseOrder(
 /**
  * 仓库到货外观验收确认
  * 严格执行 arrived_qty = rejected_qty + received_qty，实收数量全部进入 QualityHold 质量隔离位
- * 接口路径：POST /api/purchase-receipts/{id}/confirm 或 POST /api/purchase-receipts/confirm
+ * 路径 receiptId 为独立收货事实 UUID，订单 ID 必须取请求体 purchaseOrderId
+ * 接口路径：POST /api/purchase-receipts/{receiptId}/confirm
  */
 export async function confirmPurchaseReceipt(
-  orderIdOrPayload: any,
-  payload?: PurchaseReceiptConfirmPayload
+  receiptId: string,
+  payload: PurchaseReceiptConfirmPayload
 ): Promise<ApiResponse<PurchaseReceipt>> {
-  const actualPayload = payload || orderIdOrPayload;
-  const targetId = payload ? orderIdOrPayload : (actualPayload.purchaseOrderId || actualPayload.orderId || actualPayload.id || "");
-  const url = targetId ? `/api/purchase-receipts/${targetId}/confirm` : "/api/purchase-receipts/confirm";
   return await request<PurchaseReceipt>({
-    url,
+    url: `/api/purchase-receipts/${receiptId}/confirm`,
     method: "POST",
-    data: actualPayload,
+    data: payload,
   });
 }
-
-
 
 /**
  * 提交到货质检记录
  * 严格执行 inspected_qty = qualified_qty + unqualified_qty，检验只生成质量事实不改变库存
- * 接口路径：POST /api/purchase-receipts/{id}/quality/inspect
+ * 接口路径：POST /api/purchase-receipts/{receiptId}/quality/inspect
  */
-export async function submitQualityInspection(receiptIdOrPayload: any, payload?: QualityInspectPayload): Promise<ApiResponse<PurchaseQualityInspection>> {
-  const actualPayload = payload || receiptIdOrPayload;
-  const targetId = payload ? receiptIdOrPayload : (actualPayload.receiptId || actualPayload.purchaseReceiptId || actualPayload.id || "");
-  const url = targetId ? `/api/purchase-receipts/${targetId}/quality/inspect` : "/api/purchase-receipts/quality/inspect";
+export async function submitQualityInspection(
+  receiptId: string,
+  payload: QualityInspectPayload
+): Promise<ApiResponse<PurchaseQualityInspection>> {
   return await request<PurchaseQualityInspection>({
-    url,
+    url: `/api/purchase-receipts/${receiptId}/quality/inspect`,
     method: "POST",
-    data: actualPayload,
+    data: payload,
   });
 }
 export const inspectQuality = submitQualityInspection;
 
 /**
- * 查询质量处置列表
+ * 查询当前租户质量处置列表
  * 接口路径：GET /api/purchase-quality-dispositions
  */
-export async function getQualityDispositions(query: any = {}): Promise<ApiResponse<any>> {
-  return await request<any>({
+export async function getQualityDispositions(): Promise<ApiResponse<PurchaseQualityDisposition[]>> {
+  return await request<PurchaseQualityDisposition[]>({
     url: "/api/purchase-quality-dispositions",
     method: "GET",
-    params: query,
   });
 }
 
 /**
- * 查询采购到货质检记录列表
+ * 查询当前租户采购到货质检记录列表
  * 接口路径：GET /api/purchase-receipts/quality-inspections
  */
-export async function getQualityInspections(query: any = {}): Promise<ApiResponse<any>> {
-  return await request<any>({
+export async function getQualityInspections(): Promise<ApiResponse<PurchaseQualityInspection[]>> {
+  return await request<PurchaseQualityInspection[]>({
     url: "/api/purchase-receipts/quality-inspections",
     method: "GET",
-    params: query,
   });
 }
 
 /**
  * 质量处置决定 (Release / Return / Scrap)
- * 接口路径：POST /api/purchase-receipts/{id}/quality/disposition
+ * 接口路径：POST /api/purchase-receipts/{receiptId}/quality/{action}
  */
-export async function decideQualityDisposition(receiptIdOrPayload: any, payload?: any): Promise<ApiResponse<PurchaseQualityDisposition>> {
-  const actualPayload = payload || receiptIdOrPayload;
-  const targetId = payload ? receiptIdOrPayload : (actualPayload.receiptId || actualPayload.inspectionId || actualPayload.id || "");
-  const action = (actualPayload.dispositionType || actualPayload.action || actualPayload.type || "release").toLowerCase();
-  const url = targetId ? `/api/purchase-receipts/${targetId}/quality/${action}` : `/api/purchase-receipts/quality/${action}`;
+export async function decideQualityDisposition(
+  receiptId: string,
+  payload: QualityDispositionDecidePayload
+): Promise<ApiResponse<PurchaseQualityDisposition>> {
+  const action = payload.dispositionType.toLowerCase();
+
   return await request<PurchaseQualityDisposition>({
-    url,
+    url: `/api/purchase-receipts/${receiptId}/quality/${action}`,
     method: "POST",
-    data: actualPayload,
+    data: payload,
   });
 }
 

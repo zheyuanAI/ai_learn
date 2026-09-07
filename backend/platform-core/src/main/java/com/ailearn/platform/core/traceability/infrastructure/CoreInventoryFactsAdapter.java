@@ -107,6 +107,12 @@ public class CoreInventoryFactsAdapter implements InventoryFactsQuery {
                         .map(this::transactionFacts)
                         .orElseGet(() -> TraceFacts.empty("inventory transaction"));
             }
+            String sourceType = sourceType(type);
+            if (sourceType != null) {
+                UUID sourceId = type.equals("sales_order_line") ? null : query.entityId();
+                UUID sourceLineId = type.equals("sales_order_line") ? query.entityId() : null;
+                return sourceFacts(query.context(), type, sourceType, sourceId, sourceLineId);
+            }
             if (type.equals("inventory_reservation")) {
                 return reservations(tenantId).stream()
                         .filter(value -> value.reservation().id().equals(query.entityId()))
@@ -157,16 +163,22 @@ public class CoreInventoryFactsAdapter implements InventoryFactsQuery {
     }
 
     private List<InventoryTransaction> transactions(FactsQueryRequest request) {
+        return transactions(request, null, null, null);
+    }
+
+    /** 按库存事实中的来源类型、来源单据和来源明细查询真实流水。 */
+    private List<InventoryTransaction> transactions(FactsQueryRequest request, String sourceType,
+                                                    UUID sourceId, UUID sourceLineId) {
         UUID tenantId = request.context().tenantId();
         UUID warehouseId = FactsAdapterSupport.filterUuid(request, "warehouse_id");
         List<InventoryTransaction> result = new ArrayList<>();
         InventoryTransactionPage page = inventoryQuery.queryTransactions(new InventoryTransactionQuery(
-                tenantId, null, null, null, null, null, warehouseId, null, null,
+                tenantId, null, sourceType, sourceId, sourceLineId, null, warehouseId, null, null,
                 FactsAdapterSupport.utc(request.from()), FactsAdapterSupport.utc(request.to()), 1, PAGE_SIZE));
         result.addAll(page.content());
         for (int current = 2; page.hasNext(); current++) {
             page = inventoryQuery.queryTransactions(new InventoryTransactionQuery(
-                    tenantId, null, null, null, null, null, warehouseId, null, null,
+                    tenantId, null, sourceType, sourceId, sourceLineId, null, warehouseId, null, null,
                     FactsAdapterSupport.utc(request.from()), FactsAdapterSupport.utc(request.to()), current, PAGE_SIZE));
             result.addAll(page.content());
         }
@@ -192,6 +204,65 @@ public class CoreInventoryFactsAdapter implements InventoryFactsQuery {
                 FactsAdapterSupport.instant(value.occurredAt()), true);
         return new TraceFacts(List.of(node), List.of(), FactsAdapterSupport.instant(value.occurredAt()),
                 "inventory transaction");
+    }
+
+    /** 从库存来源字段构造“业务事实 -> 库存流水”的真实关系，不复制其他领域业务表。 */
+    private TraceFacts sourceFacts(FactsQueryContext context, String entityType, String sourceType,
+                                   UUID sourceId, UUID sourceLineId) {
+        FactsQueryRequest request = new FactsQueryRequest(
+                context,
+                java.time.Instant.EPOCH, java.time.Instant.now(), java.util.Map.of());
+        List<InventoryTransaction> values = transactions(request, sourceType, sourceId, sourceLineId);
+        if (values.isEmpty()) {
+            return TraceFacts.empty("inventory source " + entityType);
+        }
+        List<TraceNode> nodes = new ArrayList<>();
+        List<TraceLink> links = new ArrayList<>();
+        UUID sourceEntityId = sourceId == null ? sourceLineId : sourceId;
+        nodes.add(new TraceNode(context.tenantId(), entityType, sourceEntityId,
+                entityType + "-" + (sourceId == null ? sourceLineId : sourceId), "RECORDED",
+                sourcePermission(entityType), null, true));
+        Instant updated = null;
+        for (InventoryTransaction value : values) {
+            nodes.add(new TraceNode(context.tenantId(), "inventory_transaction", value.id(), value.transactionNo(),
+                    value.transactionType(), "inv:transaction:view", FactsAdapterSupport.instant(value.occurredAt()), true));
+            links.add(new TraceLink(entityType, sourceEntityId,
+                    "inventory_transaction", value.id(), "inventory_fact"));
+            updated = FactsAdapterSupport.later(updated, FactsAdapterSupport.instant(value.occurredAt()));
+        }
+        return new TraceFacts(nodes, links, updated, "inventory source " + entityType);
+    }
+
+    private static String sourceType(String entityType) {
+        return switch (entityType) {
+            case "material_issue" -> "MATERIAL_ISSUE";
+            case "material_return" -> "MATERIAL_RETURN";
+            case "purchase_receipt" -> "PURCHASE_RECEIPT";
+            case "finished_goods_receipt" -> "FINISHED_GOODS_RECEIPT";
+            case "quality_disposition" -> "PURCHASE_QUALITY_DISPOSITION";
+            case "sales_order" -> "SALES_ORDER";
+            case "sales_order_line" -> "SALES_ORDER";
+            case "stocktake" -> "STOCKTAKE";
+            case "transfer" -> "TRANSFER";
+            default -> null;
+        };
+    }
+
+    private static String sourcePermission(String entityType) {
+        if (entityType.startsWith("sales_")) {
+            return "sales:order:view";
+        }
+        if (entityType.startsWith("purchase_")) {
+            return "pur:receipt:view";
+        }
+        if (entityType.equals("finished_goods_receipt")) {
+            return "mes:finished:receipt";
+        }
+        if (entityType.equals("quality_disposition")) {
+            return "pur:disposition:confirm";
+        }
+        return entityType.startsWith("stock") || entityType.equals("transfer")
+                ? "inv:transaction:view" : "mes:material:requisition";
     }
 
     private TraceFacts reservationFacts(InventoryReservation value) {

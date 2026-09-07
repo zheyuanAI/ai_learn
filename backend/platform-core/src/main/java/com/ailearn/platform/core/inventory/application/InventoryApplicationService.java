@@ -18,6 +18,8 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.ailearn.platform.shared.idempotency.IdempotencyStorage;
 import com.ailearn.platform.shared.idempotency.IdempotentRecord;
 import com.ailearn.platform.shared.idempotency.InMemoryIdempotencyStorage;
+import com.ailearn.platform.shared.context.TenantContextHolder;
+import com.ailearn.platform.shared.context.UserContextHolder;
 import com.ailearn.platform.shared.exception.NotFoundException;
 import com.ailearn.platform.shared.exception.ServiceUnavailableException;
 import com.ailearn.platform.shared.exception.ValidationException;
@@ -95,6 +97,25 @@ public class InventoryApplicationService implements InventoryCommandService, Inv
         this.locationPort = locationPort;
         this.idempotencyStorage = idempotencyStorage;
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * 锁定盘点快照对应的余额并校验版本。
+     * 入参：库存维度和快照版本；出参：当前已锁定余额；流程：读取可信租户/用户 -> 校验库位 -> FOR UPDATE 锁行
+     * -> 校验版本，调用方可在同一事务中据此安全判断零差异。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryBalance assertBalanceVersion(InventoryDimension dimension, long expectedVersion) {
+        if (dimension == null || expectedVersion < 0) {
+            throw new ValidationException("盘点余额维度或版本不合法");
+        }
+        UUID tenantId = TenantContextHolder.requireTenantId();
+        UUID userId = UserContextHolder.requireUserId();
+        activeLocation(tenantId, dimension);
+        InventoryBalance locked = requiredBalance(repository.lockOrCreateBalance(tenantId, dimension, userId));
+        requireExpectedBalanceVersion(locked, expectedVersion);
+        return locked;
     }
 
     /**

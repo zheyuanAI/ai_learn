@@ -248,14 +248,9 @@ import {
 } from "../../api/iot";
 import DeviceCredentialDialog from "./DeviceCredentialDialog.vue";
 
-const props = withDefaults(
-  defineProps<{
-    deviceId?: string;
-  }>(),
-  {
-    deviceId: "dev-cnc-01",
-  }
-);
+const props = defineProps<{
+  deviceId?: string;
+}>();
 
 defineEmits<{
   (e: "back"): void;
@@ -294,7 +289,10 @@ async function loadDeviceData() {
   viewState.value = "loading";
   errorMessage.value = "";
   try {
-    const id = props.deviceId || "dev-cnc-01";
+    const id = props.deviceId;
+    if (!id) {
+      throw new Error("缺少设备 UUID，无法查询设备详情");
+    }
     const [devRes, statRes, credRes, tlmRes, almRes] = await Promise.all([
       getDeviceDetail(id),
       getDeviceStatus(id),

@@ -44,7 +44,7 @@ public class PurchaseQualityController {
      */
     @PostMapping("/api/purchase-receipts/{id}/quality/inspect")
     public ApiResponse<com.ailearn.platform.core.quality.dto.QualityInspectionView> inspect(
-            @PathVariable UUID id, @RequestBody QualityInspectionRequest request,
+            @PathVariable("id") UUID id, @RequestBody QualityInspectionRequest request,
             @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(applicationService.inspect(id, request, idempotencyKey));
     }
@@ -62,7 +62,7 @@ public class PurchaseQualityController {
      */
     @PostMapping("/api/purchase-receipts/{id}/quality/{type}")
     public ApiResponse<com.ailearn.platform.core.quality.dto.QualityDispositionView> decide(
-            @PathVariable UUID id, @PathVariable String type, @RequestBody QualityDispositionRequest request,
+            @PathVariable("id") UUID id, @PathVariable("type") String type, @RequestBody QualityDispositionRequest request,
             @RequestHeader("Idempotency-Key") String idempotencyKey) {
         QualityDispositionType dispositionType;
         try {
@@ -85,7 +85,7 @@ public class PurchaseQualityController {
      */
     @PostMapping("/api/purchase-quality-dispositions/{id}/confirm")
     public ApiResponse<com.ailearn.platform.core.quality.dto.QualityDispositionView> confirm(
-            @PathVariable UUID id, @RequestBody QualityDispositionConfirmRequest request,
+            @PathVariable("id") UUID id, @RequestBody QualityDispositionConfirmRequest request,
             @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(applicationService.confirmDisposition(id, request, idempotencyKey));
     }

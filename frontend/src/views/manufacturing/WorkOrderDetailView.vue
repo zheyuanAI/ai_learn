@@ -445,8 +445,6 @@ import type {
   WorkOrderStatus,
   DispatchOrderItem,
   OperationExecutionItem,
-  MaterialIssueItem,
-  MaterialReturnItem,
   FinishedGoodsReceiptItem,
 } from "../../types/manufacturing";
 import {
@@ -459,8 +457,6 @@ import {
   manualCompleteWorkOrder,
   getDispatchOrders,
   getOperationExecutions,
-  getMaterialIssues,
-  getMaterialReturns,
   getFinishedGoodsReceipts,
 } from "../../api/manufacturing";
 
@@ -469,7 +465,7 @@ const props = withDefaults(
     id?: string;
   }>(),
   {
-    id: "wo-001",
+    id: "",
   }
 );
 
@@ -485,8 +481,8 @@ const activeTab = ref<"dispatch" | "execution" | "movement" | "receipt">("dispat
 
 const dispatchOrders = ref<DispatchOrderItem[]>([]);
 const executions = ref<OperationExecutionItem[]>([]);
-const materialIssues = ref<MaterialIssueItem[]>([]);
-const materialReturns = ref<MaterialReturnItem[]>([]);
+const materialIssues = ref<any[]>([]);
+const materialReturns = ref<any[]>([]);
 const finishedReceipts = ref<FinishedGoodsReceiptItem[]>([]);
 
 const rejectModalVisible = ref(false);
@@ -545,29 +541,27 @@ async function loadAllData() {
   viewState.value = "loading";
   errorMessage.value = "";
   try {
-    const targetId = props.id || "wo-001";
-    const res = await getWorkOrderDetail(targetId);
-    if (res.data) {
-      workOrder.value = res.data;
-    } else {
-      const fallbackList = await getWorkOrders({ page: 1, size: 1 });
-      workOrder.value = fallbackList.data?.records?.[0] || null;
+    const targetId = props.id;
+    if (!targetId) {
+      viewState.value = "empty";
+      return;
     }
+    const res = await getWorkOrderDetail(targetId);
+    workOrder.value = res.data || null;
 
     if (workOrder.value) {
       const wid = workOrder.value.id as string;
-      const [dspRes, exeRes, issRes, retRes, fgRes] = await Promise.all([
+      const [dspRes, exeRes, fgRes] = await Promise.all([
         getDispatchOrders({ workOrderId: wid }),
         getOperationExecutions({ workOrderId: wid }),
-        getMaterialIssues({ workOrderId: wid }),
-        getMaterialReturns({ workOrderId: wid }),
-        getFinishedGoodsReceipts({ workOrderId: wid }),
+        getFinishedGoodsReceipts(wid),
       ]);
       dispatchOrders.value = dspRes.data?.records || [];
       executions.value = exeRes.data?.records || [];
-      materialIssues.value = issRes.data?.records || [];
-      materialReturns.value = retRes.data?.records || [];
-      finishedReceipts.value = fgRes.data?.records || [];
+      // 后端未提供领退料列表读取接口，页面不伪造历史事实。
+      materialIssues.value = [];
+      materialReturns.value = [];
+      finishedReceipts.value = fgRes.data || [];
     }
 
     viewState.value = workOrder.value ? "ready" : "empty";

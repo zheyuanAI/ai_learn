@@ -239,7 +239,7 @@ const simulating = ref(false);
 const simFeedback = ref<MqttSimulateResponse | null>(null);
 
 const simForm = reactive({
-  deviceCode: "DEV-CNC-A01",
+  deviceCode: "",
   messageId: `msg-${Date.now().toString().slice(-6)}`,
   sequence: 1285,
   metricCode: "spindle_temp",

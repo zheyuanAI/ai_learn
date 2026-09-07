@@ -51,6 +51,10 @@ public class DeviceCredentialApplicationServiceImpl implements DeviceCredentialA
         this.idempotency = idempotency;
     }
 
+    /**
+     * 为当前租户的启用设备生成一次性接入 secret。
+     * 明文只在首次创建响应中返回，持久化仅保存 PBKDF2 摘要；相同幂等键重放时不得再次暴露明文 secret。
+     */
     @Override
     @PreAuthorize("hasAuthority('iot:device:manage')")
     @Transactional(rollbackFor = Exception.class)
@@ -83,6 +87,7 @@ public class DeviceCredentialApplicationServiceImpl implements DeviceCredentialA
                         result.credentialStatus(), null, result.createdAt()));
     }
 
+    /** 查询当前租户设备的凭证列表，返回视图不包含 secret 明文或摘要。 */
     @Override
     @PreAuthorize("hasAuthority('iot:device:view')")
     public List<CredentialView> list(UUID deviceId) {
@@ -91,6 +96,9 @@ public class DeviceCredentialApplicationServiceImpl implements DeviceCredentialA
         return repository.findByDevice(tenantId, deviceId).stream().map(this::toView).toList();
     }
 
+    /**
+     * 幂等撤销当前租户设备凭证；只有 Active 凭证允许条件更新，已被其他请求撤销时返回冲突。
+     */
     @Override
     @PreAuthorize("hasAuthority('iot:device:manage')")
     @Transactional(rollbackFor = Exception.class)
@@ -116,6 +124,9 @@ public class DeviceCredentialApplicationServiceImpl implements DeviceCredentialA
                 });
     }
 
+    /**
+     * 校验带租户的设备编码、凭证引用和 secret，用于受控协议适配器恢复可信设备身份；任何不匹配均使用统一凭证错误。
+     */
     @Override
     public Device verify(UUID tenantId, String deviceCode, String credentialReference, String plainSecret) {
         if (tenantId == null || blank(deviceCode) || blank(credentialReference) || blank(plainSecret)) {
@@ -160,17 +171,20 @@ public class DeviceCredentialApplicationServiceImpl implements DeviceCredentialA
         return device;
     }
 
+    /** 按租户读取设备并统一隐藏不存在或跨租户结果，供凭证创建/撤销复用。 */
     private Device requireDevice(UUID tenantId, UUID deviceId) {
         return deviceRepository.findDeviceById(tenantId, deviceId)
                 .filter(device -> tenantId.equals(device.tenantId()))
                 .orElseThrow(() -> new IotException(IotErrorCode.DEVICE_INVALID, "设备不存在或不属于当前租户"));
     }
 
+    /** 将凭证事实映射为不含敏感 secret 的管理视图。 */
     private CredentialView toView(DeviceCredential credential) {
         return new CredentialView(credential.id(), credential.deviceId(), credential.credentialReference(),
                 credential.status().name(), credential.createdAt(), credential.revokedAt());
     }
 
+    /** 使用固定 PBKDF2 参数计算 secret 摘要；算法不可用属于运行环境错误，不降级为明文保存。 */
     private String hashSecret(String plainSecret, byte[] salt) {
         PBEKeySpec spec = null;
         try {
@@ -186,6 +200,7 @@ public class DeviceCredentialApplicationServiceImpl implements DeviceCredentialA
         }
     }
 
+    /** 比较 secret 摘要；摘要格式、Base64 或输入异常均按校验失败处理。 */
     private boolean verifySecret(String plainSecret, String expected, String salt) {
         try {
             byte[] actual = Base64.getDecoder().decode(hashSecret(plainSecret, Base64.getDecoder().decode(salt)));

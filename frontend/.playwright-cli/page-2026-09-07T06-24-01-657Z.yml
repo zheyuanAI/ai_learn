@@ -1,0 +1,9 @@
+- generic [ref=e4]:
+  - generic [ref=e5]: "404"
+  - paragraph [ref=e6]: ROUTE NOT FOUND
+  - heading "页面不存在" [level=1] [ref=e7]
+  - paragraph [ref=e8]: 当前地址没有对应的业务页面。你可以返回上一页，或回到系统首页继续操作。
+  - paragraph [ref=e9]: /definitely-not-a-real-page
+  - generic [ref=e10]:
+    - button "返回上一页" [ref=e11] [cursor=pointer]
+    - button "返回系统首页" [ref=e12] [cursor=pointer]

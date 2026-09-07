@@ -72,6 +72,7 @@ public class IotIdempotencyExecutor {
         }
     }
 
+    /** 校验缓存记录仍属于同一载荷且已成功，再反序列化重放；PENDING、载荷冲突或结果损坏均拒绝重放。 */
     private <T> T replay(IdempotentRecord record, String key, String requestHash, Class<T> responseType) {
         if (!requestHash.equals(record.getRequestHash())
                 || record.getStatus() != IdempotentRecord.Status.SUCCESS
@@ -85,6 +86,7 @@ public class IotIdempotencyExecutor {
         }
     }
 
+    /** 将事务回滚与幂等 claim 释放绑定，避免业务失败后同一幂等键永久停留在处理中。 */
     private void registerRollback(IdempotencyClaim claim) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             return;
@@ -99,6 +101,7 @@ public class IotIdempotencyExecutor {
         });
     }
 
+    /** 在事务提交前序列化并登记成功响应；序列化或 CAS 失败不得返回可被错误重放的结果。 */
     private void completeBeforeCommit(IdempotencyClaim claim, Object result) {
         final String response;
         try {

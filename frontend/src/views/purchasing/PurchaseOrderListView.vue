@@ -145,15 +145,20 @@
           <div class="form-item">
             <label>供应商 <span class="req">*</span></label>
             <select v-model="createForm.supplierId" class="form-select" required>
-              <option value="1">华东精密机电制造有限公司 (SUP-HD-001)</option>
-              <option value="2">精密轴承制造中心 (SUP-NB-008)</option>
+              <option value="">请选择供应商</option>
+              <option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">
+                {{ supplier.supplierCode }} - {{ supplier.supplierName }}
+              </option>
             </select>
           </div>
           <div class="form-row">
             <div class="form-item">
               <label>目标仓库 <span class="req">*</span></label>
               <select v-model="createForm.targetWarehouseId" class="form-select" required>
-                <option value="1">原料一仓 (WH-RM-01)</option>
+                <option value="">请选择目标仓库</option>
+                <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">
+                  {{ warehouse.code }} - {{ warehouse.name }}
+                </option>
               </select>
             </div>
             <div class="form-item">
@@ -164,8 +169,10 @@
           <div class="form-item">
             <label>采购商品物料 <span class="req">*</span></label>
             <select v-model="createForm.productId" class="form-select" required>
-              <option value="3">RM-SERVO-ST (定子转子组件)</option>
-              <option value="4">RM-BEARING-01 (高精轴承组件)</option>
+              <option value="">请选择物料</option>
+              <option v-for="product in products" :key="product.id" :value="product.id">
+                {{ product.sku }} - {{ product.name }}
+              </option>
             </select>
           </div>
           <div class="form-item">
@@ -174,7 +181,12 @@
           </div>
           <div class="form-item">
             <label>关联来源工单 (可选，用于追溯)</label>
-            <input v-model="createForm.sourceWorkOrderId" type="text" class="form-input" placeholder="如: WO-20260826-018" />
+            <select v-model="createForm.sourceWorkOrderId" class="form-select">
+              <option value="">不关联来源工单</option>
+              <option v-for="workOrder in workOrders" :key="workOrder.id" :value="workOrder.id">
+                {{ workOrder.workOrderNo }}
+              </option>
+            </select>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn-secondary" @click="isCreateModalOpen = false">取消</button>
@@ -205,6 +217,9 @@ import PurchaseOrderDetailView from "./PurchaseOrderDetailView.vue";
 import ReceiptConfirmView from "./ReceiptConfirmView.vue";
 import type { ViewState } from "@/types/common";
 import type { PurchaseOrder } from "@/types/purchasing";
+import type { Product, Supplier, Warehouse } from "@/types/inventory";
+import { getProducts, getSuppliers, getWarehouses } from "@/api/masterData";
+import { getWorkOrders } from "@/api/manufacturing";
 import {
   getPurchaseOrders,
   createPurchaseOrder,
@@ -215,6 +230,10 @@ const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 const orderList = ref<PurchaseOrder[]>([]);
 const totalCount = ref(0);
+const products = ref<Product[]>([]);
+const suppliers = ref<Supplier[]>([]);
+const warehouses = ref<Warehouse[]>([]);
+const workOrders = ref<Array<{ id: string | number; workOrderNo?: string; woNo?: string }>>([]);
 
 const queryParams = reactive({
   page: 1,
@@ -252,12 +271,12 @@ const isReceiving = ref(false);
 const isCreateModalOpen = ref(false);
 const isCreating = ref(false);
 const createForm = reactive({
-  supplierId: "1",
-  targetWarehouseId: "1",
+  supplierId: "",
+  targetWarehouseId: "",
   expectedArrivalDate: new Date().toISOString().slice(0, 10),
-  productId: "3",
-  orderedQty: "80",
-  sourceWorkOrderId: "WO-20260826-018",
+  productId: "",
+  orderedQty: "",
+  sourceWorkOrderId: "",
 });
 
 function statusBadgeType(status: string): any {
@@ -333,7 +352,8 @@ function openReceiptConfirm(row: PurchaseOrder) {
 async function handleConfirmReceipt(payload: any) {
   isReceiving.value = true;
   try {
-    await confirmPurchaseReceipt(payload);
+    const { receiptId, ...requestPayload } = payload;
+    await confirmPurchaseReceipt(receiptId, requestPayload);
     isReceiptModalOpen.value = false;
     await fetchOrders();
   } catch (err: any) {
@@ -346,17 +366,20 @@ async function handleConfirmReceipt(payload: any) {
 async function submitCreateOrder() {
   isCreating.value = true;
   try {
+    const product = products.value.find((item) => item.id === createForm.productId);
+    if (!product) {
+      throw new Error("请选择真实物料");
+    }
     await createPurchaseOrder({
       supplierId: createForm.supplierId,
       expectedArrivalDate: createForm.expectedArrivalDate,
-      targetWarehouseId: createForm.targetWarehouseId,
       lines: [
         {
           productId: createForm.productId,
           orderedQty: createForm.orderedQty,
-          uom: "件",
+          uom: product.uom,
           targetWarehouseId: createForm.targetWarehouseId,
-          sourceWorkOrderId: createForm.sourceWorkOrderId,
+          sourceWorkOrderId: createForm.sourceWorkOrderId || undefined,
         },
       ],
     });
@@ -369,8 +392,32 @@ async function submitCreateOrder() {
   }
 }
 
+/**
+ * 加载采购建单所需主数据和来源工单，选择值统一使用后端真实 UUID。
+ */
+async function loadCreateOptions() {
+  try {
+    const [supplierResponse, warehouseResponse, productResponse, workOrderResponse] = await Promise.all([
+      getSuppliers({ page: 1, size: 200, status: "ACTIVE" }),
+      getWarehouses({ page: 1, size: 200, status: "ACTIVE" }),
+      getProducts({ page: 1, size: 200, status: "ACTIVE" }),
+      getWorkOrders({ page: 1, size: 200 }),
+    ]);
+    suppliers.value = supplierResponse.data.records;
+    warehouses.value = warehouseResponse.data.records;
+    products.value = productResponse.data.records;
+    workOrders.value = workOrderResponse.data.records.map((item: any) => ({
+      id: item.id,
+      workOrderNo: item.workOrderNo || item.woNo,
+    }));
+  } catch (error) {
+    console.error("[PurchaseOrderListView] 加载建单选项失败", error);
+  }
+}
+
 onMounted(() => {
   fetchOrders();
+  loadCreateOptions();
 });
 </script>
 

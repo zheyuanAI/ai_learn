@@ -7,7 +7,7 @@
         <span class="stale-count-badge">共 {{ staleCount }} 个领域指标已过期</span>
       </div>
       <p class="banner-desc">
-        当前看板中存在源领域服务响应超时或更新延迟（最早陈旧于：<span class="stale-time">{{ staleSince || "2026-08-26 15:45:00" }}</span
+        当前看板中存在源领域服务响应超时或更新延迟（最早陈旧于：<span class="stale-time">{{ staleSince || "服务端未提供陈旧起始时间" }}</span
         >）。系统已启用上一次成功结果只读降级保留展示，未冒充实时事实；严禁依据降级数据执行关键质量放行或高风险出库。
       </p>
     </div>

@@ -107,9 +107,10 @@
           <div class="form-item">
             <label>目标常规存储库位 (Storage) <span class="req">*</span></label>
             <select v-model="targetLocationId" class="form-select" required>
-              <option value="3">ST-A-01 (原料常规存储位A01)</option>
-              <option value="4">ST-B-02 (标准件存储位B02)</option>
-              <option value="6">FG-A-01 (成品常规存储位01)</option>
+              <option value="">请选择 Storage 库位</option>
+              <option v-for="location in storageLocations" :key="location.id" :value="location.id">
+                {{ location.code }} - {{ location.name }}
+              </option>
             </select>
           </div>
           <div class="form-item">
@@ -143,12 +144,15 @@ import EmptyState from "@/components/common/EmptyState.vue";
 import ErrorState from "@/components/common/ErrorState.vue";
 import type { ViewState } from "@/types/common";
 import type { PutawayTask } from "@/types/purchasing";
+import type { Location } from "@/types/inventory";
+import { getLocations } from "@/api/masterData";
 import { getPutawayTasks, confirmPutawayTask } from "@/api/purchasing";
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 const taskList = ref<PutawayTask[]>([]);
 const totalCount = ref(0);
+const storageLocations = ref<Location[]>([]);
 
 const queryParams = reactive({
   page: 1,
@@ -171,8 +175,8 @@ const columns: TableColumn[] = [
 
 const isConfirmModalOpen = ref(false);
 const selectedTask = ref<PutawayTask | null>(null);
-const targetLocationId = ref("3");
-const putawayQtyInput = ref("70");
+const targetLocationId = ref("");
+const putawayQtyInput = ref("");
 const isSubmitting = ref(false);
 
 async function fetchPutawayTasks() {
@@ -182,14 +186,11 @@ async function fetchPutawayTasks() {
     const res = await getPutawayTasks({
       page: queryParams.page,
       size: queryParams.size,
+      status: queryParams.status || undefined,
     });
-    let list = res.data.records;
-    if (queryParams.status) {
-      list = list.filter((t) => t.status === queryParams.status);
-    }
-    taskList.value = list;
-    totalCount.value = list.length;
-    viewState.value = list.length === 0 ? "empty" : "ready";
+    taskList.value = res.data.records;
+    totalCount.value = res.data.total;
+    viewState.value = taskList.value.length === 0 ? "empty" : "ready";
   } catch (err: any) {
     console.error("[PutawayTaskView] 获取失败:", err);
     errorMessage.value = err?.message || "网络请求异常";
@@ -211,7 +212,7 @@ function resetFilter() {
 
 function openConfirmModal(row: PutawayTask) {
   selectedTask.value = row;
-  targetLocationId.value = "3";
+  targetLocationId.value = row.toLocationId || "";
   putawayQtyInput.value = row.putawayQty;
   isConfirmModalOpen.value = true;
 }
@@ -220,8 +221,8 @@ async function submitPutaway() {
   if (!selectedTask.value) return;
   isSubmitting.value = true;
   try {
-    await confirmPutawayTask(selectedTask.value.id, {
-      taskId: selectedTask.value.id,
+    await confirmPutawayTask(String(selectedTask.value.id), {
+      taskId: String(selectedTask.value.id),
       toLocationId: targetLocationId.value,
       putawayQty: putawayQtyInput.value,
     });
@@ -234,8 +235,21 @@ async function submitPutaway() {
   }
 }
 
+/**
+ * 加载上架可选 Storage 库位，确认上架时提交真实 UUID。
+ */
+async function loadStorageLocations() {
+  try {
+    const response = await getLocations({ page: 1, size: 200, type: "Storage", status: "ACTIVE" });
+    storageLocations.value = response.data.records;
+  } catch (error) {
+    console.error("[PutawayTaskView] 加载 Storage 库位失败", error);
+  }
+}
+
 onMounted(() => {
   fetchPutawayTasks();
+  loadStorageLocations();
 });
 </script>
 

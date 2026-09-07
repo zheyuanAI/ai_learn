@@ -52,7 +52,7 @@ class S7ControllerTest {
                 new TrustedFactsQueryContextFactory());
 
         GisException exception = assertThrows(GisException.class,
-                () -> controller.projection(null, null, null, null));
+                () -> controller.projection(null, null, null));
 
         assertEquals("GIS_QUERY_001", exception.getBusinessCode());
     }
@@ -93,7 +93,7 @@ class S7ControllerTest {
         TraceabilityController controller = new TraceabilityController(service,
                 new TrustedFactsQueryContextFactory());
 
-        controller.query("sales_order", null, ENTITY_ID, null);
+        controller.query("sales_order", ENTITY_ID);
 
         var query = org.mockito.ArgumentCaptor.forClass(TraceabilityQuery.class);
         verify(service).query(query.capture());

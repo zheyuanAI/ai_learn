@@ -9,6 +9,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Set;
+import java.util.LinkedHashSet;
 
 /** 测试与本地演示用补链仓储；生产环境由 PostgreSQL 适配器承接。 */
 public class InMemoryAlarmContextLinkRepository implements AlarmContextLinkRepository {
@@ -115,5 +117,21 @@ public class InMemoryAlarmContextLinkRepository implements AlarmContextLinkRepos
             tasks.put(taskId, new ContextLinkTask(current.id(), current.tenantId(), current.alarmId(),
                     "Retry", retryCount, nextRetryAt));
         }
+    }
+
+    /** 返回内存中存在到期任务的租户，便于调度器测试而不引入全局租户上下文。 */
+    @Override
+    public synchronized Set<UUID> findDueTenantIds(OffsetDateTime now, int limit) {
+        Set<UUID> result = new LinkedHashSet<>();
+        for (ContextLinkTask task : tasks.values()) {
+            if (result.size() >= limit) {
+                break;
+            }
+            if (("Pending".equals(task.status()) || "Retry".equals(task.status()))
+                    && (task.nextRetryAt() == null || !task.nextRetryAt().isAfter(now))) {
+                result.add(task.tenantId());
+            }
+        }
+        return Set.copyOf(result);
     }
 }

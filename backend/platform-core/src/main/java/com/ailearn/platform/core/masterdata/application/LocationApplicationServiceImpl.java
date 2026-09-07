@@ -16,7 +16,9 @@ import com.ailearn.platform.shared.context.TenantContextHolder;
 import com.ailearn.platform.shared.exception.ConflictException;
 import com.ailearn.platform.shared.exception.NotFoundException;
 import com.ailearn.platform.shared.idempotency.IdempotencyStorage;
+import com.ailearn.platform.shared.idempotency.InMemoryIdempotencyStorage;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.beans.factory.annotation.Autowired;
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -34,20 +36,26 @@ public class LocationApplicationServiceImpl
     private final LocationUsagePort locationUsagePort;
     private final WarehouseReferencePort warehouseReferencePort;
 
-    @Autowired
     public LocationApplicationServiceImpl(MasterDataRepository<Location> repository,
                                            LocationUsagePort locationUsagePort,
                                            WarehouseReferencePort warehouseReferencePort) {
-        this(repository, locationUsagePort, warehouseReferencePort, null, null);
+        this(repository, locationUsagePort, warehouseReferencePort,
+                new InMemoryIdempotencyStorage(), new ObjectMapper().registerModule(new JavaTimeModule()));
     }
 
+    /**
+     * 创建生产环境库位服务，复用 Core PostgreSQL 幂等存储和 Spring 的 Java 时间序列化配置。
+     * 入参：库位仓储、使用量端口、仓库引用端口、幂等存储和 JSON 映射器；出参：可执行库位主数据命令的服务；
+     * 流程：将共享幂等设施传给主数据模板，保证库位写入与其他主数据使用同一租户级幂等边界。
+     */
+    @Autowired
     public LocationApplicationServiceImpl(MasterDataRepository<Location> repository,
                                            LocationUsagePort locationUsagePort,
                                            WarehouseReferencePort warehouseReferencePort,
                                            IdempotencyStorage storage,
                                            ObjectMapper objectMapper) {
         super(repository, storage == null ? new com.ailearn.platform.shared.idempotency.InMemoryIdempotencyStorage() : storage,
-                objectMapper == null ? new ObjectMapper() : objectMapper);
+                objectMapper == null ? new ObjectMapper().registerModule(new JavaTimeModule()) : objectMapper);
         this.locationUsagePort = locationUsagePort;
         this.warehouseReferencePort = warehouseReferencePort;
     }

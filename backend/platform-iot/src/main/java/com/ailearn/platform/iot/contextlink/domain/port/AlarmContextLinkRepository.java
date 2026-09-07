@@ -6,6 +6,7 @@ import com.ailearn.platform.iot.contextlink.domain.ProductionContextView;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Set;
 
 /**
  * IoT 告警上下文补链持久化边界；实现只能更新 IoT 自有告警字段和既有补链任务表。
@@ -35,4 +36,9 @@ public interface AlarmContextLinkRepository {
     /** 失败只记录任务重试信息，不改写告警的生产上下文标识。 */
     void markRetry(UUID tenantId, UUID taskId, int retryCount,
                    OffsetDateTime nextRetryAt, String error, OffsetDateTime updatedAt);
+
+    /** 查询存在到期补链任务的租户，供后台调度器逐租户领取任务。 */
+    default Set<UUID> findDueTenantIds(OffsetDateTime now, int limit) {
+        return Set.of();
+    }
 }

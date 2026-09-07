@@ -70,4 +70,30 @@ public record QualityInspection(UUID id, UUID tenantId, String inspectionNo, UUI
                 inspectionType, sampleQty, qualified, defect, next.name(), next, userId, now,
                 createdBy, createdAt, userId, now);
     }
+
+    /**
+     * 关闭不合格质检事实；disposition 只能是 ISOLATE、SCRAP 或 CLOSE，关闭本身不触发库存移动。
+     *
+     * @param disposition 不合格处置决定
+     * @param userId 可信操作人
+     * @param now 可信当前时间
+     * @return Closed 质检事实
+     */
+    public QualityInspection close(String disposition, UUID userId, OffsetDateTime now) {
+        if (status != QualityInspectionStatus.Failed) {
+            throw new IllegalStateException("只有 Failed 质检可以关闭不合格处置");
+        }
+        if (disposition == null || disposition.isBlank()) {
+            throw new IllegalArgumentException("不合格处置不能为空");
+        }
+        String normalized = disposition.trim().toUpperCase();
+        if (!normalized.equals("ISOLATE") && !normalized.equals("SCRAP")
+                && !normalized.equals("CLOSE")) {
+            throw new IllegalArgumentException("不合格处置只能是 ISOLATE、SCRAP 或 CLOSE");
+        }
+        return new QualityInspection(id, tenantId, inspectionNo, workReportId, workOrderId, operationId,
+                inspectionType, sampleQty, qualifiedQty, defectQty, "CLOSED:" + normalized,
+                QualityInspectionStatus.Closed, submittedBy, submittedAt, createdBy, createdAt,
+                userId, now);
+    }
 }

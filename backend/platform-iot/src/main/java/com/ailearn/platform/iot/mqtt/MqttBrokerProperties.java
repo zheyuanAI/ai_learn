@@ -16,6 +16,10 @@ public class MqttBrokerProperties {
     private String clientId = "platform-iot-telemetry-consumer";
     private String username;
     private String password;
+    /** Broker 侧 password_file 路径，仅作为部署契约记录，不读取或输出文件内容。 */
+    private String passwordFile;
+    /** Broker 侧 ACL 文件路径，仅作为部署契约记录，不读取或输出文件内容。 */
+    private String aclFile;
     private int qos = 1;
     private int connectionTimeoutSeconds = 10;
     private int keepAliveSeconds = 30;
@@ -69,6 +73,22 @@ public class MqttBrokerProperties {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public String getPasswordFile() {
+        return passwordFile;
+    }
+
+    public void setPasswordFile(String passwordFile) {
+        this.passwordFile = passwordFile;
+    }
+
+    public String getAclFile() {
+        return aclFile;
+    }
+
+    public void setAclFile(String aclFile) {
+        this.aclFile = aclFile;
     }
 
     public int getQos() {

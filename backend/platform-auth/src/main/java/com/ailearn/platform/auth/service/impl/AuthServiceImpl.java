@@ -38,6 +38,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 认证与权限核心业务服务实现类。
+ * <p>
+ * PostgreSQL 保存租户、用户、权限关系和会话事实；Redis 只承担当前会话及权限快照的快速校验，不能替代数据库事实。
+ * </p>
+ * <p>
+ * 登录必须先确认会话中心可用，签发 JWT 前废弃旧会话；会话或权限缓存写入失败时不返回半成品 Token，避免出现“客户端已登录但网关无法识别会话”的断裂状态。
+ * </p>
  */
 @Service
 public class AuthServiceImpl implements AuthService {
@@ -74,6 +80,11 @@ public class AuthServiceImpl implements AuthService {
         this.sessionCacheService = sessionCacheService;
     }
 
+    /**
+     * 校验租户、账号和密码并建立单账号单有效会话。
+     * 入参：登录凭据及审计用的客户端 IP、User-Agent；出参：JWT、JTI 和用户基础信息；
+     * 流程：读取数据库权限快照、废弃旧会话、写入会话事实及 Redis 快照，任一会话中心写入失败都不返回 Token。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public LoginResponse login(LoginRequest request, String ipAddress, String userAgent) {
@@ -190,6 +201,10 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
+    /**
+     * 注销指定租户下用户的全部活跃会话，并同步清除 Redis 中的会话与授权缓存。
+     * 调用方应传入当前可信会话上下文；数据库会话事实和缓存清理均失败时交由统一异常边界处理，不返回部分成功状态。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void logout(UUID userId, UUID tenantId) {
@@ -204,6 +219,10 @@ public class AuthServiceImpl implements AuthService {
         sessionCacheService.evictUserAuthCache(tenantId, userId);
     }
 
+    /**
+     * 查询当前用户画像及权限快照。
+     * 只按 userId、tenantId 和有效状态读取；租户/用户不可见时按不存在处理，权限快照缺失则 Fail-Closed，禁止临时回源放行。
+     */
     @Override
     public UserProfileVo getCurrentUserProfile(UUID userId, UUID tenantId) {
         // 1. 严格使用 userId + tenantId + status = ACTIVE + isdel = 0 查询，防止跨租户越权
@@ -242,6 +261,10 @@ public class AuthServiceImpl implements AuthService {
         );
     }
 
+    /**
+     * 查询当前用户可访问的动态菜单树。
+     * 先复用 Redis 菜单快照，未命中时从授权关联查询菜单并组装树；菜单为空或用户无效时不凭前端预设补造菜单。
+     */
     @Override
     public List<MenuNodeVo> getCurrentUserMenus(UUID userId, UUID tenantId) {
         // 0. 确认用户与租户有效性

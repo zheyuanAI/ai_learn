@@ -76,10 +76,22 @@ public class CoreSalesFactsAdapter implements SalesFactsQuery {
     @Override
     public TraceFacts trace(TraceQuery query) {
         try {
-            if (!"sales_order".equalsIgnoreCase(query.entityType())) {
-                return TraceFacts.empty("sales");
+            String type = query.entityType().trim().toLowerCase(java.util.Locale.ROOT);
+            if ("sales_order".equals(type)) {
+                return orderFacts(query.context().tenantId(), query.entityId());
             }
-            Optional<SalesOrder> order = repository.findById(query.context().tenantId(), query.entityId());
+            if ("sales_order_line".equals(type)) {
+                return lineFacts(query.context().tenantId(), query.entityId());
+            }
+            return TraceFacts.empty("sales");
+        } catch (RuntimeException exception) {
+            throw FactsAdapterSupport.unavailable("sales", exception);
+        }
+    }
+
+    /** 从真实销售订单聚合展开订单和订单行节点及其关系。 */
+    private TraceFacts orderFacts(UUID tenantId, UUID orderId) {
+        Optional<SalesOrder> order = repository.findById(tenantId, orderId);
             if (order.isEmpty()) {
                 return TraceFacts.empty("sales order");
             }
@@ -97,9 +109,29 @@ public class CoreSalesFactsAdapter implements SalesFactsQuery {
                 links.add(new TraceLink("sales_order", value.id(), "sales_order_line", line.id(), "order_line"));
             }
             return new TraceFacts(nodes, links, updated, "sales order");
-        } catch (RuntimeException exception) {
-            throw FactsAdapterSupport.unavailable("sales", exception);
+    }
+
+    /** 通过真实销售订单查询反向解析订单行，供销售来源工单继续 BFS。 */
+    private TraceFacts lineFacts(UUID tenantId, UUID lineId) {
+        for (SalesOrder order : orders(tenantId)) {
+            Optional<SalesOrderLine> found = order.lines().stream()
+                    .filter(line -> line.id().equals(lineId)).findFirst();
+            if (found.isEmpty()) {
+                continue;
+            }
+            SalesOrderLine line = found.get();
+            Instant updated = FactsAdapterSupport.instant(order.updatedAt() == null
+                    ? order.createdAt() : order.updatedAt());
+            TraceNode orderNode = new TraceNode(tenantId, "sales_order", order.id(), order.soNo(),
+                    order.status().name(), "sales:order:view", updated, true);
+            TraceNode lineNode = new TraceNode(tenantId, "sales_order_line", line.id(),
+                    "line-" + line.lineNo(), order.fulfillmentStatus().name(), "sales:order:view",
+                    updated, true);
+            return new TraceFacts(List.of(lineNode, orderNode),
+                    List.of(new TraceLink("sales_order", order.id(), "sales_order_line", line.id(), "order_line")),
+                    updated, "sales order line");
         }
+        return TraceFacts.empty("sales order line");
     }
 
     private List<SalesOrder> orders(UUID tenantId) {

@@ -2,6 +2,8 @@ package com.ailearn.platform.iot.alarm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import com.ailearn.platform.iot.alarm.application.AlarmApplicationServiceImpl;
@@ -10,6 +12,7 @@ import com.ailearn.platform.iot.alarm.domain.AlarmStatus;
 import com.ailearn.platform.iot.alarm.domain.port.AlarmRuleFactsPort;
 import com.ailearn.platform.iot.alarm.exception.AlarmException;
 import com.ailearn.platform.iot.alarm.infrastructure.InMemoryAlarmRepository;
+import com.ailearn.platform.iot.contextlink.application.AlarmContextLinkApplicationService;
 import com.ailearn.platform.iot.device.application.IotIdempotencyExecutor;
 import com.ailearn.platform.iot.profile.domain.AlarmRule;
 import com.ailearn.platform.iot.telemetry.application.TelemetryCredentialContext;
@@ -37,16 +40,17 @@ class AlarmApplicationServiceTest {
     private static final OffsetDateTime BASE_TIME = OffsetDateTime.of(2026, 9, 4, 10, 0, 0, 0, ZoneOffset.UTC);
 
     private InMemoryAlarmRepository repository;
+    private AlarmRuleFactsPort ruleFactsPort;
     private AlarmApplicationServiceImpl service;
 
     @BeforeEach
     void setUp() {
         RequestContextHolder.getContext().setTenantId(TENANT_ID);
         RequestContextHolder.getContext().setUserId(USER_ID);
-        AlarmRuleFactsPort rules = Mockito.mock(AlarmRuleFactsPort.class);
-        when(rules.findActiveRules(TENANT_ID, DEVICE_ID)).thenReturn(List.of(rule()));
+        ruleFactsPort = Mockito.mock(AlarmRuleFactsPort.class);
+        when(ruleFactsPort.findActiveRules(TENANT_ID, DEVICE_ID)).thenReturn(List.of(rule()));
         repository = new InMemoryAlarmRepository();
-        service = new AlarmApplicationServiceImpl(repository, rules,
+        service = new AlarmApplicationServiceImpl(repository, ruleFactsPort,
                 new IotIdempotencyExecutor(new InMemoryIdempotencyStorage(),
                         new ObjectMapper().findAndRegisterModules()));
     }
@@ -124,6 +128,22 @@ class AlarmApplicationServiceTest {
         UUID alarmId = repository.findActive(TENANT_ID, DEVICE_ID, RULE_ID).orElseThrow().id();
         service.ack(alarmId, "一次确认", "ack-4");
         assertThrows(AlarmException.class, () -> service.ack(alarmId, "二次确认", "ack-5"));
+    }
+
+    /** Core 自动补链失败时不能回滚已保存的 IoT 告警事实，后续由补链任务重试。 */
+    @Test
+    void contextLinkFailureDoesNotRollbackAlarmFact() {
+        AlarmContextLinkApplicationService contextLink = Mockito.mock(AlarmContextLinkApplicationService.class);
+        when(contextLink.link(eq(TENANT_ID), any(UUID.class)))
+                .thenThrow(new RuntimeException("Core unavailable"));
+        service = new AlarmApplicationServiceImpl(repository, ruleFactsPort,
+                new IotIdempotencyExecutor(new InMemoryIdempotencyStorage(),
+                        new ObjectMapper().findAndRegisterModules()), null, contextLink);
+
+        service.onTelemetryAccepted(command("m-9", BASE_TIME, "11"), null);
+
+        assertEquals(AlarmStatus.Triggered,
+                repository.findActive(TENANT_ID, DEVICE_ID, RULE_ID).orElseThrow().status());
     }
 
     private AlarmRule rule() {

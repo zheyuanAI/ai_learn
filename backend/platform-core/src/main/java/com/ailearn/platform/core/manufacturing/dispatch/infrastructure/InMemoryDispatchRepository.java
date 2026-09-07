@@ -4,6 +4,7 @@ import com.ailearn.platform.core.manufacturing.dispatch.domain.DispatchOrder;
 import com.ailearn.platform.core.manufacturing.dispatch.domain.DispatchRepository;
 import com.ailearn.platform.core.manufacturing.dispatch.port.DispatchReferencePort;
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -32,6 +33,17 @@ public class InMemoryDispatchRepository implements DispatchRepository, DispatchR
     public DispatchOrder update(UUID tenantId, UUID id, UnaryOperator<DispatchOrder> updater) {
         Key key = new Key(tenantId, id);
         return store.compute(key, (ignored, current) -> current == null ? null : updater.apply(current));
+    }
+
+    /** 返回当前租户的内存派工快照，供列表查询和累计数量校验复用。 */
+    @Override
+    public List<DispatchOrder> findAll(UUID tenantId) {
+        return store.entrySet().stream()
+                .filter(entry -> tenantId.equals(entry.getKey().tenantId()))
+                .map(java.util.Map.Entry::getValue)
+                .sorted(java.util.Comparator.comparing(DispatchOrder::createdAt)
+                        .thenComparing(DispatchOrder::id))
+                .toList();
     }
 
     private record Key(UUID tenantId, UUID id) { }

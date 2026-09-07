@@ -3,6 +3,8 @@ package com.ailearn.platform.core.sales.fulfillment.application;
 import com.ailearn.platform.core.config.CoreIdempotencyExecutor;
 import com.ailearn.platform.core.inventory.application.InventoryCommandMetadata;
 import com.ailearn.platform.core.inventory.application.InventoryCommandService;
+import com.ailearn.platform.core.inventory.application.InventoryBalancePage;
+import com.ailearn.platform.core.inventory.application.InventoryBalanceQuery;
 import com.ailearn.platform.core.inventory.application.InventoryDecreaseCommand;
 import com.ailearn.platform.core.inventory.application.InventoryMutationResult;
 import com.ailearn.platform.core.inventory.application.InventoryQueryService;
@@ -12,6 +14,7 @@ import com.ailearn.platform.core.inventory.application.InventoryReservationView;
 import com.ailearn.platform.core.inventory.application.InventoryReserveCommand;
 import com.ailearn.platform.core.inventory.application.InventoryMoveCommand;
 import com.ailearn.platform.core.inventory.domain.InventoryDimension;
+import com.ailearn.platform.core.inventory.domain.InventoryBalance;
 import com.ailearn.platform.core.inventory.domain.InventoryReservation;
 import com.ailearn.platform.core.inventory.domain.InventoryReservationAllocation;
 import com.ailearn.platform.core.inventory.domain.LocationSnapshot;
@@ -51,6 +54,7 @@ import java.security.MessageDigest;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -143,7 +147,6 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
                         LocationSnapshot source = activeLocation(actor.tenantId(), lineRequest.getSourceLocationId());
                         LocationSnapshot shipping = activeLocation(actor.tenantId(), lineRequest.getShippingLocationId());
                         requirePickLocations(source, shipping);
-                        InventoryDimension shippingDimension = dimension(line, shipping, "");
                         List<ReservationPart> sourceParts = partsAt(order, line, source.id(), actor.tenantId());
                         BigDecimal existingAtSource = sum(sourceParts);
                         if (line.unpickedQty().compareTo(existingAtSource) > 0
@@ -157,8 +160,10 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
                                     "自动预留数量超过订单行未预留数量");
                         }
                         if (reserveQty.signum() > 0) {
+                            String sourceLotNo = resolveSourceLot(actor.tenantId(), line, source, reserveQty);
                             InventoryMutationResult reserved = inventoryCommandService.reserve(
-                                    reserveCommand(actor, idempotencyKey, pickTaskId, line, source, reserveQty));
+                                    reserveCommand(actor, idempotencyKey, pickTaskId, order.id(), line, source,
+                                            reserveQty, sourceLotNo));
                             collectTransactions(reserved, transactionIds);
                             InventoryReservation reservation = requiredReservation(reserved);
                             reservationIds.add(reservation.id());
@@ -176,6 +181,9 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
                             if (moved.signum() <= 0) {
                                 continue;
                             }
+                            // 批次是库存维度的一部分，移动预留时必须原样带到发货暂存位，不能降级为空批次。
+                            InventoryDimension shippingDimension = dimension(line, shipping,
+                                    part.allocation().dimension().normalizedLotNo());
                             InventoryMutationResult movedResult = inventoryCommandService.move(new InventoryMoveCommand(
                                     moveMetadata(actor, idempotencyKey, pickTaskId, line, "PICK", index++),
                                     part.allocation().dimension(), shippingDimension, moved,
@@ -585,11 +593,37 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
     }
 
     private InventoryReserveCommand reserveCommand(Actor actor, String parentKey, UUID operationId,
-                                                   SalesOrderLine line, LocationSnapshot source,
-                                                   BigDecimal quantity) {
+                                                   UUID salesOrderId, SalesOrderLine line, LocationSnapshot source,
+                                                   BigDecimal quantity, String lotNo) {
+        // 修改：预留来源必须登记销售订单 ID，履约查询才能按订单回收预留；操作 UUID 仍用于幂等子键和审计事实。
         return new InventoryReserveCommand(metadata(actor, childKey(parentKey, "reserve|" + line.id()),
-                line, "RESERVE", operationId, now()), dimension(line, source, ""), quantity,
-                "SO-" + operationId + "-" + line.id());
+                line, "RESERVE", salesOrderId, now()), dimension(line, source, lotNo), quantity,
+                // 预留编号落库上限为 64 字符；保留完整操作号并截取明细号前缀，既可读又能区分同一操作的多行。
+                "SO-" + operationId + "-" + line.id().toString().substring(0, 18));
+    }
+
+    /**
+     * 为直接拣货自动预留选择来源库位的单一可用批次。
+     * 入参：可信租户、销售订单行、来源库位和本次待预留数量；出参：可承载完整数量的规范化批次号；
+     * 流程：按产品/仓库/库位读取余额，优先选择可用量最大的批次并以批次号稳定排序，避免批次库存被错误降级为空批次。
+     */
+    private String resolveSourceLot(UUID tenantId, SalesOrderLine line, LocationSnapshot source,
+                                    BigDecimal quantity) {
+        InventoryBalancePage page = inventoryQueryService.queryBalances(new InventoryBalanceQuery(
+                tenantId, line.productId(), source.warehouseId(), source.id(), null, 1, QUERY_SIZE));
+        if (page == null || page.content() == null) {
+            throw new ServiceUnavailableException("直接拣货来源库存查询不可用");
+        }
+        return page.content().stream()
+                .filter(balance -> balance != null && balance.dimension() != null
+                        && source.id().equals(balance.dimension().locationId())
+                        && balance.availableQty().compareTo(quantity) >= 0)
+                .sorted(Comparator.comparing(InventoryBalance::availableQty).reversed()
+                        .thenComparing(balance -> balance.dimension().normalizedLotNo()))
+                .map(balance -> balance.dimension().normalizedLotNo())
+                .findFirst()
+                .orElseThrow(() -> new SalesOrderException(SalesOrderErrorCode.SO_002,
+                        "来源库位没有包含所需数量的单一批次可用库存"));
     }
 
     private InventoryReleaseCommand releaseCommand(Actor actor, String parentKey, UUID operationId,
@@ -657,6 +691,10 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
                         .anyMatch(line -> line.unshippedQty().signum() > 0), null),
                 new AllowedActionVo("ship", order.lines().stream()
                         .anyMatch(line -> line.shippingStagedQty().signum() > 0), null),
+                new AllowedActionVo("returnPick", order.lines().stream()
+                        .anyMatch(line -> line.shippingStagedQty().signum() > 0), null),
+                new AllowedActionVo("releaseReservation", order.lines().stream()
+                        .anyMatch(line -> line.unpickedQty().signum() > 0), null),
                 new AllowedActionVo("manualComplete", order.lines().stream()
                         .noneMatch(line -> line.shippingStagedQty().signum() > 0), null));
     }

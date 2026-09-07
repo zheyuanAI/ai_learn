@@ -125,36 +125,35 @@
           <div class="form-item">
             <label>物料 <span class="req">*</span></label>
             <select v-model="createForm.productId" class="form-select" required>
-              <option value="3">RM-SERVO-ST (定子转子组件)</option>
-              <option value="1">FG-SERVO-01 (伺服电机总成)</option>
-              <option value="4">RM-BEARING-01 (高精轴承组件)</option>
+              <option value="">请选择物料</option>
+              <option v-for="product in products" :key="product.id" :value="product.id">
+                {{ product.sku }} - {{ product.name }}
+              </option>
             </select>
           </div>
           <div class="form-row">
             <div class="form-item">
               <label>来源库位 <span class="req">*</span></label>
               <select v-model="createForm.fromLocationId" class="form-select" required>
-                <option value="3">ST-A-01 (原料存储位 - 可用 150)</option>
-                <option value="2">RS-01 (收货暂存位 - 可用 70)</option>
-                <option value="6">FG-A-01 (成品存储位 - 可用 400)</option>
+                <option value="">请选择来源库位</option>
+                <option v-for="location in locations" :key="location.id" :value="location.id">
+                  {{ location.code }} - {{ location.name }}
+                </option>
               </select>
             </div>
             <div class="form-item">
               <label>目标库位 <span class="req">*</span></label>
               <select v-model="createForm.toLocationId" class="form-select" required>
-                <option value="5">PK-01 (拣货备料位)</option>
-                <option value="4">ST-B-02 (标准件存储位)</option>
-                <option value="7">SHP-01 (发货暂存位)</option>
+                <option value="">请选择目标库位</option>
+                <option v-for="location in locations" :key="location.id" :value="location.id">
+                  {{ location.code }} - {{ location.name }}
+                </option>
               </select>
             </div>
           </div>
           <div class="form-item">
             <label>调拨数量 <span class="req">*</span></label>
             <input v-model="createForm.qty" type="text" class="form-input" required placeholder="如: 30" />
-          </div>
-          <div class="form-item">
-            <label>调拨原因</label>
-            <textarea v-model="createForm.reason" class="form-textarea" rows="2" placeholder="填写车间备料或移位原因..."></textarea>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn-secondary" @click="isCreateVisible = false">取消</button>
@@ -183,13 +182,16 @@ import EmptyState from "@/components/common/EmptyState.vue";
 import ErrorState from "@/components/common/ErrorState.vue";
 import TransferDetailView from "./TransferDetailView.vue";
 import type { ViewState } from "@/types/common";
-import type { TransferOrder } from "@/types/inventory";
+import type { TransferOrder, Product, Location } from "@/types/inventory";
+import { getLocations, getProducts } from "@/api/masterData";
 import { getTransfers, createTransfer, confirmTransfer } from "@/api/inventory";
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 const transferList = ref<TransferOrder[]>([]);
 const totalCount = ref(0);
+const products = ref<Product[]>([]);
+const locations = ref<Location[]>([]);
 
 const queryParams = reactive({
   page: 1,
@@ -217,13 +219,10 @@ const isConfirming = ref(false);
 const isCreateVisible = ref(false);
 const isSubmitting = ref(false);
 const createForm = reactive({
-  productId: "3",
-  fromWarehouseId: "1",
-  fromLocationId: "3",
-  toWarehouseId: "1",
-  toLocationId: "5",
-  qty: "30",
-  reason: "车间生产急需备料至拣选位",
+  productId: "",
+  fromLocationId: "",
+  toLocationId: "",
+  qty: "",
 });
 
 async function fetchTransfers() {
@@ -283,14 +282,22 @@ function openCreateModal() {
 async function handleCreateSubmit() {
   isSubmitting.value = true;
   try {
+    const product = products.value.find((item) => item.id === createForm.productId);
+    const fromLocation = locations.value.find((item) => item.id === createForm.fromLocationId);
+    const toLocation = locations.value.find((item) => item.id === createForm.toLocationId);
+    if (!product || !fromLocation || !toLocation) {
+      throw new Error("请选择真实的物料和来源/目标库位");
+    }
     await createTransfer({
-      productId: createForm.productId,
-      fromWarehouseId: createForm.fromWarehouseId,
+      fromWarehouseId: String(fromLocation.warehouseId),
       fromLocationId: createForm.fromLocationId,
-      toWarehouseId: createForm.toWarehouseId,
+      toWarehouseId: String(toLocation.warehouseId),
       toLocationId: createForm.toLocationId,
-      qty: createForm.qty,
-      reason: createForm.reason,
+      lines: [{
+        productId: createForm.productId,
+        uom: product.uom,
+        quantity: createForm.qty,
+      }],
     });
     isCreateVisible.value = false;
     await fetchTransfers();
@@ -301,8 +308,25 @@ async function handleCreateSubmit() {
   }
 }
 
+/**
+ * 加载调拨表单的物料和库位，提交时仅传递后端返回的真实 UUID。
+ */
+async function loadMasterData() {
+  try {
+    const [productResponse, locationResponse] = await Promise.all([
+      getProducts({ page: 1, size: 200, status: "ACTIVE" }),
+      getLocations({ page: 1, size: 200, status: "ACTIVE" }),
+    ]);
+    products.value = productResponse.data.records;
+    locations.value = locationResponse.data.records;
+  } catch (error) {
+    console.error("[TransferListView] 加载物料库位失败", error);
+  }
+}
+
 onMounted(() => {
   fetchTransfers();
+  loadMasterData();
 });
 </script>
 

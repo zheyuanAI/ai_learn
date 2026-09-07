@@ -1,13 +1,11 @@
 package com.ailearn.platform.core.purchasing.dto;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
 import java.util.UUID;
 
 /**
  * 到货验收明细请求；不包含质检合格/不合格字段。
  */
 public class PurchaseReceiptLineRequest {
-    @JsonAlias("lineId")
     private UUID purchaseOrderLineId;
     private UUID productId;
     private String uom;

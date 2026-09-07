@@ -28,3 +28,7 @@
 1. 沿“销售需求—采购—生产—仓储—发货”黄金业务闭环逐页接入 Core 与 IoT 真实接口
 2. 接入主数据（客户、供应商、物料、仓库库位、工作中心）管理视图
 3. 接入库存流水、采购收货质检、销售直接拣货发货等闭环交互页面
+
+## 阶段 0–7 浏览器回归
+
+第 0 批基线回归入口为 `npm run test:e2e`，脚本位于 `e2e/menu-regression.ps1`，使用项目内 `@playwright/cli` 操作真实 `http://localhost:5173` 服务。运行前通过 `STAGE_UI_PASSWORD` 或受保护的 `STAGE_UI_STATE_FILE` 提供登录上下文；密码不会写入仓库或验证报告。当前三条红色断言对应采购菜单路由、看板七接口和无权限派工创建入口，详见 `../docs/verification/stage-0-7-ui/README.md`。

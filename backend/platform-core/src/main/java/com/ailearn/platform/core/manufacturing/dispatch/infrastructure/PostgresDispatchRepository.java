@@ -14,6 +14,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.Optional;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.UUID;
 import java.util.function.UnaryOperator;
 import javax.sql.DataSource;
@@ -123,6 +125,25 @@ public class PostgresDispatchRepository implements DispatchRepository, DispatchR
                 }
                 return findInternal(connection, tenantId, id, false);
             }
+        });
+    }
+
+    /** 查询当前租户派工列表，供分页查询和工单累计数量校验复用。 */
+    @Override
+    public List<DispatchOrder> findAll(UUID tenantId) {
+        return database(() -> {
+            List<DispatchOrder> result = new ArrayList<>();
+            try (Connection connection = dataSource.getConnection();
+                 PreparedStatement statement = connection.prepareStatement(selectSql()
+                         + " WHERE tenant_id = ? AND isdel = 0 ORDER BY created_at, id")) {
+                statement.setObject(1, tenantId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) {
+                        result.add(read(rows));
+                    }
+                }
+            }
+            return List.copyOf(result);
         });
     }
 

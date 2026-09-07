@@ -46,7 +46,7 @@ public class PurchaseOrderController {
      * 查询采购订单详情。
      */
     @GetMapping("/{id}")
-    public ApiResponse<PurchaseOrderView> detail(@PathVariable UUID id) {
+    public ApiResponse<PurchaseOrderView> detail(@PathVariable("id") UUID id) {
         return ApiResponse.success(applicationService.detail(id));
     }
 
@@ -63,7 +63,7 @@ public class PurchaseOrderController {
      * 修改 Draft 采购订单。
      */
     @PutMapping("/{id}")
-    public ApiResponse<PurchaseOrderView> update(@PathVariable UUID id,
+    public ApiResponse<PurchaseOrderView> update(@PathVariable("id") UUID id,
                                                  @RequestBody PurchaseOrderSaveRequest request,
                                                  @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(applicationService.update(id, request, idempotencyKey));
@@ -73,7 +73,7 @@ public class PurchaseOrderController {
      * 提交采购订单。
      */
     @PostMapping("/{id}/submit")
-    public ApiResponse<PurchaseOrderView> submit(@PathVariable UUID id,
+    public ApiResponse<PurchaseOrderView> submit(@PathVariable("id") UUID id,
                                                   @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(applicationService.submit(id, idempotencyKey));
     }
@@ -82,7 +82,7 @@ public class PurchaseOrderController {
      * 审核采购订单。
      */
     @PostMapping("/{id}/approve")
-    public ApiResponse<PurchaseOrderView> approve(@PathVariable UUID id,
+    public ApiResponse<PurchaseOrderView> approve(@PathVariable("id") UUID id,
                                                   @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(applicationService.approve(id, idempotencyKey));
     }
@@ -91,7 +91,7 @@ public class PurchaseOrderController {
      * 人工完成采购订单。
      */
     @PostMapping("/{id}/complete")
-    public ApiResponse<PurchaseOrderView> manuallyComplete(@PathVariable UUID id,
+    public ApiResponse<PurchaseOrderView> manuallyComplete(@PathVariable("id") UUID id,
                                                             @RequestBody PurchaseOrderCompleteRequest request,
                                                             @RequestHeader("Idempotency-Key") String idempotencyKey) {
         return ApiResponse.success(applicationService.manuallyComplete(id, request, idempotencyKey));

@@ -94,32 +94,14 @@
           <strong class="effective-range-text">{{ overviewData?.timeRangeLabel || "今日 (00:00 - 23:59)" }}</strong>
         </div>
 
-        <!-- 右侧同步状态模拟控制器 (供验收测试 StaleDataBanner 与故障降级) -->
+        <!-- 右侧源事实同步状态信息条 -->
         <div class="sync-status-block">
-          <div class="sync-controller">
-            <label class="review-label">源同步模式模拟:</label>
-            <select v-model="simulatedSyncMode" class="sync-select" @change="handleSyncModeChange">
-              <option value="healthy">正常 (Healthy - 全部实时)</option>
-              <option value="delayed">更新延迟 (Delayed - 仓储延迟)</option>
-              <option value="degraded">服务降级 (Degraded - IoT与履约不可用)</option>
-            </select>
-          </div>
-
-          <div class="state-controller">
-            <label class="review-label">四态切换:</label>
-            <select v-model="simulateState" class="sync-select" @change="loadDashboardData(false)">
-              <option value="normal">正常呈现 (Ready)</option>
-              <option value="empty">空数据态 (Empty)</option>
-              <option value="error">聚合异常 (Error)</option>
-            </select>
-          </div>
-
           <div class="sync-meta-text">
             <span>源事实更新:</span>
-            <span class="sync-time">{{ overviewData?.sourceUpdatedAt || "实时" }}</span>
+            <span class="sync-time">{{ overviewData?.sourceUpdatedAt || "未返回服务端时间" }}</span>
             <StatusBadge
-              :type="overviewData?.staleCardsCount ? 'warning' : 'success'"
-              :text="overviewData?.staleCardsCount ? `部分陈旧 (${overviewData.staleCardsCount})` : '全域正常'"
+              :type="dashboardSyncStatus.type"
+              :text="dashboardSyncStatus.text"
             />
           </div>
         </div>
@@ -129,7 +111,7 @@
       <StaleDataBanner
         :visible="(overviewData?.staleCardsCount || 0) > 0"
         :stale-count="overviewData?.staleCardsCount || 0"
-        :stale-since="overviewData?.cards.device?.staleSince || '2026-08-26 15:45:00'"
+        :stale-since="Object.values(overviewData?.cards || {}).map((card) => card.staleSince).find(Boolean)"
         :loading="isRefreshing"
         @retry="handleManualRefresh"
       />
@@ -239,19 +221,28 @@
  * 2. 30 秒自动轮询与手动即时刷新；
  * 3. 针对单卡片异常独立降级，与 StaleDataBanner 联动展示陈旧时间戳；
  * 4. 支持今日、近 7 天、近 30 天统计时间切换；
- * 5. 完整四态（Loading, Ready, Empty, Error）及本地高质量 Fixture 回退；
+ * 5. 完整四态（Loading, Ready, Empty, Error），接口失败时保留已返回的服务端事实；
  * 6. 支持与二维 GIS 站点地图 (SiteMapListView) 及全闭环追溯中心 (TraceabilityView) 顶部子导航无缝切换。
  */
 
-import { ref, reactive, onMounted, onUnmounted } from "vue";
+import { computed, ref, reactive, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import type {
   DashboardOverviewData,
   DashboardTimeRange,
   DashboardCardType,
 } from "../../types/insights";
-import type { ViewState } from "../../types/common";
-import { fetchDashboardOverview } from "../../api/insights";
+import type { BadgeType, ViewState } from "../../types/common";
+import {
+  fetchDashboardOverview,
+  getInventoryDashboard,
+  getFulfillmentDashboard,
+  getManufacturingDashboard,
+  getQualityDashboard,
+  getDeviceDashboard,
+  getAlarmsDashboard,
+  getTraceabilityDashboard,
+} from "../../api/insights";
 import PageHeader from "../../components/common/PageHeader.vue";
 import StatusBadge from "../../components/common/StatusBadge.vue";
 import EmptyState from "../../components/common/EmptyState.vue";
@@ -276,11 +267,36 @@ const viewState = ref<ViewState>("loading");
 const errorMessage = ref<string>("");
 const isRefreshing = ref(false);
 const currentTimeRange = ref<DashboardTimeRange>("today");
-const simulatedSyncMode = ref<"healthy" | "delayed" | "degraded">("healthy");
-const simulateState = ref<"normal" | "empty" | "error">("normal");
 
 // 看板全景数据
 const overviewData = ref<DashboardOverviewData | null>(null);
+
+/**
+ * 用途：计算综合看板顶部的源事实同步状态。
+ * 入参：当前七张卡片的真实响应投影。
+ * 出参：状态徽标类型和文案；只有每张卡明确返回 stale=false 且无错误时才标记实时。
+ * 流程：优先统计错误/缺失 stale 标识的不可用卡片，再统计明确 stale 卡片，最后才进入全域实时。
+ */
+const dashboardSyncStatus = computed<{ type: BadgeType; text: string }>(() => {
+  const cards = Object.values(overviewData.value?.cards || {});
+  if (cards.length === 0) {
+    return { type: "default", text: "等待同步" };
+  }
+
+  const unavailableCount = cards.filter((card) =>
+    Boolean(card.error) || (card.stale !== true && card.stale !== false),
+  ).length;
+  if (unavailableCount > 0) {
+    return { type: "danger", text: `部分不可用 (${unavailableCount})` };
+  }
+
+  const staleCount = cards.filter((card) => !card.error && card.stale === true).length;
+  if (staleCount > 0) {
+    return { type: "warning", text: `部分陈旧 (${staleCount})` };
+  }
+
+  return { type: "success", text: "全域实时" };
+});
 
 // 单卡片刷新中状态字典
 const cardLoadingMap = reactive<Record<DashboardCardType, boolean>>({
@@ -308,19 +324,9 @@ async function loadDashboardData(silent: boolean = false) {
   isRefreshing.value = true;
   errorMessage.value = "";
 
-  // 根据模拟同步模式决定降级领域
-  let degradedDomains: DashboardCardType[] = [];
-  if (simulatedSyncMode.value === "delayed") {
-    degradedDomains = ["inventory"];
-  } else if (simulatedSyncMode.value === "degraded") {
-    degradedDomains = ["device", "fulfillment"];
-  }
-
   try {
     const data = await fetchDashboardOverview({
       timeRange: currentTimeRange.value,
-      degradedDomains,
-      simulateState: simulateState.value,
     });
 
     overviewData.value = data;
@@ -344,13 +350,6 @@ function setTimeRange(range: DashboardTimeRange) {
 }
 
 /**
- * 同步模式变更处理
- */
-function handleSyncModeChange() {
-  loadDashboardData(true);
-}
-
-/**
  * 手动刷新看板
  */
 function handleManualRefresh() {
@@ -364,22 +363,51 @@ function handleManualRefresh() {
 async function refreshSingleCard(type: DashboardCardType) {
   cardLoadingMap[type] = true;
   try {
-    // 单卡局部刷新：模拟重新拉取该单项
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    if (overviewData.value && overviewData.value.cards[type]) {
+    let res: any;
+    switch (type) {
+      case "inventory":
+        res = await getInventoryDashboard({ time_range: currentTimeRange.value });
+        break;
+      case "fulfillment":
+        res = await getFulfillmentDashboard({ time_range: currentTimeRange.value });
+        break;
+      case "manufacturing":
+        res = await getManufacturingDashboard({ time_range: currentTimeRange.value });
+        break;
+      case "quality":
+        res = await getQualityDashboard({ time_range: currentTimeRange.value });
+        break;
+      case "device":
+        res = await getDeviceDashboard({ time_range: currentTimeRange.value });
+        break;
+      case "alarm":
+        res = await getAlarmsDashboard({ time_range: currentTimeRange.value });
+        break;
+      case "traceability":
+        res = await getTraceabilityDashboard({ time_range: currentTimeRange.value });
+        break;
+    }
+    if (overviewData.value && res?.data) {
+      const data = res.data;
       const card = overviewData.value.cards[type];
-      card.stale = false;
-      card.staleSince = undefined;
+      card.stale = !!data.stale;
+      card.staleSince = data.stale_since;
       card.error = undefined;
-      card.generatedAt = new Date().toLocaleString();
-      card.sourceUpdatedAt = new Date().toLocaleString();
-
-      // 重新统计陈旧卡片数
+      card.generatedAt = data.generated_at;
+      card.sourceUpdatedAt = data.source_updated_at;
+      card.metrics = Object.entries(data.metrics || {}).map(([k, v]) => ({
+        key: k,
+        label: k,
+        value: v !== null && v !== undefined ? String(v) : "0",
+        isQuantity: typeof v === "number" || (!isNaN(Number(v)) && String(v).trim() !== ""),
+        status: "normal",
+      }));
       overviewData.value.staleCardsCount = Object.values(overviewData.value.cards).filter((c) => c.stale).length;
     }
   } catch (err: any) {
     if (overviewData.value && overviewData.value.cards[type]) {
       overviewData.value.cards[type].error = err?.message || "单项刷新失败";
+      overviewData.value.staleCardsCount = Object.values(overviewData.value.cards).filter((c) => c.stale).length;
     }
   } finally {
     cardLoadingMap[type] = false;
@@ -411,7 +439,7 @@ function stopPollingTimer() {
  * 穿透业务控制台
  */
 function handlePenetrate(routePath: string) {
-  if (routePath === "/gis") {
+  if (routePath === "/gis/site-maps") {
     activeModule.value = "sitemap";
   } else {
     router.push(routePath);

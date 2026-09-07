@@ -132,6 +132,7 @@ public class TelemetryApplicationServiceImpl implements TelemetryApplicationServ
         return ingestionService.ingest(command);
     }
 
+    /** 按可信租户读取设备；空 ID、不存在或跨租户设备统一映射为不可见，供查询和模拟入口复用。 */
     private Device requireDevice(UUID tenantId, UUID deviceId) {
         if (deviceId == null) {
             throw new IotException(IotErrorCode.DEVICE_INVALID, "设备不存在或不属于当前租户");
@@ -140,16 +141,19 @@ public class TelemetryApplicationServiceImpl implements TelemetryApplicationServ
                 .orElseThrow(() -> new IotException(IotErrorCode.DEVICE_INVALID, "设备不存在或不属于当前租户"));
     }
 
+    /** 校验遥测查询时间范围，避免把反向区间传给事实端口。 */
     private void validateRange(OffsetDateTime from, OffsetDateTime to) {
         if (from != null && to != null && from.isAfter(to)) {
             throw new IllegalArgumentException("date_from 不能晚于 date_to");
         }
     }
 
+    /** 规范化可选指标编码，空白筛选按未提供处理。 */
     private String normalize(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
+    /** 对服务端确定的模拟载荷计算稳定摘要，供统一摄取服务执行去重和审计。 */
     private String hash(Object value) {
         try {
             byte[] payload = objectMapper.writeValueAsString(value).getBytes(StandardCharsets.UTF_8);

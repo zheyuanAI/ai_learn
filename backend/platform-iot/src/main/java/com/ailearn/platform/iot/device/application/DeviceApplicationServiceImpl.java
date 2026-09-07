@@ -42,6 +42,10 @@ public class DeviceApplicationServiceImpl implements DeviceApplicationService {
         this.idempotency = idempotency;
     }
 
+    /**
+     * 创建当前租户设备并绑定已启用的 DeviceProfile。
+     * 入参：设备基础信息、协议和可选业务/GIS关联；出参：设备视图；流程：校验协议与模型、幂等占用、租户内编码唯一性后落库。
+     */
     @Override
     @PreAuthorize("hasAuthority('iot:device:manage')")
     @Transactional(rollbackFor = Exception.class)
@@ -89,6 +93,7 @@ public class DeviceApplicationServiceImpl implements DeviceApplicationService {
                 });
     }
 
+    /** 按当前租户分页查询设备；非法生命周期状态拒绝，分页值限制在服务端而不是依赖前端控件。 */
     @Override
     @PreAuthorize("hasAuthority('iot:device:view')")
     public DevicePageResult page(String deviceCode, String lifecycleStatus, int page, int size) {
@@ -107,6 +112,7 @@ public class DeviceApplicationServiceImpl implements DeviceApplicationService {
         return new DevicePageResult(records, repository.count(tenantId, code, status), normalizedPage, normalizedSize);
     }
 
+    /** 查询当前租户单台设备详情；不存在或跨租户设备统一返回设备不可用错误。 */
     @Override
     @PreAuthorize("hasAuthority('iot:device:view')")
     public DeviceView detail(UUID id) {
@@ -115,6 +121,9 @@ public class DeviceApplicationServiceImpl implements DeviceApplicationService {
                 .orElseThrow(() -> new IotException(IotErrorCode.DEVICE_INVALID, "设备不存在或不属于当前租户"));
     }
 
+    /**
+     * 幂等推进设备 Active/Disabled 生命周期，并用条件更新拒绝并发请求覆盖已变化的状态。
+     */
     @Override
     @PreAuthorize("hasAuthority('iot:device:manage')")
     @Transactional(rollbackFor = Exception.class)
@@ -143,6 +152,7 @@ public class DeviceApplicationServiceImpl implements DeviceApplicationService {
                 });
     }
 
+    /** 将设备事实映射为前端视图，并根据当前生命周期计算允许的启用/停用动作。 */
     private DeviceView toView(Device device) {
         boolean active = device.lifecycleStatus() == DeviceLifecycleStatus.Active;
         return DeviceView.from(device, List.of(

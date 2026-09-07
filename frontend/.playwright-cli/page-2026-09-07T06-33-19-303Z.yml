@@ -1,0 +1,71 @@
+- generic [ref=f26e342]:
+  - complementary [ref=f26e343]:
+    - generic [ref=f26e344]:
+      - paragraph [ref=f26e345]: AI Learn
+      - heading "制造与仓储协同执行平台" [level=1] [ref=f26e346]
+      - paragraph [ref=f26e347]: 一期壳层按黄金业务闭环组织；动态挂载当前角色授权菜单。
+    - navigation [ref=f26e348]:
+      - link "DashboardOutlined 控制台看板" [ref=f26e349] [cursor=pointer]:
+        - /url: /dashboard
+        - generic [ref=f26e350]:
+          - generic [ref=f26e351]: DashboardOutlined
+          - strong [ref=f26e353]: 控制台看板
+      - button "DatabaseOutlined 主数据管理 ▼" [ref=f26e355] [cursor=pointer]:
+        - generic [ref=f26e356]:
+          - generic [ref=f26e357]: DatabaseOutlined
+          - strong [ref=f26e359]: 主数据管理
+        - generic [ref=f26e360]: ▼
+      - button "ShoppingOutlined 采购入库 ▼" [ref=f26e362] [cursor=pointer]:
+        - generic [ref=f26e363]:
+          - generic [ref=f26e364]: ShoppingOutlined
+          - strong [ref=f26e366]: 采购入库
+        - generic [ref=f26e367]: ▼
+      - button "ShopOutlined 销售出库 ▼" [ref=f26e369] [cursor=pointer]:
+        - generic [ref=f26e370]:
+          - generic [ref=f26e371]: ShopOutlined
+          - strong [ref=f26e373]: 销售出库
+        - generic [ref=f26e374]: ▼
+      - button "ToolOutlined 制造执行 ▼" [ref=f26e376] [cursor=pointer]:
+        - generic [ref=f26e377]:
+          - generic [ref=f26e378]: ToolOutlined
+          - strong [ref=f26e380]: 制造执行
+        - generic [ref=f26e381]: ▼
+      - link "CompassOutlined 厂区二维地图" [ref=f26e382] [cursor=pointer]:
+        - /url: /gis/site-maps
+        - generic [ref=f26e383]:
+          - generic [ref=f26e384]: CompassOutlined
+          - strong [ref=f26e386]: 厂区二维地图
+      - button "RobotOutlined AI助手与追溯 ▼" [ref=f26e388] [cursor=pointer]:
+        - generic [ref=f26e389]:
+          - generic [ref=f26e390]: RobotOutlined
+          - strong [ref=f26e392]: AI助手与追溯
+        - generic [ref=f26e393]: ▼
+    - generic [ref=f26e394]: 系统认证状态：在线
+  - generic [ref=f26e397]:
+    - banner [ref=f26e398]:
+      - generic [ref=f26e399]:
+        - generic [ref=f26e400]: AI-LEARN / WORKSPACE
+        - generic [ref=f26e401]: 🏢 tenant_demo_a
+      - generic [ref=f26e402]:
+        - generic [ref=f26e403]:
+          - generic [ref=f26e404]: 👤
+          - generic [ref=f26e405]:
+            - generic [ref=f26e406]: 王库管
+            - generic [ref=f26e407]: warehouse.operator
+        - button "退出登录" [ref=f26e408] [cursor=pointer]:
+          - generic [aria-hidden] [ref=f26e410]: ➔
+    - main [ref=f26e411]:
+      - generic [ref=f26e412]:
+        - paragraph [ref=f26e413]: Domain Ready
+        - heading "供需与仓储" [level=2] [ref=f26e414]
+        - paragraph [ref=f26e415]: 销售需求、生产工单与采购来源人工关联；收货进入暂存位，上架与拣货只移位，销售预留后由发货扣减实物库存。
+      - generic [ref=f26e416]:
+        - article [ref=f26e417]:
+          - heading "Spec 目录" [level=3] [ref=f26e418]
+          - paragraph [ref=f26e419]: docs/specs/10-erp-wms
+        - article [ref=f26e420]:
+          - heading "原型基线" [level=3] [ref=f26e421]
+          - paragraph [ref=f26e422]: docs/prototype/pages/purchase-inbound.html / sales-outbound.html
+      - article [ref=f26e424]:
+        - heading "开发提示" [level=3] [ref=f26e425]
+        - paragraph [ref=f26e426]: 先接列表查询和详情查询，再补写接口；所有写接口默认要幂等、租户过滤和权限校验。

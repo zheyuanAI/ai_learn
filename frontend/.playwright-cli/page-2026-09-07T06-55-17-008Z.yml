@@ -1,0 +1,81 @@
+- generic [ref=e96]:
+  - complementary [ref=e97]:
+    - generic [ref=e98]:
+      - paragraph [ref=e99]: AI Learn
+      - heading "制造与仓储协同执行平台" [level=1] [ref=e100]
+      - paragraph [ref=e101]: 一期壳层按黄金业务闭环组织；动态挂载当前角色授权菜单。
+    - navigation [ref=e102]:
+      - link "DashboardOutlined 控制台看板" [ref=e103] [cursor=pointer]:
+        - /url: /dashboard
+        - generic [ref=e104]:
+          - generic [ref=e105]: DashboardOutlined
+          - strong [ref=e107]: 控制台看板
+      - button "DatabaseOutlined 主数据管理 ▼" [ref=e109] [cursor=pointer]:
+        - generic [ref=e110]:
+          - generic [ref=e111]: DatabaseOutlined
+          - strong [ref=e113]: 主数据管理
+        - generic [ref=e114]: ▼
+      - button "ShoppingOutlined 采购入库 ▼" [ref=e116] [cursor=pointer]:
+        - generic [ref=e117]:
+          - generic [ref=e118]: ShoppingOutlined
+          - strong [ref=e120]: 采购入库
+        - generic [ref=e121]: ▼
+      - button "ShopOutlined 销售出库 ▼" [ref=e123] [cursor=pointer]:
+        - generic [ref=e124]:
+          - generic [ref=e125]: ShopOutlined
+          - strong [ref=e127]: 销售出库
+        - generic [ref=e128]: ▼
+      - button "ToolOutlined 制造执行 ▼" [ref=e130] [cursor=pointer]:
+        - generic [ref=e131]:
+          - generic [ref=e132]: ToolOutlined
+          - strong [ref=e134]: 制造执行
+        - generic [ref=e135]: ▼
+      - button "ApiOutlined IoT设备与告警 ▼" [ref=e137] [cursor=pointer]:
+        - generic [ref=e138]:
+          - generic [ref=e139]: ApiOutlined
+          - strong [ref=e141]: IoT设备与告警
+        - generic [ref=e142]: ▼
+      - link "CompassOutlined 厂区二维地图" [ref=e143] [cursor=pointer]:
+        - /url: /gis/site-maps
+        - generic [ref=e144]:
+          - generic [ref=e145]: CompassOutlined
+          - strong [ref=e147]: 厂区二维地图
+      - button "RobotOutlined AI助手与追溯 ▼" [ref=e149] [cursor=pointer]:
+        - generic [ref=e150]:
+          - generic [ref=e151]: RobotOutlined
+          - strong [ref=e153]: AI助手与追溯
+        - generic [ref=e154]: ▼
+      - button "SettingOutlined 系统管理 ▼" [ref=e156] [cursor=pointer]:
+        - generic [ref=e157]:
+          - generic [ref=e158]: SettingOutlined
+          - strong [ref=e160]: 系统管理
+        - generic [ref=e161]: ▼
+    - generic [ref=e162]: 系统认证状态：在线
+  - generic [ref=e165]:
+    - banner [ref=e166]:
+      - generic [ref=e167]:
+        - generic [ref=e168]: AI-LEARN / WORKSPACE
+        - generic [ref=e169]: 🏢 tenant_demo_a
+      - generic [ref=e170]:
+        - generic [ref=e171]:
+          - generic [ref=e172]: 👤
+          - generic [ref=e173]:
+            - generic [ref=e174]: 张管理
+            - generic [ref=e175]: tenant.admin
+        - button "退出登录" [ref=e176] [cursor=pointer]:
+          - generic [aria-hidden] [ref=e178]: ➔
+    - main [ref=e179]:
+      - generic [ref=e180]:
+        - paragraph [ref=e181]: Phase 1 Target Design
+        - heading "围绕一条黄金业务闭环推进" [level=2] [ref=e182]
+        - paragraph [ref=e183]: 销售需求通过人工来源关系连接生产与采购，再贯通收货、上架、领退料、工序执行、成品入库、库存预留、拣货和发货。这里仅展示一期目标与导航，不代表业务功能已经实现。
+      - generic [ref=e184]:
+        - article [ref=e185]:
+          - heading "业务主线" [level=3] [ref=e186]
+          - paragraph [ref=e187]: 销售行 -> 生产工单 -> 采购来源 -> 制造执行 -> 销售交付。
+        - article [ref=e188]:
+          - heading "事实边界" [level=3] [ref=e189]
+          - paragraph [ref=e190]: 预留不扣实物，上架与拣货只移位，发货才扣减总库存；遥测、状态与告警分离。
+        - article [ref=e191]:
+          - heading "展示边界" [level=3] [ref=e192]
+          - paragraph [ref=e193]: 二维地图、看板、追溯与 AI 均只读，不建立第二套事实来源。

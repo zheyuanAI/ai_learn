@@ -1,0 +1,61 @@
+- generic [ref=f24e210]:
+  - complementary [ref=f24e211]:
+    - generic [ref=f24e212]:
+      - paragraph [ref=f24e213]: AI Learn
+      - heading "制造与仓储协同执行平台" [level=1] [ref=f24e214]
+      - paragraph [ref=f24e215]: 一期壳层按黄金业务闭环组织；动态挂载当前角色授权菜单。
+    - navigation [ref=f24e216]:
+      - link "DashboardOutlined 控制台看板" [ref=f24e217] [cursor=pointer]:
+        - /url: /dashboard
+        - generic [ref=f24e218]:
+          - generic [ref=f24e219]: DashboardOutlined
+          - strong [ref=f24e221]: 控制台看板
+      - button "DatabaseOutlined 主数据管理 ▼" [ref=f24e223] [cursor=pointer]:
+        - generic [ref=f24e224]:
+          - generic [ref=f24e225]: DatabaseOutlined
+          - strong [ref=f24e227]: 主数据管理
+        - generic [ref=f24e228]: ▼
+      - button "ShopOutlined 销售出库 ▼" [ref=f24e230] [cursor=pointer]:
+        - generic [ref=f24e231]:
+          - generic [ref=f24e232]: ShopOutlined
+          - strong [ref=f24e234]: 销售出库
+        - generic [ref=f24e235]: ▼
+      - link "CompassOutlined 厂区二维地图" [ref=f24e236] [cursor=pointer]:
+        - /url: /gis/site-maps
+        - generic [ref=f24e237]:
+          - generic [ref=f24e238]: CompassOutlined
+          - strong [ref=f24e240]: 厂区二维地图
+      - button "RobotOutlined AI助手与追溯 ▼" [ref=f24e242] [cursor=pointer]:
+        - generic [ref=f24e243]:
+          - generic [ref=f24e244]: RobotOutlined
+          - strong [ref=f24e246]: AI助手与追溯
+        - generic [ref=f24e247]: ▼
+    - generic [ref=f24e248]: 系统认证状态：在线
+  - generic [ref=f24e251]:
+    - banner [ref=f24e252]:
+      - generic [ref=f24e253]:
+        - generic [ref=f24e254]: AI-LEARN / WORKSPACE
+        - generic [ref=f24e255]: 🏢 tenant_demo_a
+      - generic [ref=f24e256]:
+        - generic [ref=f24e257]:
+          - generic [ref=f24e258]: 👤
+          - generic [ref=f24e259]:
+            - generic [ref=f24e260]: 刘销售
+            - generic [ref=f24e261]: sales.rep
+        - button "退出登录" [ref=f24e262] [cursor=pointer]:
+          - generic [aria-hidden] [ref=f24e264]: ➔
+    - main [ref=f24e265]:
+      - generic [ref=f24e266]:
+        - paragraph [ref=f24e267]: Domain Ready
+        - heading "供需与仓储" [level=2] [ref=f24e268]
+        - paragraph [ref=f24e269]: 销售需求、生产工单与采购来源人工关联；收货进入暂存位，上架与拣货只移位，销售预留后由发货扣减实物库存。
+      - generic [ref=f24e270]:
+        - article [ref=f24e271]:
+          - heading "Spec 目录" [level=3] [ref=f24e272]
+          - paragraph [ref=f24e273]: docs/specs/10-erp-wms
+        - article [ref=f24e274]:
+          - heading "原型基线" [level=3] [ref=f24e275]
+          - paragraph [ref=f24e276]: docs/prototype/pages/purchase-inbound.html / sales-outbound.html
+      - article [ref=f24e278]:
+        - heading "开发提示" [level=3] [ref=f24e279]
+        - paragraph [ref=f24e280]: 先接列表查询和详情查询，再补写接口；所有写接口默认要幂等、租户过滤和权限校验。

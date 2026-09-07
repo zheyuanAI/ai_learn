@@ -72,7 +72,7 @@ export interface Product extends BaseEntity {
   uom: string;
   category: ProductCategory | string;
   batchMgmt: boolean;
-  status: "ENABLE" | "DISABLE";
+  status: "ACTIVE" | "INACTIVE";
   minStock?: string;
   maxStock?: string;
   safetyStock?: string;
@@ -113,15 +113,25 @@ export interface Warehouse extends BaseEntity {
 }
 
 /**
+ * 计量单位主数据实体
+ */
+export interface Uom extends BaseEntity {
+  code: string;
+  name: string;
+  symbol?: string;
+  status: "ACTIVE" | "INACTIVE";
+}
+
+/**
  * 库位实体
  */
 export interface Location extends BaseEntity {
-  warehouseId: string | number;
+  warehouseId: string;
   warehouseName?: string;
   code: string;
   name: string;
   type: LocationType;
-  status: "AVAILABLE" | "OCCUPIED" | "LOCKED";
+  status: "ACTIVE" | "INACTIVE";
   capacity?: string;
   description?: string;
 }
@@ -164,20 +174,32 @@ export interface Supplier extends BaseEntity {
 // ========================
 
 /**
+ * 库存唯一维度
+ */
+export interface InventoryDimension {
+  productId: string;
+  warehouseId: string;
+  locationId: string;
+  lotNo?: string;
+}
+
+/**
  * 实时库存余额实体
  */
 export interface InventoryBalance extends BaseEntity {
-  tenantId?: string | number;
-  productId: string | number;
-  sku: string;
-  productName: string;
+  tenantId?: string;
+  dimension?: InventoryDimension;
+  // 视图解构与兼容字段
+  productId?: string;
+  sku?: string;
+  productName?: string;
   spec?: string;
-  uom: string;
-  warehouseId: string | number;
-  warehouseName: string;
-  locationId: string | number;
-  locationCode: string;
-  locationType: LocationType;
+  uom?: string;
+  warehouseId?: string;
+  warehouseName?: string;
+  locationId?: string;
+  locationCode?: string;
+  locationType?: LocationType;
   lotNo?: string;
   onHandQty: string;       // 实物在库量
   reservedQty: string;     // 业务预留量
@@ -190,9 +212,13 @@ export interface InventoryBalance extends BaseEntity {
  * 库存余额查询条件
  */
 export interface InventoryBalanceQuery extends PageQuery {
-  productId?: string | number;
-  warehouseId?: string | number;
-  locationId?: string | number;
+  product_id?: string;
+  warehouse_id?: string;
+  location_id?: string;
+  lot_no?: string;
+  productId?: string;
+  warehouseId?: string;
+  locationId?: string;
   locationType?: LocationType | string;
   lotNo?: string;
 }
@@ -208,49 +234,72 @@ export type ReservationSourceType = "SALES_ORDER" | "WORK_ORDER" | "TRANSFER" | 
 export type ReservationStatus = "Active" | "PartiallyReleased" | "Released";
 
 /**
- * 库存预留记录实体
- */
-export interface InventoryReservation extends BaseEntity {
-  reservationNo: string;
-  sourceType: ReservationSourceType;
-  sourceId: string | number;
-  sourceNo?: string;
-  sourceLineId?: string | number;
-  productId: string | number;
-  sku: string;
-  productName: string;
-  uom: string;
-  reservedQty: string;
-  releasedQty: string;
-  activeReservedQty: string;
-  status: ReservationStatus;
-  allocations?: InventoryReservationAllocation[];
-}
-
-/**
  * 库位级预留分配实体
  */
 export interface InventoryReservationAllocation {
-  id: string | number;
-  reservationId: string | number;
-  warehouseId: string | number;
-  warehouseName?: string;
-  locationId: string | number;
-  locationCode: string;
-  lotNo?: string;
+  id: string;
+  reservationId: string;
+  dimension?: InventoryDimension;
+  locationId: string;
+  locationCode?: string;
   allocatedQty: string;
-  releasedQty: string;
+  status: string;
   version: number;
+  createdAt?: string;
+  // 视图兼容
+  warehouseId?: string;
+  warehouseName?: string;
+  lotNo?: string;
+  releasedQty?: string;
+}
+
+/**
+ * 库存预留记录实体
+ */
+export interface InventoryReservation extends BaseEntity {
+  reservationNo?: string;
+  sourceType: ReservationSourceType | string;
+  sourceId: string;
+  sourceNo?: string;
+  sourceLineId?: string;
+  dimension?: InventoryDimension;
+  reservedQty: string;
+  status: ReservationStatus | string;
+  version: number;
+  allocations?: InventoryReservationAllocation[];
+  // 视图兼容
+  productId?: string;
+  sku?: string;
+  productName?: string;
+  uom?: string;
+  releasedQty?: string;
+  activeReservedQty?: string;
+}
+
+/**
+ * 库存预留与分配视图 (匹配后端 InventoryReservationView)
+ */
+export interface InventoryReservationView {
+  reservation: InventoryReservation;
+  allocations: InventoryReservationAllocation[];
 }
 
 /**
  * 库存预留查询参数
  */
 export interface InventoryReservationQuery extends PageQuery {
+  reservation_id?: string;
+  source_type?: string;
+  source_id?: string;
+  source_line_id?: string;
+  status?: string;
+  product_id?: string;
+  warehouse_id?: string;
+  location_id?: string;
+  lot_no?: string;
   sourceType?: ReservationSourceType | string;
   sourceNo?: string;
-  productId?: string | number;
-  status?: ReservationStatus | string;
+  productId?: string;
 }
 
 /**
@@ -269,47 +318,62 @@ export type InventoryTransactionType =
   | "MATERIAL_RETURN"      // 生产退料入库
   | "FG_INBOUND"           // 产成品完工入库
   | "TRANSFER"             // 库位调拨
-  | "STOCKTAKE_ADJUST";    // 盘点差异调整
+  | "STOCKTAKE_ADJUST"     // 盘点差异调整
+  | "ADJUSTMENT";
 
 /**
  * 库存审计流水不可篡改事实
  */
 export interface InventoryTransaction extends BaseEntity {
   transactionNo: string;
-  transactionType: InventoryTransactionType;
+  transactionType: InventoryTransactionType | string;
   sourceType: string;
-  sourceId: string | number;
-  sourceNo?: string;
-  sourceLineId?: string | number;
-  productId: string | number;
-  sku: string;
-  productName: string;
-  uom: string;
-  lotNo?: string;
-  fromWarehouseId?: string | number;
-  fromWarehouseName?: string;
-  fromLocationId?: string | number;
-  fromLocationCode?: string;
-  toWarehouseId?: string | number;
-  toWarehouseName?: string;
-  toLocationId?: string | number;
-  toLocationCode?: string;
-  qty: string; // 正数增加，负数减少，或移位绝对数量
+  sourceId: string;
+  sourceLineId?: string;
+  fromDimension?: InventoryDimension | null;
+  toDimension?: InventoryDimension | null;
+  quantity?: string;
+  qty?: string;
   occurredAt: string;
-  operatorId?: string | number;
+  operatorId?: string;
   operatorName?: string;
   sessionId?: string;
+  requestId?: string;
   idempotencyKey?: string;
+  // 视图兼容
+  productId?: string;
+  sku?: string;
+  productName?: string;
+  uom?: string;
+  lotNo?: string;
+  fromWarehouseId?: string;
+  fromWarehouseName?: string;
+  fromLocationId?: string;
+  fromLocationCode?: string;
+  toWarehouseId?: string;
+  toWarehouseName?: string;
+  toLocationId?: string;
+  toLocationCode?: string;
 }
 
 /**
  * 库存流水查询入参
  */
 export interface InventoryTransactionQuery extends PageQuery {
+  transaction_type?: string;
+  source_type?: string;
+  source_id?: string;
+  source_line_id?: string;
+  product_id?: string;
+  warehouse_id?: string;
+  location_id?: string;
+  lot_no?: string;
+  occurred_from?: string;
+  occurred_to?: string;
   transactionType?: InventoryTransactionType | string;
-  productId?: string | number;
-  warehouseId?: string | number;
-  locationId?: string | number;
+  productId?: string;
+  warehouseId?: string;
+  locationId?: string;
   lotNo?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -319,49 +383,69 @@ export interface InventoryTransactionQuery extends PageQuery {
 // 库位调拨 (Transfer)
 // ========================
 
-/**
- * 调拨单状态
- */
-export type TransferStatus = "Draft" | "Confirmed" | "Cancelled";
+export type TransferStatus = "Draft" | "Confirmed";
 
 /**
- * 调拨单实体
+ * 调拨单明细
  */
-export interface TransferOrder extends BaseEntity {
-  transferNo: string;
-  fromWarehouseId: string | number;
-  fromWarehouseName: string;
-  fromLocationId: string | number;
-  fromLocationCode: string;
-  toWarehouseId: string | number;
-  toWarehouseName: string;
-  toLocationId: string | number;
-  toLocationCode: string;
-  productId: string | number;
-  sku: string;
-  productName: string;
-  uom: string;
+export interface TransferLineItem {
+  id?: string;
+  transferId?: string;
+  lineNo?: number;
+  productId: string;
   lotNo?: string;
-  qty: string;
-  status: TransferStatus;
-  reason?: string;
-  confirmedBy?: string;
-  confirmedAt?: string;
-  allowedActions?: AllowedAction[];
+  uom: string;
+  quantity: string;
+  // 视图展示
+  productName?: string;
+  sku?: string;
 }
 
 /**
- * 调拨创建载荷
+ * 调拨单实体 (TransferView)
  */
-export interface TransferCreatePayload {
-  fromWarehouseId: string | number;
-  fromLocationId: string | number;
-  toWarehouseId: string | number;
-  toLocationId: string | number;
-  productId: string | number;
-  qty: string;
+export interface TransferOrder extends BaseEntity {
+  transferNo: string;
+  fromWarehouseId: string;
+  fromLocationId: string;
+  toWarehouseId: string;
+  toLocationId: string;
+  status: TransferStatus;
+  version: number;
+  confirmedBy?: string;
+  confirmedAt?: string;
+  lines: TransferLineItem[];
+  transactionIds?: string[];
+  allowedActions?: AllowedAction[];
+  // 视图展示兼容
+  fromWarehouseName?: string;
+  fromLocationCode?: string;
+  toWarehouseName?: string;
+  toLocationCode?: string;
+  productId?: string;
+  sku?: string;
+  productName?: string;
+  uom?: string;
+  qty?: string;
   lotNo?: string;
   reason?: string;
+}
+
+/**
+ * 调拨创建载荷 (对齐后端 TransferCreateRequest)
+ */
+export interface TransferCreatePayload {
+  transferNo?: string;
+  fromWarehouseId: string;
+  fromLocationId: string;
+  toWarehouseId: string;
+  toLocationId: string;
+  lines: Array<{
+    productId: string;
+    lotNo?: string;
+    uom: string;
+    quantity: string;
+  }>;
 }
 
 /**
@@ -369,90 +453,95 @@ export interface TransferCreatePayload {
  */
 export interface TransferQuery extends PageQuery {
   status?: TransferStatus | string;
-  fromWarehouseId?: string | number;
-  toWarehouseId?: string | number;
-  productId?: string | number;
+  keyword?: string;
+  fromWarehouseId?: string;
+  toWarehouseId?: string;
+  productId?: string;
 }
 
 // ========================
 // 差异盘点 (Stocktake)
 // ========================
 
-/**
- * 盘点单状态
- */
 export type StocktakeStatus = "NotStarted" | "Counting" | "ConfirmedAdjusted";
 
 /**
- * 盘点明细行
+ * 盘点明细行 (对齐后端 StocktakeLine)
  */
 export interface StocktakeLine {
-  id: string | number;
-  stocktakeOrderId: string | number;
-  productId: string | number;
-  sku: string;
-  productName: string;
-  spec?: string;
-  uom: string;
-  warehouseId: string | number;
-  locationId: string | number;
-  locationCode: string;
+  id?: string;
+  lineId?: string;
+  stocktakeId?: string;
+  productId: string;
+  warehouseId?: string;
+  locationId?: string;
   lotNo?: string;
-  systemQty: string;       // 冻结快照系统数量
-  countedQty?: string;     // 实盘录入数量
-  varianceQty?: string;    // 差异数量 = countedQty - systemQty
-  varianceReason?: string; // 差异原因（有差异时必填）
+  systemQty: string;
+  systemBalanceVersion?: number;
+  countedQty?: string;
+  varianceQty?: string;
+  varianceReason?: string;
+  adjustmentTransactionId?: string;
+  // 视图展示
+  sku?: string;
+  productName?: string;
+  uom?: string;
+  locationCode?: string;
 }
 
 /**
- * 盘点单实体
+ * 盘点单实体 (对齐后端 StocktakeView)
  */
 export interface StocktakeOrder extends BaseEntity {
   stocktakeNo: string;
-  warehouseId: string | number;
-  warehouseName: string;
-  locationId?: string | number;
-  locationCode?: string;
-  scopeType: "FULL" | "LOCATION" | "CATEGORY";
+  warehouseId: string;
+  locationId?: string;
   status: StocktakeStatus;
-  systemSnapshotAt?: string;
-  confirmedAt?: string;
+  version: number;
+  startedBy?: string;
+  startedAt?: string;
   confirmedBy?: string;
+  confirmedAt?: string;
   lines: StocktakeLine[];
+  transactionIds?: string[];
   allowedActions?: AllowedAction[];
+  // 视图展示兼容
+  warehouseName?: string;
+  locationCode?: string;
+  scopeType?: string;
+  systemSnapshotAt?: string;
 }
 
 /**
- * 盘点单创建载荷
+ * 盘点创建载荷 (对齐后端 StocktakeCreateRequest)
  */
 export interface StocktakeCreatePayload {
-  warehouseId: string | number;
-  locationId?: string | number;
-  scopeType: "FULL" | "LOCATION" | "CATEGORY";
-  remark?: string;
+  stocktakeNo?: string;
+  warehouseId: string;
+  locationId?: string;
 }
 
 /**
- * 盘点录入行项载荷
+ * 盘点确认明细 (对齐后端 StocktakeCountLineRequest)
  */
-export interface StocktakeRecordLinePayload {
-  lineId: string | number;
+export interface StocktakeCountLinePayload {
+  lineId: string;
   countedQty: string;
   varianceReason?: string;
 }
 
 /**
- * 盘点确认调整载荷
+ * 盘点确认载荷 (对齐后端 StocktakeConfirmRequest)
  */
 export interface StocktakeConfirmPayload {
-  lines: StocktakeRecordLinePayload[];
-  overallReason?: string;
+  lines: StocktakeCountLinePayload[];
 }
 
 /**
  * 盘点查询参数
  */
 export interface StocktakeQuery extends PageQuery {
-  warehouseId?: string | number;
+  warehouseId?: string;
   status?: StocktakeStatus | string;
+  keyword?: string;
 }

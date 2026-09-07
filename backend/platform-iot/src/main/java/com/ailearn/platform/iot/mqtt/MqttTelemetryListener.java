@@ -100,6 +100,7 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
         }
     }
 
+    /** Spring 生命周期回调：停止动作后执行容器回调，保证资源释放完成再通知上层。 */
     @Override
     public void stop(Runnable callback) {
         try {
@@ -109,21 +110,25 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
         }
     }
 
+    /** 返回监听器本地运行标记，不代表 Broker 当前一定已连接。 */
     @Override
     public boolean isRunning() {
         return running.get();
     }
 
+    /** 允许 Spring 在应用启动阶段自动尝试连接；失败由监听器自身重试，不阻断 HTTP 服务。 */
     @Override
     public boolean isAutoStartup() {
         return true;
     }
 
+    /** 让 MQTT 监听器启动靠后、停止靠前，避免抢先依赖未就绪的业务组件或拖延应用关闭。 */
     @Override
     public int getPhase() {
         return Integer.MAX_VALUE;
     }
 
+    /** Broker 重连成功后重新订阅固定遥测主题，订阅失败仍进入统一重连流程。 */
     @Override
     public void connectComplete(boolean reconnect, String serverURI) {
         if (reconnect && running.get()) {
@@ -131,6 +136,7 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
         }
     }
 
+    /** 连接断开时只安排后台重连，不把 Broker 短暂故障传播为 Spring 应用退出。 */
     @Override
     public void connectionLost(Throwable cause) {
         connecting.set(false);
@@ -155,11 +161,13 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
         }
     }
 
+    /** 监听器只订阅遥测，不发布消息，因此该回调无需推进业务状态。 */
     @Override
     public void deliveryComplete(IMqttDeliveryToken token) {
         // 监听器只订阅遥测，不发送发布消息。
     }
 
+    /** 校验 MQTT 最小运行配置及一期固定 QoS/主题约束；失败时保持等待状态，不阻断 HTTP 启动。 */
     private boolean validConfiguration() {
         if (blank(properties.getServerUri())) {
             log.error("已启用 IoT MQTT，但未配置 iot.mqtt.server-uri；监听器保持等待，不阻断应用启动");
@@ -187,6 +195,7 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
         return true;
     }
 
+    /** 延迟创建 MQTT 客户端；初始化失败后允许下一轮重试重新创建持久化对象和客户端。 */
     private void ensureClient() throws MqttException {
         if (client != null) {
             return;
@@ -200,6 +209,7 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
         client = created;
     }
 
+    /** 发起非阻塞 Broker 连接，使用 connecting 标记避免并发重连重复建立连接。 */
     private void connect() {
         if (!running.get()) {
             return;
@@ -235,6 +245,7 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
         }
     }
 
+    /** 按项目基线生成 MQTT 连接参数，显式关闭 Paho 自动重连并交由本类统一调度。 */
     private MqttConnectOptions connectOptions() {
         MqttConnectOptions options = new MqttConnectOptions();
         options.setCleanSession(properties.isCleanSession());
@@ -251,6 +262,7 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
         return options;
     }
 
+    /** 在连接有效且监听器仍运行时订阅固定遥测主题；订阅失败主动断开并安排重试。 */
     private void subscribe(MqttAsyncClient current) {
         if (!running.get() || current == null || !current.isConnected()) {
             return;
@@ -280,6 +292,7 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
         }
     }
 
+    /** 创建单线程重连调度器并保证同一时刻只有一个待执行重连任务。 */
     private void scheduleReconnect() {
         if (!running.get()) {
             return;
@@ -303,6 +316,7 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
         }
     }
 
+    /** 判断配置字符串是否为空白，避免把空白地址、账号或密码交给 Paho。 */
     private boolean blank(String value) {
         return value == null || value.isBlank();
     }

@@ -5,7 +5,7 @@ import com.ailearn.platform.shared.exception.ServiceUnavailableException;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
  * Core 未提供可确认的服务端入口时显式失败，让任务进入重试而不是返回伪造上下文。
  */
 @Component
-@ConditionalOnMissingBean(ProductionContextQueryPort.class)
+@ConditionalOnProperty(name = "iot.context.core.enabled", havingValue = "false", matchIfMissing = true)
 public class UnavailableProductionContextQueryAdapter implements ProductionContextQueryPort {
     @Override
     public Optional<com.ailearn.platform.iot.contextlink.domain.ProductionContextView> findActive(

@@ -129,12 +129,12 @@
             </div>
 
             <div class="form-row">
-              <label class="form-label required">源实体编码 (Entity ID)</label>
+              <label class="form-label required">源实体 UUID (Entity ID)</label>
               <input
                 v-model="activeForm.entityId"
                 type="text"
                 class="form-input"
-                placeholder="例如: DEV-A01 / WH-FG-01"
+                placeholder="请输入后端实体 UUID"
               />
             </div>
           </div>
@@ -288,7 +288,8 @@
  * 5. 复用 PageHeader, DataTable, StatusBadge, ConfirmDialog。
  */
 
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, onMounted, computed } from "vue";
+import { useRoute } from "vue-router";
 import type { MapPoint, MapEntityType, MapPointStatus } from "../../types/insights";
 import { fetchSiteMapProjection, saveMapPoint, deleteMapPoint } from "../../api/insights";
 import PageHeader from "../../components/common/PageHeader.vue";
@@ -296,14 +297,11 @@ import DataTable, { type TableColumn } from "../../components/common/DataTable.v
 import StatusBadge from "../../components/common/StatusBadge.vue";
 import ConfirmDialog from "../../components/common/ConfirmDialog.vue";
 
-const props = withDefaults(
-  defineProps<{
-    mapId?: string | number;
-  }>(),
-  {
-    mapId: "MAP-001",
-  }
-);
+const props = defineProps<{
+  mapId?: string | number;
+}>();
+const route = useRoute();
+const currentMapId = computed(() => props.mapId || (route.params.id as string) || "");
 
 defineEmits<{
   (e: "back-map"): void;
@@ -339,7 +337,7 @@ const activeForm = reactive<{
   xPercent: 50,
   yPercent: 50,
   rotation: 0,
-  linkedPage: "/iot",
+  linkedPage: "/iot/devices",
   detail: "",
   displayStatus: "Normal",
 });
@@ -348,7 +346,7 @@ const activeForm = reactive<{
 const pointTableColumns: TableColumn[] = [
   { key: "pointName", label: "点位名称", minWidth: "180px" },
   { key: "entityType", label: "实体类型", width: "130px" },
-  { key: "entityId", label: "实体编码", width: "130px" },
+  { key: "entityId", label: "实体 UUID", width: "220px" },
   { key: "xPercent", label: "水平 X", width: "100px", align: "right" },
   { key: "yPercent", label: "垂直 Y", width: "100px", align: "right" },
   { key: "displayStatus", label: "展示状态", width: "110px", align: "center" },
@@ -361,10 +359,13 @@ const pointTableColumns: TableColumn[] = [
  */
 async function loadPoints() {
   try {
-    const proj = await fetchSiteMapProjection({ siteMapId: props.mapId });
+    if (!currentMapId.value) {
+      throw new Error("缺少站点地图 UUID，无法加载点位配置");
+    }
+    const proj = await fetchSiteMapProjection(currentMapId.value);
     existingPoints.value = proj.points || [];
-  } catch (err) {
-    console.error("加载点位配置失败", err);
+  } catch (err: any) {
+    validationError.value = err?.message || "加载点位配置失败";
   }
 }
 
@@ -429,7 +430,11 @@ async function handleSaveCurrentPoint() {
     return;
   }
   if (!activeForm.entityId.trim()) {
-    validationError.value = "请输入所关联的业务实体编码";
+    validationError.value = "请输入所关联的业务实体 UUID";
+    return;
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(activeForm.entityId.trim())) {
+    validationError.value = "业务实体 ID 必须是后端已分配的 UUID，不能填写业务编码";
     return;
   }
   if (
@@ -446,7 +451,7 @@ async function handleSaveCurrentPoint() {
   try {
     const saved = await saveMapPoint({
       id: editingPointId.value || undefined,
-      siteMapId: props.mapId,
+      siteMapId: currentMapId.value,
       pointName: activeForm.pointName.trim(),
       entityType: activeForm.entityType,
       entityId: activeForm.entityId.trim(),
@@ -488,8 +493,8 @@ async function confirmDeletePoint() {
     showDeleteDialog.value = false;
     pointToDelete.value = null;
     await loadPoints();
-  } catch (err) {
-    console.error("删除点位失败", err);
+  } catch (err: any) {
+    validationError.value = err?.message || "删除点位失败";
   }
 }
 

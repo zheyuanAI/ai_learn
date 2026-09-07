@@ -76,24 +76,25 @@ public class PostgresProductionFactRepository implements ProductionFactRepositor
             try (Connection connection = dataSource.getConnection()) {
                 try (PreparedStatement statement = connection.prepareStatement("""
                         INSERT INTO mes_material_issue
-                            (id, tenant_id, issue_no, work_order_id, status, inventory_operation_id,
+                            (id, tenant_id, issue_no, work_order_id, status, overage_reason, inventory_operation_id,
                              confirmed_by, confirmed_session_id, confirmed_at, created_by, created_at,
                              updated_by, updated_at, isdel)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                         """)) {
                     statement.setObject(1, issue.id());
                     statement.setObject(2, issue.tenantId());
                     statement.setString(3, issue.issueNo());
                     statement.setObject(4, issue.workOrderId());
                     statement.setString(5, issue.status().name());
-                    statement.setObject(6, issue.inventoryOperationId());
-                    statement.setObject(7, issue.confirmedBy());
-                    statement.setString(8, issue.confirmedSessionId());
-                    statement.setObject(9, issue.confirmedAt());
-                    statement.setObject(10, issue.createdBy());
-                    statement.setObject(11, issue.createdAt());
-                    statement.setObject(12, issue.updatedBy());
-                    statement.setObject(13, issue.updatedAt());
+                    statement.setString(6, issue.overageReason());
+                    statement.setObject(7, issue.inventoryOperationId());
+                    statement.setObject(8, issue.confirmedBy());
+                    statement.setString(9, issue.confirmedSessionId());
+                    statement.setObject(10, issue.confirmedAt());
+                    statement.setObject(11, issue.createdBy());
+                    statement.setObject(12, issue.createdAt());
+                    statement.setObject(13, issue.updatedBy());
+                    statement.setObject(14, issue.updatedAt());
                     statement.executeUpdate();
                 }
                 try (PreparedStatement statement = connection.prepareStatement("""
@@ -615,20 +616,21 @@ public class PostgresProductionFactRepository implements ProductionFactRepositor
             throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 UPDATE mes_material_issue
-                   SET status = ?, inventory_operation_id = ?, confirmed_by = ?, confirmed_session_id = ?,
-                       confirmed_at = ?, updated_by = ?, updated_at = ?
+                   SET status = ?, overage_reason = ?, inventory_operation_id = ?, confirmed_by = ?,
+                       confirmed_session_id = ?, confirmed_at = ?, updated_by = ?, updated_at = ?
                  WHERE tenant_id = ? AND id = ? AND status = ? AND isdel = 0
                 """)) {
             statement.setString(1, updated.status().name());
-            statement.setObject(2, updated.inventoryOperationId());
-            statement.setObject(3, updated.confirmedBy());
-            statement.setString(4, updated.confirmedSessionId());
-            statement.setObject(5, updated.confirmedAt());
-            statement.setObject(6, updated.updatedBy());
-            statement.setObject(7, updated.updatedAt());
-            statement.setObject(8, current.tenantId());
-            statement.setObject(9, current.id());
-            statement.setString(10, current.status().name());
+            statement.setString(2, updated.overageReason());
+            statement.setObject(3, updated.inventoryOperationId());
+            statement.setObject(4, updated.confirmedBy());
+            statement.setString(5, updated.confirmedSessionId());
+            statement.setObject(6, updated.confirmedAt());
+            statement.setObject(7, updated.updatedBy());
+            statement.setObject(8, updated.updatedAt());
+            statement.setObject(9, current.tenantId());
+            statement.setObject(10, current.id());
+            statement.setString(11, current.status().name());
             return statement.executeUpdate() == 1;
         }
     }
@@ -703,7 +705,8 @@ public class PostgresProductionFactRepository implements ProductionFactRepositor
                 row.getObject("inventory_operation_id", UUID.class), row.getObject("confirmed_by", UUID.class),
                 row.getString("confirmed_session_id"), row.getObject("confirmed_at", OffsetDateTime.class),
                 row.getObject("created_by", UUID.class), row.getObject("created_at", OffsetDateTime.class),
-                row.getObject("updated_by", UUID.class), row.getObject("updated_at", OffsetDateTime.class));
+                row.getObject("updated_by", UUID.class), row.getObject("updated_at", OffsetDateTime.class),
+                row.getString("overage_reason"));
     }
 
     private List<MaterialIssueLine> readIssueLines(Connection connection, UUID tenantId, UUID issueId)
@@ -797,7 +800,7 @@ public class PostgresProductionFactRepository implements ProductionFactRepositor
     }
 
     private String issueSelect() {
-        return "SELECT id, tenant_id, issue_no, work_order_id, status, inventory_operation_id, "
+        return "SELECT id, tenant_id, issue_no, work_order_id, status, overage_reason, inventory_operation_id, "
                 + "confirmed_by, confirmed_session_id, confirmed_at, created_by, created_at, updated_by, updated_at "
                 + "FROM mes_material_issue";
     }

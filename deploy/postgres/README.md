@@ -24,7 +24,7 @@
 - 接管库：先在共享 `flyway_schema_history` 执行 V1 -> V4，插入模拟 Core/IoT 成功记录，运行本目录接管脚本，再切换到 `auth_flyway_schema_history`，确认只执行 V5；
 - 回滚保护：构造失败的 Auth 历史记录，确认 handoff 事务失败后不会留下半成品 `auth_flyway_schema_history`。
 
-Maven 默认通过 `backend/platform-auth/pom.xml` 使用预先启动的 `127.0.0.1:55432/postgres` 独立 PostgreSQL 12.1 验证实例；该实例不会由测试自动启动，且命令行参数可以覆盖默认值。也可以显式传入独立验证实例连接参数，例如：
+Maven 默认通过 `backend/platform-auth/pom.xml` 使用预先启动的 `127.0.0.1:55432/postgres` 独立 PostgreSQL 12.1 验证实例；该地址仅是可选的 `AuthPostgresMigrationTest` 外部测试夹具，不是本项目运行数据库，也不是启动任何服务的前置条件。该实例不会由测试自动启动，且命令行参数可以覆盖默认值。也可以显式传入独立验证实例连接参数，例如：
 
 ```powershell
 mvn -pl platform-auth -Dauth.test.pg12.jdbc-url=jdbc:postgresql://127.0.0.1:55432/postgres -Dauth.test.pg12.username=postgres -Dauth.test.pg12.password=postgres -Dtest=AuthPostgresMigrationTest test

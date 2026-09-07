@@ -6,6 +6,7 @@ import com.ailearn.platform.core.gis.domain.MapPointConfiguration;
 import com.ailearn.platform.core.gis.domain.SiteMapConfiguration;
 import com.ailearn.platform.core.gis.infrastructure.PostgresGisConfigurationStore;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -35,9 +36,13 @@ class PostgresGisConfigurationStoreTest {
         store.saveMap(map);
 
         var sql = org.mockito.ArgumentCaptor.forClass(String.class);
-        verify(jdbcTemplate, times(2)).update(sql.capture(), any(Object[].class));
+        var arguments = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate, times(2)).update(sql.capture(), arguments.capture());
         assertTrue(sql.getAllValues().stream().allMatch(value -> value.toLowerCase().contains("tenant_id")));
         assertTrue(sql.getAllValues().stream().anyMatch(value -> value.contains("gis_site_map_asset")));
+        Object[] mapArguments = arguments.getAllValues().get(0);
+        assertTrue(mapArguments[5] instanceof OffsetDateTime);
+        assertTrue(mapArguments[6] instanceof OffsetDateTime);
     }
 
     @Test

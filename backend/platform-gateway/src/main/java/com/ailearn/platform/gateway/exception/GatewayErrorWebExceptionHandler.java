@@ -41,6 +41,13 @@ public class GatewayErrorWebExceptionHandler implements ErrorWebExceptionHandler
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 将网关自身未捕获的异常转换为统一响应，并尽量沿用请求链路号。
+     * <p>
+     * 网关只负责 HTTP 状态和 {@link ApiResponse} 外壳，不在这里重判下游业务规则；响应已经提交时也不能再次改写，
+     * 否则可能破坏下游已发送的响应流。无法映射为明确状态的异常统一按 500 处理，下游连接失败按 503 处理。
+     * </p>
+     */
     @Override
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
         ServerHttpRequest request = exchange.getRequest();
@@ -106,6 +113,9 @@ public class GatewayErrorWebExceptionHandler implements ErrorWebExceptionHandler
         return response.writeWith(Mono.just(buffer));
     }
 
+    /**
+     * 将处理器置于网关错误链的高优先级，确保路由、连接和过滤器异常能先被统一包装。
+     */
     @Override
     public int getOrder() {
         return -2;

@@ -92,6 +92,33 @@ public class WorkOrderExecutionServiceImpl implements WorkOrderExecutionService 
                 });
     }
 
+    /**
+     * 修改 Draft/Rejected 工单并同步生命周期。
+     * 入参：工单 ID、完整生产意图和幂等键；出参：更新后的生命周期；流程：锁定生命周期状态 -> 更新 foundation 基础事实 -> 合并新快照。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    @PreAuthorize("hasAuthority('mes:workorder:update')")
+    public WorkOrderLifecycle update(UUID workOrderId, WorkOrderCreateRequest request, String idempotencyKey) {
+        UUID tenantId = trustedTenant();
+        return idempotency.execute("manufacturing:execution:work-order:update", tenantId, idempotencyKey,
+                new UpdatePayload(workOrderId, request), WorkOrderLifecycle.class, () -> {
+                    WorkOrderLifecycle current = repository.find(tenantId, workOrderId)
+                            .orElseThrow(() -> error(WorkOrderExecutionErrorCode.MES_WO_001, "工单不存在"));
+                    if (current.status() != WorkOrderStatus.Draft && current.status() != WorkOrderStatus.Rejected) {
+                        throw error(WorkOrderExecutionErrorCode.MES_WO_005,
+                                "只有 Draft 或 Rejected 工单允许修改");
+                    }
+                    WorkOrderFact updated = foundationService.updateWorkOrder(workOrderId, request, idempotencyKey);
+                    WorkOrderLifecycle saved = repository.update(tenantId, workOrderId,
+                            ignored -> current.withWorkOrder(updated));
+                    if (saved == null) {
+                        throw error(WorkOrderExecutionErrorCode.MES_WO_001, "工单生命周期版本已变化");
+                    }
+                    return saved;
+                });
+    }
+
     /** 提交 Draft 或 Rejected 工单并保存本次提交审计。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -162,10 +189,15 @@ public class WorkOrderExecutionServiceImpl implements WorkOrderExecutionService 
                 });
     }
 
-    /** 接收后续执行链路进度并阻止累计报工超过计划数量。 */
+    /**
+     * 接收后续事实链路的进度快照并阻止累计报工超过计划数量。
+     *
+     * 该方法只作为生产报工、质检、成品入库和工序执行之间的内部协同端口，
+     * 各个对外写入口已经分别完成自己的业务权限校验，因此这里不能再叠加
+     * mes:execution:manage，否则仓库确认成品入库会被错误拒绝。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    @PreAuthorize("hasAuthority('mes:execution:manage')")
     public WorkOrderLifecycle recordProgress(UUID workOrderId, WorkOrderProgress progress,
                                              String idempotencyKey) {
         UUID tenantId = trustedTenant();
@@ -334,5 +366,9 @@ public class WorkOrderExecutionServiceImpl implements WorkOrderExecutionService 
 
     /** 幂等摘要所需的进度载荷。 */
     private record ProgressPayload(UUID workOrderId, WorkOrderProgress progress) {
+    }
+
+    /** 工单更新幂等摘要载荷。 */
+    private record UpdatePayload(UUID workOrderId, WorkOrderCreateRequest request) {
     }
 }

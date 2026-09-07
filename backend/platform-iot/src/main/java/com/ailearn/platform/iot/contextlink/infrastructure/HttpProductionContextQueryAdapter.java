@@ -15,6 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpEntity;
@@ -33,7 +34,7 @@ import org.springframework.web.util.UriComponentsBuilder;
  * 只有同时配置 query-url 和 HMAC secret 才启用；请求只含服务身份签名，不透传用户身份、权限或租户 Header。
  */
 @Component
-@ConditionalOnProperty(name = {"iot.context.core.query-url", "iot.context.core.hmac-secret"})
+@ConditionalOnProperty(name = "iot.context.core.enabled", havingValue = "true")
 public class HttpProductionContextQueryAdapter implements ProductionContextQueryPort {
     private static final String SERVICE_NAME = "platform-iot";
     private static final String HMAC_ALGORITHM = "HmacSHA256";
@@ -42,6 +43,7 @@ public class HttpProductionContextQueryAdapter implements ProductionContextQuery
     private final String hmacSecret;
     private final Clock clock;
 
+    @Autowired
     public HttpProductionContextQueryAdapter(
             @Value("${iot.context.core.query-url}") String queryUrl,
             @Value("${iot.context.core.hmac-secret}") String hmacSecret) {

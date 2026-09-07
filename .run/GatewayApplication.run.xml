@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="GatewayApplication (10001)" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+  <configuration default="false" name="GatewayApplication (20001)" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
     <module name="platform-gateway" />
     <option name="SPRING_BOOT_MAIN_CLASS" value="com.ailearn.platform.gateway.GatewayApplication" />
     <extension name="coverage">

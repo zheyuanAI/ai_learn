@@ -42,6 +42,10 @@
             <label>物流运单号</label>
             <input v-model="trackingNo" type="text" class="form-input mono-text" placeholder="如: SF20260826001" />
           </div>
+          <div class="form-item">
+            <label>后端履约操作 UUID <span class="req">*</span></label>
+            <input v-model="operationId" type="text" class="form-input mono-text" placeholder="输入真实 operationId" required />
+          </div>
         </div>
 
         <!-- 发货行项明细 -->
@@ -146,7 +150,8 @@ const emit = defineEmits<{
 
 const shipTime = ref(new Date().toISOString().slice(0, 16));
 const carrierName = ref("顺丰冷链物流");
-const trackingNo = ref(`SF${Date.now().toString().slice(-8)}`);
+const trackingNo = ref("");
+const operationId = ref("");
 const editableShipLines = ref<EditableShipLine[]>([]);
 
 watch(
@@ -175,7 +180,7 @@ function handleClose() {
 }
 
 function submitShipment() {
-  if (!props.order) return;
+  if (!props.order || !operationId.value) return;
 
   const linesToShip = editableShipLines.value.filter((l) => parseFloat(l.shipQty) > 0);
   if (linesToShip.length === 0) {
@@ -191,6 +196,7 @@ function submitShipment() {
   }
 
   const payload = {
+    operationId: operationId.value,
     salesOrderId: props.order.id,
     shipTime: shipTime.value.replace("T", " ") + ":00",
     carrierName: carrierName.value,

@@ -5,5 +5,6 @@ public enum QualityInspectionStatus {
     Draft,
     Submitted,
     Passed,
-    Failed
+    Failed,
+    Closed
 }

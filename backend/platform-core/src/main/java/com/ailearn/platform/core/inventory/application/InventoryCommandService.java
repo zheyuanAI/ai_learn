@@ -10,6 +10,19 @@ package com.ailearn.platform.core.inventory.application;
 public interface InventoryCommandService {
 
     /**
+     * 在库存命令事务内锁定并校验余额版本；盘点零差异确认也必须经过该入口，避免绕过余额行锁。
+     * focused mock 未实现时可返回 null，由调用方回退到查询端口；生产 InventoryApplicationService 返回已锁定余额。
+     *
+     * @param dimension 待校验库存维度
+     * @param expectedVersion 快照记录的余额版本
+     * @return 已锁定余额，兼容适配器可返回 null
+     */
+    default com.ailearn.platform.core.inventory.domain.InventoryBalance assertBalanceVersion(
+            com.ailearn.platform.core.inventory.domain.InventoryDimension dimension, long expectedVersion) {
+        return null;
+    }
+
+    /**
      * 增加一个库存维度的实物数量并追加增加流水。
      *
      * @param command 增加命令，包含来源、维度、数量和审计幂等元数据

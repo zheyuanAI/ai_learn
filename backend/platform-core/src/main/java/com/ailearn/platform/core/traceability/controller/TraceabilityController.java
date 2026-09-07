@@ -8,7 +8,7 @@ import com.ailearn.platform.core.traceability.dto.TraceabilityQuery;
 import com.ailearn.platform.core.traceability.web.TrustedFactsQueryContextFactory;
 import com.ailearn.platform.shared.api.ApiResponse;
 import java.util.UUID;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,7 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
  * </p>
  */
 @RestController
-@ConditionalOnBean(TraceabilityApplicationService.class)
+// S7 控制器由同一开关统一启用，避免组件扫描早于条件 Bean 注册造成启动顺序依赖。
+@ConditionalOnProperty(prefix = "core.facts.iot", name = "enabled", havingValue = "true")
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class TraceabilityController {
 
@@ -42,32 +43,18 @@ public class TraceabilityController {
     }
 
     /**
-     * 查询跨域追溯链；同时保留 /api/traceability 作为稳定后端别名。
-     * 入参：事实实体类型与 UUID；出参：真实 Facts 节点、关系和缺失来源标记。
+     * 查询跨域追溯链。
+     * 入参：正式参数 entity_type 与 entity_id；出参：真实 Facts 节点、关系和缺失来源标记。
      */
-    @GetMapping({"/api/insights/traceability", "/api/traceability"})
+    @GetMapping("/api/traceability")
     @PreAuthorize("hasAuthority('trace:chain:view') or hasAuthority('ai:trace:view')")
     public ApiResponse<TraceabilityProjection> query(
             @RequestParam(name = "entity_type", required = false) String entityType,
-            @RequestParam(name = "entityType", required = false) String entityTypeAlias,
-            @RequestParam(name = "entity_id", required = false) UUID entityId,
-            @RequestParam(name = "entityId", required = false) UUID entityIdAlias) {
-        String type = firstText(entityType, entityTypeAlias);
-        UUID id = entityId != null ? entityId : entityIdAlias;
-        if (type == null || id == null) {
+            @RequestParam(name = "entity_id", required = false) UUID entityId) {
+        if (entityType == null || entityType.isBlank() || entityId == null) {
             throw new GisException(GisErrorCode.GIS_QUERY_001, "追溯入口必须提供 entity_type 和 entity_id");
         }
         return ApiResponse.success(applicationService.query(
-                new TraceabilityQuery(contextFactory.current(), type, id)));
-    }
-
-    private static String firstText(String first, String second) {
-        if (first != null && !first.isBlank()) {
-            return first.trim();
-        }
-        if (second != null && !second.isBlank()) {
-            return second.trim();
-        }
-        return null;
+                new TraceabilityQuery(contextFactory.current(), entityType.trim(), entityId)));
     }
 }

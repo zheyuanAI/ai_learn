@@ -71,9 +71,9 @@
 
       <select v-model="queryParams.warehouseId" class="filter-select" @change="fetchBalances">
         <option value="">全部仓库</option>
-        <option value="1">原料一仓</option>
-        <option value="2">成品一仓</option>
-        <option value="3">虚拟仓</option>
+        <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">
+          {{ warehouse.code }} - {{ warehouse.name }}
+        </option>
       </select>
     </FilterBar>
 
@@ -148,13 +148,15 @@ import QuantityText from "@/components/common/QuantityText.vue";
 import EmptyState from "@/components/common/EmptyState.vue";
 import ErrorState from "@/components/common/ErrorState.vue";
 import type { ViewState } from "@/types/common";
-import { type InventoryBalance, stringAdd, stringSub } from "@/types/inventory";
+import { type InventoryBalance, type Warehouse, stringAdd, stringSub } from "@/types/inventory";
+import { getWarehouses } from "@/api/masterData";
 import { getInventoryBalances } from "@/api/inventory";
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 const balanceList = ref<InventoryBalance[]>([]);
 const totalCount = ref(0);
+const warehouses = ref<Warehouse[]>([]);
 
 const queryParams = reactive({
   page: 1,
@@ -254,8 +256,21 @@ function resetFilter() {
   fetchBalances();
 }
 
+/**
+ * 加载库存余额筛选仓库，查询参数使用后端返回的真实 UUID。
+ */
+async function loadWarehouses() {
+  try {
+    const response = await getWarehouses({ page: 1, size: 200, status: "ACTIVE" });
+    warehouses.value = response.data.records;
+  } catch (error) {
+    console.error("[InventoryBalanceView] 加载仓库失败", error);
+  }
+}
+
 onMounted(() => {
   fetchBalances();
+  loadWarehouses();
 });
 </script>
 

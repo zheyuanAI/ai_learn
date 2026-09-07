@@ -191,14 +191,11 @@
         <form class="modal-body" @submit.prevent="submitCreateWorkOrder">
           <div class="form-grid two-col">
             <div class="form-item">
-              <label>产出产品代码 <span class="req">*</span></label>
-              <input
-                v-model="createForm.productId"
-                type="text"
-                class="form-input"
-                placeholder="例如 prod-101"
-                required
-              />
+              <label>产出产品 <span class="req">*</span></label>
+              <select v-model="createForm.productId" class="form-input" required>
+                <option value="">请选择真实产品</option>
+                <option v-for="product in products" :key="product.id" :value="String(product.id)">{{ product.sku }} ({{ product.name }})</option>
+              </select>
             </div>
             <div class="form-item">
               <label>计划生产数量 <span class="req">*</span></label>
@@ -237,24 +234,18 @@
 
           <div class="form-grid two-col">
             <div class="form-item">
-              <label>关联 BOM 清单 ID <span class="req">*</span></label>
-              <input
-                v-model="createForm.bomId"
-                type="text"
-                class="form-input font-mono"
-                placeholder="例如 bom-001"
-                required
-              />
+              <label>关联 BOM <span class="req">*</span></label>
+              <select v-model="createForm.bomId" class="form-input" required>
+                <option value="">请选择真实 BOM</option>
+                <option v-for="bom in boms" :key="bom.id" :value="String(bom.id)">{{ bom.bomCode }} / {{ bom.version }}</option>
+              </select>
             </div>
             <div class="form-item">
-              <label>关联工艺路线 ID <span class="req">*</span></label>
-              <input
-                v-model="createForm.routingId"
-                type="text"
-                class="form-input font-mono"
-                placeholder="例如 rout-001"
-                required
-              />
+              <label>关联工艺路线 <span class="req">*</span></label>
+              <select v-model="createForm.routingId" class="form-input" required>
+                <option value="">请选择真实工艺路线</option>
+                <option v-for="routing in routings" :key="routing.id" :value="String(routing.id)">{{ routing.routingCode }} / {{ routing.version }}</option>
+              </select>
             </div>
           </div>
 
@@ -264,7 +255,7 @@
               v-model="createForm.sourceSalesOrderLineId"
               type="text"
               class="form-input font-mono"
-              placeholder="例如 so-line-8891"
+              placeholder="真实销售订单行 UUID"
             />
           </div>
 
@@ -369,7 +360,10 @@ import type {
   WorkOrderItem,
   WorkOrderCreateRequest,
   WorkOrderStatus,
+  BomItem,
+  RoutingItem,
 } from "../../types/manufacturing";
+import type { Product } from "../../types/inventory";
 import {
   getWorkOrders,
   createWorkOrder,
@@ -378,7 +372,10 @@ import {
   rejectWorkOrder,
   completeWorkOrder,
   manualCompleteWorkOrder,
+  getBoms,
+  getRoutings,
 } from "../../api/manufacturing";
+import { getProducts } from "../../api/masterData";
 
 const emit = defineEmits<{
   (e: "select-detail", item: WorkOrderItem): void;
@@ -389,6 +386,9 @@ const errorMessage = ref("");
 
 const workOrderList = ref<WorkOrderItem[]>([]);
 const total = ref(0);
+const products = ref<Product[]>([]);
+const boms = ref<BomItem[]>([]);
+const routings = ref<RoutingItem[]>([]);
 const queryParams = reactive({
   page: 1,
   size: 10,
@@ -409,12 +409,12 @@ const columns: TableColumn[] = [
 const createModalVisible = ref(false);
 const isSubmitting = ref(false);
 const createForm = reactive<WorkOrderCreateRequest>({
-  productId: "prod-101",
-  plannedQty: "100.00",
-  plannedStartTime: "2026-09-05 08:00:00",
-  plannedFinishTime: "2026-09-10 18:00:00",
-  bomId: "bom-001",
-  routingId: "rout-001",
+  productId: "",
+  plannedQty: "",
+  plannedStartTime: "",
+  plannedFinishTime: "",
+  bomId: "",
+  routingId: "",
   sourceSalesOrderLineId: "",
 });
 
@@ -513,18 +513,18 @@ function viewDetail(item: WorkOrderItem) {
 }
 
 function openCreateModal() {
-  createForm.productId = "prod-101";
-  createForm.plannedQty = "100.00";
-  createForm.plannedStartTime = "2026-09-05 08:00:00";
-  createForm.plannedFinishTime = "2026-09-10 18:00:00";
-  createForm.bomId = "bom-001";
-  createForm.routingId = "rout-001";
+  createForm.productId = "";
+  createForm.plannedQty = "";
+  createForm.plannedStartTime = "";
+  createForm.plannedFinishTime = "";
+  createForm.bomId = "";
+  createForm.routingId = "";
   createForm.sourceSalesOrderLineId = "";
   createModalVisible.value = true;
 }
 
 async function submitCreateWorkOrder() {
-  if (!createForm.plannedQty || !createForm.bomId || !createForm.routingId) return;
+  if (!createForm.productId || !createForm.plannedQty || !createForm.bomId || !createForm.routingId) return;
   isSubmitting.value = true;
   try {
     await createWorkOrder(createForm);
@@ -626,7 +626,24 @@ async function handleConfirmManualComplete() {
 
 onMounted(() => {
   fetchWorkOrders();
+  loadCreateOptions();
 });
+
+/** 加载工单创建所需的真实产品、BOM 与工艺路线 UUID。 */
+async function loadCreateOptions() {
+  try {
+    const [productRes, bomRes, routingRes] = await Promise.all([
+      getProducts({ page: 1, size: 200, status: "ENABLE" }),
+      getBoms({ page: 1, size: 200 }),
+      getRoutings({ page: 1, size: 200 }),
+    ]);
+    products.value = productRes.data.records || [];
+    boms.value = bomRes.data.records || [];
+    routings.value = routingRes.data.records || [];
+  } catch (err: any) {
+    errorMessage.value = err?.message || "加载工单创建主数据失败";
+  }
+}
 </script>
 
 <style scoped>

@@ -11,6 +11,7 @@ import com.ailearn.platform.core.manufacturing.productionfact.dto.MaterialIssueC
 import com.ailearn.platform.core.manufacturing.productionfact.dto.MaterialReturnCreateRequest;
 import com.ailearn.platform.core.manufacturing.productionfact.dto.QualityInspectionCreateRequest;
 import com.ailearn.platform.core.manufacturing.productionfact.dto.QualityInspectionSubmitRequest;
+import com.ailearn.platform.core.manufacturing.productionfact.dto.QualityInspectionCloseRequest;
 import com.ailearn.platform.core.manufacturing.productionfact.dto.WorkReportCreateRequest;
 import java.util.List;
 import java.util.UUID;
@@ -43,6 +44,10 @@ public interface ProductionFactApplicationService {
     /** 提交质检并进入 Passed 或 Failed。 */
     QualityInspection submitQualityInspection(UUID id, QualityInspectionSubmitRequest request,
                                                String idempotencyKey);
+
+    /** 关闭 Failed 质检的不合格处置事实；不执行库存移动。 */
+    QualityInspection closeQualityInspection(UUID id, QualityInspectionCloseRequest request,
+                                             String idempotencyKey);
 
     /** 查询当前租户工单下的质检事实。 */
     List<QualityInspection> findQualityInspections(UUID workOrderId);

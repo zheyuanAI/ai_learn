@@ -13,6 +13,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -20,6 +22,7 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public class PostgresAlarmRepository implements AlarmRepository {
+    private static final Logger log = LoggerFactory.getLogger(PostgresAlarmRepository.class);
     private final JdbcTemplate jdbc;
 
     public PostgresAlarmRepository(JdbcTemplate jdbc) {
@@ -114,7 +117,14 @@ public class PostgresAlarmRepository implements AlarmRepository {
                                     OffsetDateTime from, OffsetDateTime to, String contextStatus,
                                     int offset, int limit) {
         Query query = query(tenantId, deviceId, status, alarmLevel, from, to, contextStatus);
-        String sql = query.sql + " ORDER BY triggered_at DESC LIMIT ? OFFSET ?";
+        // query() 只负责拼接 FROM/WHERE 条件；分页查询必须补齐 SELECT 列，避免把 FROM 片段直接交给 JDBC。
+        String sql = """
+                SELECT id, tenant_id, alarm_no, device_id, rule_id, alarm_type, alarm_level, status,
+                       triggered_at, acked_at, ack_user_id, recovered_at, operation_execution_id,
+                       work_order_id, context_source, context_status, created_at, ack_comment, updated_at, updated_by
+                  FROM iot_device_alarm
+                """ + query.sql.substring(query.sql.indexOf(" WHERE"))
+                + " ORDER BY triggered_at DESC LIMIT ? OFFSET ?";
         query.args.add(limit);
         query.args.add(offset);
         return db(() -> jdbc.query(sql, this::row, query.args.toArray()));
@@ -160,6 +170,8 @@ public class PostgresAlarmRepository implements AlarmRepository {
         } catch (ServiceUnavailableException exception) {
             throw exception;
         } catch (RuntimeException exception) {
+            // 记录服务端根因，接口仍只向调用方返回统一的数据库不可用错误，避免泄露 SQL 细节。
+            log.error("IoT 告警事实数据库操作失败", exception);
             throw new ServiceUnavailableException("IoT 告警事实数据库暂时不可用", exception);
         }
     }

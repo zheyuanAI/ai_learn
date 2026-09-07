@@ -13,4 +13,9 @@ public record PutawayTaskPageView(List<PutawayTaskView> records, long total, int
     public PutawayTaskPageView {
         records = records == null ? List.of() : List.copyOf(records);
     }
+
+    /** 返回总页数，供前端统一分页组件使用。 */
+    public long getTotalPages() {
+        return size <= 0 ? 0 : (total + size - 1) / size;
+    }
 }

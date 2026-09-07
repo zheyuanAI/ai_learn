@@ -1,5 +1,7 @@
 package com.ailearn.platform.core.inventory.domain;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -37,6 +39,7 @@ public record InventoryTransaction(
         UUID sourceLineId,
         InventoryDimension fromDimension,
         InventoryDimension toDimension,
+        @JsonSerialize(using = ToStringSerializer.class)
         BigDecimal quantity,
         OffsetDateTime occurredAt,
         UUID operatorId,

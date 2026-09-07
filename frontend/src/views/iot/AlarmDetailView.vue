@@ -225,7 +225,7 @@
               v-model="contextForm.workOrderId"
               type="text"
               class="form-input font-mono"
-              placeholder="例如 wo-001 或 WO-20260901-001"
+              placeholder="请输入工单 UUID"
             />
           </div>
           <div class="form-item">
@@ -234,7 +234,7 @@
               v-model="contextForm.operationExecutionId"
               type="text"
               class="form-input font-mono"
-              placeholder="例如 exec-002 或 EXE-20260901-02"
+              placeholder="请输入工序执行 UUID"
             />
           </div>
           <div class="modal-footer">
@@ -260,19 +260,13 @@ import type {
 } from "../../types/iot";
 import {
   getDeviceAlarmDetail,
-  getDeviceAlarms,
   ackDeviceAlarm,
   updateAlarmBusinessContext,
 } from "../../api/iot";
 
-const props = withDefaults(
-  defineProps<{
-    alarmId?: string;
-  }>(),
-  {
-    alarmId: "alm-001",
-  }
-);
+const props = defineProps<{
+  alarmId?: string;
+}>();
 
 defineEmits<{
   (e: "back"): void;
@@ -323,14 +317,12 @@ async function loadAlarmData() {
   viewState.value = "loading";
   errorMessage.value = "";
   try {
-    const id = props.alarmId || "alm-001";
-    const res = await getDeviceAlarmDetail(id);
-    if (res.data) {
-      alarm.value = res.data;
-    } else {
-      const fallbackList = await getDeviceAlarms({ page: 1, size: 1 });
-      alarm.value = fallbackList.data?.records?.[0] || null;
+    const id = props.alarmId;
+    if (!id) {
+      throw new Error("缺少告警 UUID，无法查询告警详情");
     }
+    const res = await getDeviceAlarmDetail(id);
+    alarm.value = res.data || null;
     viewState.value = alarm.value ? "ready" : "empty";
   } catch (err: any) {
     errorMessage.value = err.message || "请求告警详情失败";
@@ -354,13 +346,17 @@ async function submitAck() {
 
 function openContextModal() {
   if (!alarm.value) return;
-  contextForm.workOrderId = alarm.value.workOrderId || "wo-001";
-  contextForm.operationExecutionId = alarm.value.operationExecutionId || "exec-002";
+  contextForm.workOrderId = alarm.value.workOrderId || "";
+  contextForm.operationExecutionId = alarm.value.operationExecutionId || "";
   contextModalVisible.value = true;
 }
 
 async function submitContext() {
   if (!alarm.value) return;
+  if (!contextForm.workOrderId.trim() && !contextForm.operationExecutionId.trim()) {
+    errorMessage.value = "请填写至少一个后端已分配的工单或工序执行 UUID";
+    return;
+  }
   isSubmitting.value = true;
   try {
     await updateAlarmBusinessContext(alarm.value.id as string, contextForm);

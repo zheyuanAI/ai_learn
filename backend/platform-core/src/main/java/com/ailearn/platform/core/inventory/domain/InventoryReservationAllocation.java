@@ -1,5 +1,7 @@
 package com.ailearn.platform.core.inventory.domain;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -20,7 +22,9 @@ public record InventoryReservationAllocation(
         UUID tenantId,
         UUID reservationId,
         InventoryDimension dimension,
+        @JsonSerialize(using = ToStringSerializer.class)
         BigDecimal allocatedQty,
+        @JsonSerialize(using = ToStringSerializer.class)
         BigDecimal releasedQty,
         long version,
         OffsetDateTime createdAt,

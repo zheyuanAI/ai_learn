@@ -155,7 +155,7 @@ public class PostgresFoundationRepository implements FoundationRepository {
                              (id, tenant_id, work_order_no, product_id, planned_qty,
                               planned_start_time, planned_finish_time, bom_id, bom_version,
                               routing_id, routing_version, source_sales_order_line_id,
-                              status, version, created_by, created_at, isdel)
+                             status, version, created_by, created_at, isdel)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0)
                          """)) {
                 statement.setObject(1, workOrder.id());
@@ -181,6 +181,96 @@ public class PostgresFoundationRepository implements FoundationRepository {
         });
     }
 
+    /**
+     * 按租户和版本修改 Draft/Rejected 工单基础事实。
+     * 入参：已校验的新快照与旧版本；出参：更新后快照；流程：带租户、状态和版本条件更新，失败时返回受控冲突。
+     */
+    @Override
+    public WorkOrderFact updateWorkOrder(WorkOrderFact workOrder, long expectedVersion) {
+        return database(() -> {
+            try (Connection connection = dataSource.getConnection();
+                 PreparedStatement statement = connection.prepareStatement("""
+                         UPDATE mes_work_order
+                            SET work_order_no = ?, product_id = ?, planned_qty = ?,
+                                planned_start_time = ?, planned_finish_time = ?, bom_id = ?,
+                                bom_version = ?, routing_id = ?, routing_version = ?,
+                                source_sales_order_line_id = ?, version = version + 1,
+                                updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                          WHERE tenant_id = ? AND id = ? AND status IN ('Draft', 'Rejected')
+                            AND version = ? AND isdel = 0
+                         """)) {
+                statement.setString(1, workOrder.workOrderNo());
+                statement.setObject(2, workOrder.productId());
+                statement.setBigDecimal(3, workOrder.plannedQty());
+                statement.setObject(4, workOrder.plannedStartTime());
+                statement.setObject(5, workOrder.plannedFinishTime());
+                statement.setObject(6, workOrder.bomId());
+                statement.setString(7, workOrder.bomVersion());
+                statement.setObject(8, workOrder.routingId());
+                statement.setString(9, workOrder.routingVersion());
+                statement.setObject(10, workOrder.sourceSalesOrderLineId());
+                statement.setObject(11, workOrder.createdBy());
+                statement.setObject(12, workOrder.tenantId());
+                statement.setObject(13, workOrder.id());
+                statement.setLong(14, expectedVersion);
+                if (statement.executeUpdate() != 1) {
+                    throw new com.ailearn.platform.core.manufacturing.foundation.exception.FoundationException(
+                            com.ailearn.platform.core.manufacturing.foundation.exception.FoundationErrorCode.MES_WO_005,
+                            "工单状态或版本已变化，请重新读取");
+                }
+                return workOrder;
+            }
+        });
+    }
+
+    /** 查询当前租户未删除 BOM 列表及组件，供正式只读接口复用。 */
+    @Override
+    public List<BomFact> findBoms(UUID tenantId) {
+        return database(() -> {
+            List<BomFact> result = new ArrayList<>();
+            try (Connection connection = dataSource.getConnection();
+                 PreparedStatement statement = connection.prepareStatement("""
+                         SELECT id, tenant_id, product_id, bom_code, version, status,
+                                created_by, created_at
+                           FROM mes_bom
+                          WHERE tenant_id = ? AND isdel = 0
+                          ORDER BY created_at, id
+                         """)) {
+                statement.setObject(1, tenantId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) {
+                        result.add(readBom(connection, rows));
+                    }
+                }
+            }
+            return List.copyOf(result);
+        });
+    }
+
+    /** 查询当前租户未删除 Routing 列表及工序，供正式只读接口复用。 */
+    @Override
+    public List<RoutingFact> findRoutings(UUID tenantId) {
+        return database(() -> {
+            List<RoutingFact> result = new ArrayList<>();
+            try (Connection connection = dataSource.getConnection();
+                 PreparedStatement statement = connection.prepareStatement("""
+                         SELECT id, tenant_id, product_id, routing_code, version, status,
+                                created_by, created_at
+                           FROM mes_routing
+                          WHERE tenant_id = ? AND isdel = 0
+                          ORDER BY created_at, id
+                         """)) {
+                statement.setObject(1, tenantId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) {
+                        result.add(readRouting(connection, rows));
+                    }
+                }
+            }
+            return List.copyOf(result);
+        });
+    }
+
     /** 按租户读取完整工单生产意图，供执行生命周期查询和下游来源校验复用。 */
     @Override
     public Optional<WorkOrderFact> findWorkOrder(UUID tenantId, UUID workOrderId) {
@@ -190,7 +280,7 @@ public class PostgresFoundationRepository implements FoundationRepository {
                          SELECT id, tenant_id, work_order_no, product_id, planned_qty,
                                 planned_start_time, planned_finish_time, bom_id, bom_version,
                                 routing_id, routing_version, source_sales_order_line_id,
-                                status, created_by, created_at
+                                status, version, created_by, created_at
                            FROM mes_work_order
                           WHERE tenant_id = ? AND id = ? AND isdel = 0
                          """)) {
@@ -213,7 +303,7 @@ public class PostgresFoundationRepository implements FoundationRepository {
                          SELECT id, tenant_id, work_order_no, product_id, planned_qty,
                                 planned_start_time, planned_finish_time, bom_id, bom_version,
                                 routing_id, routing_version, source_sales_order_line_id,
-                                status, created_by, created_at
+                                status, version, created_by, created_at
                            FROM mes_work_order
                           WHERE tenant_id = ? AND isdel = 0
                           ORDER BY created_at, id
@@ -349,6 +439,30 @@ public class PostgresFoundationRepository implements FoundationRepository {
         });
     }
 
+    /** 以当前租户和工单标识锁定主事实，确保派工数量检查与写入在同一事务中串行。 */
+    @Override
+    public void lockWorkOrder(UUID tenantId, UUID workOrderId) {
+        database(() -> {
+            try (Connection connection = dataSource.getConnection();
+                 PreparedStatement statement = connection.prepareStatement("""
+                         SELECT id FROM mes_work_order
+                          WHERE tenant_id = ? AND id = ? AND isdel = 0
+                          FOR UPDATE
+                         """)) {
+                statement.setObject(1, tenantId);
+                statement.setObject(2, workOrderId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    if (!rows.next()) {
+                        throw new com.ailearn.platform.core.manufacturing.foundation.exception.FoundationException(
+                                com.ailearn.platform.core.manufacturing.foundation.exception.FoundationErrorCode.MES_TENANT_001,
+                                "工单不存在或不属于当前租户");
+                    }
+                }
+            }
+            return null;
+        });
+    }
+
     private BomFact readBom(Connection connection, ResultSet resultSet) throws SQLException {
         List<BomComponentFact> components = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement("""
@@ -413,7 +527,8 @@ public class PostgresFoundationRepository implements FoundationRepository {
                 resultSet.getObject("source_sales_order_line_id", UUID.class),
                 WorkOrderStatus.valueOf(resultSet.getString("status")), false,
                 resultSet.getObject("created_by", UUID.class),
-                resultSet.getObject("created_at", OffsetDateTime.class));
+                resultSet.getObject("created_at", OffsetDateTime.class),
+                resultSet.getLong("version"));
     }
 
     private <T> T database(SqlSupplier<T> supplier) {

@@ -163,16 +163,20 @@
           <div class="form-item">
             <label>往来客户 <span class="req">*</span></label>
             <select v-model="createForm.customerId" class="form-select" required>
-              <option value="1">华北智造系统有限公司 (CUS-NC-021)</option>
-              <option value="2">苏州精密装备研究院 (CUS-EA-014)</option>
-              <option value="3">宁波柔性制造中心 (CUS-EA-006)</option>
+              <option value="">请选择真实客户</option>
+              <option v-for="customer in customers" :key="customer.id" :value="String(customer.id)">
+                {{ customer.customerName }} ({{ customer.customerCode }})
+              </option>
             </select>
           </div>
           <div class="form-row">
             <div class="form-item">
               <label>出库仓库 <span class="req">*</span></label>
               <select v-model="createForm.warehouseId" class="form-select" required>
-                <option value="2">成品一仓 (WH-FG-01)</option>
+                <option value="">请选择真实仓库</option>
+                <option v-for="warehouse in warehouses" :key="warehouse.id" :value="String(warehouse.id)">
+                  {{ warehouse.name }} ({{ warehouse.code }})
+                </option>
               </select>
             </div>
             <div class="form-item">
@@ -183,8 +187,10 @@
           <div class="form-item">
             <label>订购物料 <span class="req">*</span></label>
             <select v-model="createForm.productId" class="form-select" required>
-              <option value="1">FG-SERVO-01 (伺服电机总成 - 可用 400)</option>
-              <option value="2">FG-CTRL-08 (边缘控制终端)</option>
+              <option value="">请选择真实产品</option>
+              <option v-for="product in products" :key="product.id" :value="String(product.id)">
+                {{ product.sku }} ({{ product.name }})
+              </option>
             </select>
           </div>
           <div class="form-item">
@@ -223,11 +229,16 @@ import SalesOrderDetailView from "./SalesOrderDetailView.vue";
 import type { ViewState } from "@/types/common";
 import type { SalesOrder } from "@/types/sales";
 import { getSalesOrders, createSalesOrder } from "@/api/sales";
+import { getCustomers, getProducts, getWarehouses } from "@/api/masterData";
+import type { Customer, Product, Warehouse } from "@/types/inventory";
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 const orderList = ref<SalesOrder[]>([]);
 const totalCount = ref(0);
+const customers = ref<Customer[]>([]);
+const products = ref<Product[]>([]);
+const warehouses = ref<Warehouse[]>([]);
 
 const queryParams = reactive({
   page: 1,
@@ -267,12 +278,12 @@ const selectedOrderId = ref<string | number | null>(null);
 const isCreateModalOpen = ref(false);
 const isCreating = ref(false);
 const createForm = reactive({
-  customerId: "1",
-  warehouseId: "2",
+  customerId: "",
+  warehouseId: "",
   plannedShipDate: new Date().toISOString().slice(0, 10),
-  productId: "1",
-  orderedQty: "40",
-  remark: "加急专车发运",
+  productId: "",
+  orderedQty: "",
+  remark: "",
 });
 
 function lifecycleBadgeType(status: string): any {
@@ -365,6 +376,7 @@ function openOrderDetail(row: SalesOrder) {
 }
 
 async function submitCreateOrder() {
+  if (!createForm.customerId || !createForm.warehouseId || !createForm.productId || !createForm.orderedQty) return;
   isCreating.value = true;
   try {
     await createSalesOrder({
@@ -377,7 +389,6 @@ async function submitCreateOrder() {
           productId: createForm.productId,
           orderedQty: createForm.orderedQty,
           uom: "台",
-          sourceLocationId: "6",
         },
       ],
     });
@@ -391,8 +402,24 @@ async function submitCreateOrder() {
 }
 
 onMounted(() => {
-  fetchOrders();
+  Promise.all([fetchOrders(), loadMasterData()]);
 });
+
+/** 加载销售订单创建所需的真实主数据 UUID，前端不维护演示业务事实。 */
+async function loadMasterData() {
+  try {
+    const [customerRes, productRes, warehouseRes] = await Promise.all([
+      getCustomers({ page: 1, size: 200, status: "ACTIVE" }),
+      getProducts({ page: 1, size: 200, status: "ENABLE" }),
+      getWarehouses({ page: 1, size: 200, status: "ACTIVE" }),
+    ]);
+    customers.value = customerRes.data.records || [];
+    products.value = productRes.data.records || [];
+    warehouses.value = warehouseRes.data.records || [];
+  } catch (err: any) {
+    errorMessage.value = err?.message || "加载销售主数据失败";
+  }
+}
 </script>
 
 <style scoped>

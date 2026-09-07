@@ -294,21 +294,14 @@ const isCompleteDialogOpen = ref(false);
 const manualCompleteReason = ref("");
 
 watch(
-  () => props.orderId,
-  (val) => {
-    if (val && props.visible) {
-      fetchDetail();
+  () => [props.orderId, props.visible] as const,
+  ([orderId, visible]) => {
+    // 修改：合并 props 监听并立即执行，确保直达/刷新路由主动加载详情，列表抽屉仍可复用同一组件。
+    if (orderId && visible) {
+      void fetchDetail();
     }
-  }
-);
-
-watch(
-  () => props.visible,
-  (val) => {
-    if (val && props.orderId) {
-      fetchDetail();
-    }
-  }
+  },
+  { immediate: true }
 );
 
 async function fetchDetail() {
@@ -391,7 +384,8 @@ async function handleApproveOrder() {
 async function handleConfirmReceipt(payload: any) {
   actionLoading.value = true;
   try {
-    await confirmPurchaseReceipt(payload);
+    const { receiptId, ...requestPayload } = payload;
+    await confirmPurchaseReceipt(receiptId, requestPayload);
     isReceiptConfirmOpen.value = false;
     await fetchDetail();
     emit("refresh");

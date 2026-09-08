@@ -7,10 +7,10 @@
       description="配置与标定厂区空间底图点位。在画布上点击可快速捕获相对百分比坐标 (x%, y%)；点位修改严格保存展示参数，不修改源业务事实。"
     >
       <template #actions>
-        <button type="button" class="btn-return" @click="$emit('back-map')">
+        <button type="button" class="btn-return" @click="handleBackMap">
           <span>🖥️ 返回地图监控</span>
         </button>
-        <button type="button" class="btn-return-list" @click="$emit('back-list')">
+        <button type="button" class="btn-return-list" @click="handleBackList">
           <span>☰ 地图列表</span>
         </button>
         <button type="button" class="btn-save-all" :disabled="isSaving" @click="handleSaveCurrentPoint">
@@ -121,21 +121,73 @@
           <div class="form-grid-two">
             <div class="form-row">
               <label class="form-label required">实体类型</label>
-              <select v-model="activeForm.entityType" class="form-select">
+              <select v-model="activeForm.entityType" class="form-select" @change="handleEntityTypeChange">
                 <option value="DEVICE">生产设备 (DEVICE)</option>
                 <option value="WAREHOUSE">仓库库区 (WAREHOUSE)</option>
                 <option value="PRODUCTION_AREA">车间区域 (AREA)</option>
               </select>
             </div>
 
-            <div class="form-row">
-              <label class="form-label required">源实体 UUID (Entity ID)</label>
+            <!-- 设备实体选择器 -->
+            <div v-if="activeForm.entityType === 'DEVICE'" class="form-row">
+              <label class="form-label required">选择生产设备</label>
+              <select
+                :value="activeForm.entityId"
+                class="form-select"
+                :disabled="loadingEntities"
+                @change="(e) => handleDeviceSelect((e.target as HTMLSelectElement).value)"
+              >
+                <option value="">{{ loadingEntities ? "正在加载设备..." : "-- 请选择生产设备 --" }}</option>
+                <option
+                  v-for="dev in deviceOptions"
+                  :key="dev.id"
+                  :value="dev.id"
+                >
+                  {{ dev.deviceCode }} - {{ dev.deviceName }}
+                </option>
+              </select>
+              <span v-if="activeForm.entityId" class="selected-uuid-hint font-mono">UUID: {{ activeForm.entityId }}</span>
+            </div>
+
+            <!-- 仓库实体选择器 -->
+            <div v-else-if="activeForm.entityType === 'WAREHOUSE'" class="form-row">
+              <label class="form-label required">选择仓库库区</label>
+              <select
+                :value="activeForm.entityId"
+                class="form-select"
+                :disabled="loadingEntities"
+                @change="(e) => handleWarehouseSelect((e.target as HTMLSelectElement).value)"
+              >
+                <option value="">{{ loadingEntities ? "正在加载仓库..." : "-- 请选择仓库库区 --" }}</option>
+                <option
+                  v-for="wh in warehouseOptions"
+                  :key="wh.id"
+                  :value="wh.id"
+                >
+                  {{ wh.code }} - {{ wh.name }}
+                </option>
+              </select>
+              <span v-if="activeForm.entityId" class="selected-uuid-hint font-mono">UUID: {{ activeForm.entityId }}</span>
+            </div>
+
+            <!-- 生产区域实体：事实缺失声明 -->
+            <div v-else class="form-row">
+              <label class="form-label required">车间区域实体</label>
               <input
-                v-model="activeForm.entityId"
                 type="text"
-                class="form-input"
-                placeholder="请输入后端实体 UUID"
+                class="form-input text-muted"
+                disabled
+                value="未提供事实源（禁止手填）"
               />
+            </div>
+          </div>
+
+          <!-- 生产区域事实缺失警示横幅 -->
+          <div v-if="activeForm.entityType === 'PRODUCTION_AREA'" class="fact-gap-alert">
+            <span class="gap-icon">⚠️</span>
+            <div class="gap-text">
+              <strong>仓库内未发现事实依据：</strong>
+              <span>当前后端尚未提供独立车间区域 (Production Area) 维护与查询实体，严禁盲猜手输或伪造 UUID。请选择生产设备 (DEVICE) 或仓库库区 (WAREHOUSE) 进行点位标定。</span>
             </div>
           </div>
 
@@ -289,9 +341,13 @@
  */
 
 import { ref, reactive, onMounted, computed } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import type { MapPoint, MapEntityType, MapPointStatus } from "../../types/insights";
+import type { DeviceItem } from "../../types/iot";
+import type { Warehouse } from "../../types/inventory";
 import { fetchSiteMapProjection, saveMapPoint, deleteMapPoint } from "../../api/insights";
+import { getDevices } from "../../api/iot";
+import { getWarehouses } from "../../api/masterData";
 import PageHeader from "../../components/common/PageHeader.vue";
 import DataTable, { type TableColumn } from "../../components/common/DataTable.vue";
 import StatusBadge from "../../components/common/StatusBadge.vue";
@@ -301,12 +357,93 @@ const props = defineProps<{
   mapId?: string | number;
 }>();
 const route = useRoute();
+const router = useRouter();
 const currentMapId = computed(() => props.mapId || (route.params.id as string) || "");
 
-defineEmits<{
+const emit = defineEmits<{
   (e: "back-map"): void;
   (e: "back-list"): void;
 }>();
+
+/** 空间点位返回地图监控 */
+function handleBackMap() {
+  emit("back-map");
+  if (currentMapId.value) {
+    router.push(`/gis/site-maps/${currentMapId.value}`);
+  } else {
+    router.push("/gis/site-maps");
+  }
+}
+
+/** 返回地图列表 */
+function handleBackList() {
+  emit("back-list");
+  router.push("/gis/site-maps");
+}
+
+// 实体选项与选择器联动
+const deviceOptions = ref<DeviceItem[]>([]);
+const warehouseOptions = ref<Warehouse[]>([]);
+const loadingEntities = ref(false);
+
+/**
+ * 预载入真实生产设备与仓库主数据选项，杜绝用户手工盲猜输入 UUID
+ */
+async function loadEntityOptions() {
+  loadingEntities.value = true;
+  try {
+    const [devRes, whRes] = await Promise.allSettled([
+      getDevices({ page: 1, size: 200 }),
+      getWarehouses({ page: 1, size: 200 }),
+    ]);
+    if (devRes.status === "fulfilled" && devRes.value.data) {
+      deviceOptions.value = devRes.value.data.records || [];
+    }
+    if (whRes.status === "fulfilled" && whRes.value.data) {
+      warehouseOptions.value = whRes.value.data.records || [];
+    }
+  } catch (err: any) {
+    console.warn("加载实体选项失败:", err);
+  } finally {
+    loadingEntities.value = false;
+  }
+}
+
+/** 实体类型切换事件处理 */
+function handleEntityTypeChange() {
+  activeForm.entityId = "";
+  if (activeForm.entityType === "DEVICE") {
+    activeForm.linkedPage = "/iot/devices";
+  } else if (activeForm.entityType === "WAREHOUSE") {
+    activeForm.linkedPage = "/master-data?tab=warehouses";
+  } else {
+    activeForm.linkedPage = "";
+  }
+}
+
+/** 选中生产设备并自动联动点位名称与穿透路由 */
+function handleDeviceSelect(id: string) {
+  activeForm.entityId = id;
+  const dev = deviceOptions.value.find((d) => d.id === id);
+  if (dev) {
+    if (!activeForm.pointName || deviceOptions.value.some((d) => d.deviceName === activeForm.pointName || d.deviceCode === activeForm.pointName)) {
+      activeForm.pointName = dev.deviceName || dev.deviceCode;
+    }
+    activeForm.linkedPage = `/iot/devices/${dev.id}`;
+  }
+}
+
+/** 选中仓库并自动联动点位名称与穿透路由 */
+function handleWarehouseSelect(id: string) {
+  activeForm.entityId = id;
+  const wh = warehouseOptions.value.find((w) => w.id === id);
+  if (wh) {
+    if (!activeForm.pointName || warehouseOptions.value.some((w) => w.name === activeForm.pointName || w.code === activeForm.pointName)) {
+      activeForm.pointName = wh.name || wh.code;
+    }
+    activeForm.linkedPage = "/master-data?tab=warehouses";
+  }
+}
 
 const canvasRef = ref<HTMLDivElement | null>(null);
 const existingPoints = ref<MapPoint[]>([]);
@@ -425,12 +562,16 @@ async function handleSaveCurrentPoint() {
   validationError.value = "";
   feedbackSuccess.value = "";
 
+  if (activeForm.entityType === "PRODUCTION_AREA") {
+    validationError.value = "后端尚未提供车间区域实体事实源，无法保存此类点位";
+    return;
+  }
   if (!activeForm.pointName.trim()) {
     validationError.value = "请输入点位展示名称";
     return;
   }
   if (!activeForm.entityId.trim()) {
-    validationError.value = "请输入所关联的业务实体 UUID";
+    validationError.value = "请选择所关联的业务实体";
     return;
   }
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(activeForm.entityId.trim())) {
@@ -500,6 +641,7 @@ async function confirmDeletePoint() {
 
 onMounted(() => {
   loadPoints();
+  loadEntityOptions();
 });
 </script>
 
@@ -895,5 +1037,30 @@ onMounted(() => {
     transform: scale(1.6);
     opacity: 0;
   }
+}
+
+.selected-uuid-hint {
+  font-size: 11px;
+  color: #38bdf8;
+  margin-top: 2px;
+  word-break: break-all;
+}
+
+.fact-gap-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #fca5a5;
+  line-height: 1.5;
+}
+
+.fact-gap-alert .gap-icon {
+  font-size: 16px;
+  flex-shrink: 0;
 }
 </style>

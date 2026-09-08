@@ -91,6 +91,11 @@ try {
   foreach ($item in $result.results) {
     $state = if ($item.passed) { "PASS" } else { "FAIL" }
     Write-Output ("[{0}] {1}: {2}" -f $state, $item.id, $item.detail)
+    if ($item.id -eq "MENU_LEAVES" -and $item.detail.results) {
+      foreach ($leaf in $item.detail.results) {
+        Write-Output ("  menuCode={0}; requestedPath={1}; finalPath={2}; result={3}" -f $leaf.menuCode, $leaf.requestedPath, $leaf.finalPath, $leaf.result)
+      }
+    }
   }
   Write-Output "最终 URL：$($result.finalUrl)"
 

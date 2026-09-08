@@ -189,6 +189,20 @@
         </div>
 
         <form class="modal-body" @submit.prevent="submitCreateWorkOrder">
+          <div class="options-search-row">
+            <label for="work-order-option-keyword">目录搜索</label>
+            <input
+              id="work-order-option-keyword"
+              v-model="createOptionsKeyword"
+              type="search"
+              class="form-input"
+              placeholder="输入产品、BOM 或工艺路线编码后回车搜索"
+              @keyup.enter="loadCreateOptions"
+            />
+            <button type="button" class="btn-text text-primary" @click="loadCreateOptions">搜索</button>
+          </div>
+          <div v-if="createOptionsLoading" class="options-hint text-muted">⏳ 正在加载真实产品、BOM 和工艺路线目录...</div>
+          <div v-else-if="createOptionsError" class="options-hint text-warning">⚠️ {{ createOptionsError }}</div>
           <div class="form-grid two-col">
             <div class="form-item">
               <label>产出产品 <span class="req">*</span></label>
@@ -345,6 +359,9 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
+import { useRouter } from "vue-router";
+import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
+import type { AllowedAction } from "../../types/common";
 import {
   PageHeader,
   FilterBar,
@@ -381,6 +398,8 @@ const emit = defineEmits<{
   (e: "select-detail", item: WorkOrderItem): void;
 }>();
 
+const router = useRouter();
+
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 
@@ -389,6 +408,9 @@ const total = ref(0);
 const products = ref<Product[]>([]);
 const boms = ref<BomItem[]>([]);
 const routings = ref<RoutingItem[]>([]);
+const createOptionsKeyword = ref("");
+const createOptionsLoading = ref(false);
+const createOptionsError = ref("");
 const queryParams = reactive({
   page: 1,
   size: 10,
@@ -459,15 +481,14 @@ function getStatusText(status: WorkOrderStatus): string {
   }
 }
 
-function isActionAllowed(item: WorkOrderItem, action: string): boolean {
-  if (!item.allowedActions || item.allowedActions.length === 0) return true;
-  const match = item.allowedActions.find((a) => a.action === action);
-  return match ? match.enabled : true;
+// 使用 actionGuard 统一权限判断逻辑
+function isActionAllowed(item: { allowedActions?: AllowedAction[] | null }, action: string): boolean {
+  return checkAction(item.allowedActions, action);
 }
 
-function getActionDisabledReason(item: WorkOrderItem, action: string): string | undefined {
-  const match = item.allowedActions?.find((a) => a.action === action);
-  return match && !match.enabled ? match.reason : undefined;
+// 使用 actionGuard 统一获取禁用原因逻辑
+function getActionDisabledReason(item: { allowedActions?: AllowedAction[] | null }, action: string): string | undefined {
+  return getDisabledReason(item.allowedActions, action);
 }
 
 async function fetchWorkOrders() {
@@ -509,6 +530,8 @@ function handlePageChange(page: number) {
 }
 
 function viewDetail(item: WorkOrderItem) {
+  // 该页面是正式路由宿主，不依赖未被监听的组件事件来打开详情。
+  router.push(`/mes/work-orders/${encodeURIComponent(String(item.id))}`);
   emit("select-detail", item);
 }
 
@@ -524,7 +547,11 @@ function openCreateModal() {
 }
 
 async function submitCreateWorkOrder() {
-  if (!createForm.productId || !createForm.plannedQty || !createForm.bomId || !createForm.routingId) return;
+  if (!createForm.productId || !products.value.some((item) => String(item.id) === String(createForm.productId))
+    || !createForm.plannedQty || !createForm.bomId
+    || !boms.value.some((item) => String(item.id) === String(createForm.bomId))
+    || !createForm.routingId
+    || !routings.value.some((item) => String(item.id) === String(createForm.routingId))) return;
   isSubmitting.value = true;
   try {
     await createWorkOrder(createForm);
@@ -629,19 +656,28 @@ onMounted(() => {
   loadCreateOptions();
 });
 
-/** 加载工单创建所需的真实产品、BOM 与工艺路线 UUID。 */
+/** 加载工单创建所需的真实产品、BOM 与工艺路线 UUID；每次只取服务端小页并支持关键词搜索。 */
 async function loadCreateOptions() {
+  createOptionsLoading.value = true;
+  createOptionsError.value = "";
   try {
+    const keyword = createOptionsKeyword.value.trim() || undefined;
     const [productRes, bomRes, routingRes] = await Promise.all([
-      getProducts({ page: 1, size: 200, status: "ENABLE" }),
-      getBoms({ page: 1, size: 200 }),
-      getRoutings({ page: 1, size: 200 }),
+      getProducts({ page: 1, size: 20, keyword, status: "ACTIVE" }),
+      getBoms({ page: 1, size: 20, keyword, status: "ACTIVE" }),
+      getRoutings({ page: 1, size: 20, keyword, status: "ACTIVE" }),
     ]);
     products.value = productRes.data.records || [];
     boms.value = bomRes.data.records || [];
     routings.value = routingRes.data.records || [];
+    // 搜索结果变化后清理不再属于当前真实目录的选择值，禁止提交失效 UUID。
+    if (createForm.productId && !products.value.some((item) => String(item.id) === String(createForm.productId))) createForm.productId = "";
+    if (createForm.bomId && !boms.value.some((item) => String(item.id) === String(createForm.bomId))) createForm.bomId = "";
+    if (createForm.routingId && !routings.value.some((item) => String(item.id) === String(createForm.routingId))) createForm.routingId = "";
   } catch (err: any) {
-    errorMessage.value = err?.message || "加载工单创建主数据失败";
+    createOptionsError.value = err?.message || "加载工单创建主数据失败";
+  } finally {
+    createOptionsLoading.value = false;
   }
 }
 </script>
@@ -835,6 +871,26 @@ async function loadCreateOptions() {
   font-size: 13px;
   color: #cbd5e1;
   line-height: 1.5;
+}
+
+.options-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.options-search-row label {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.options-search-row .form-input {
+  flex: 1;
+}
+
+.options-hint {
+  font-size: 12px;
 }
 
 .form-grid.two-col {

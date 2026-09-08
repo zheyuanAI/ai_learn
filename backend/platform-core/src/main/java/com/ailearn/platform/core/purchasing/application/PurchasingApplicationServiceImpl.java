@@ -235,6 +235,18 @@ public class PurchasingApplicationServiceImpl implements PurchaseOrderApplicatio
     @Override
     @Transactional(rollbackFor = Exception.class)
     @PreAuthorize("hasAuthority('pur:receipt:confirm')")
+    public PurchaseReceiptView confirmReceipt(PurchaseReceiptConfirmRequest request, String idempotencyKey) {
+        Actor actor = actor();
+        validateKey(idempotencyKey);
+        // 修改：由服务端根据可信租户与幂等键分配收货事实 ID，避免客户端伪造或复用订单 ID。
+        UUID receiptId = UUID.nameUUIDFromBytes(("purchase-receipt|" + actor.tenantId() + "|"
+                + idempotencyKey).getBytes(StandardCharsets.UTF_8));
+        return confirmReceipt(receiptId, request, idempotencyKey);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    @PreAuthorize("hasAuthority('pur:receipt:confirm')")
     public PurchaseReceiptView confirmReceipt(UUID receiptId, PurchaseReceiptConfirmRequest request,
                                               String idempotencyKey) {
         Actor actor = actor();

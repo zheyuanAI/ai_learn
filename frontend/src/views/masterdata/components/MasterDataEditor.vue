@@ -23,7 +23,23 @@
           </div>
           <div class="form-item">
             <label>计量单位 (UOM) <span class="req">*</span></label>
-            <input v-model="formData.uom" type="text" class="form-input" required placeholder="如: 件, 台, 套" />
+            <input
+              v-model="uomKeyword"
+              type="search"
+              class="form-input form-input-sm"
+              placeholder="输入单位编码或名称后回车搜索"
+              @keyup.enter="loadUoms"
+            />
+            <select v-model="formData.uom" class="form-select" required>
+              <option value="">请选择计量单位</option>
+              <option v-for="u in uomList" :key="u.code" :value="u.code">
+                {{ u.code }} ({{ u.name }})
+              </option>
+              <!-- 兜底显示已选但不在活跃列表中的历史 UOM -->
+              <option v-if="formData.uom && !uomList.some((u) => u.code === formData.uom)" :value="formData.uom">
+                {{ formData.uom }} (已选用)
+              </option>
+            </select>
           </div>
           <div class="form-item">
             <label>物料分类</label>
@@ -72,10 +88,23 @@
           </div>
           <div class="form-item">
             <label>所属仓库 <span class="req">*</span></label>
+            <input
+              v-model="warehouseKeyword"
+              type="search"
+              class="form-input form-input-sm"
+              placeholder="输入仓库编码或名称后回车搜索"
+              @keyup.enter="loadWarehouses"
+            />
             <select v-model="formData.warehouseId" class="form-select" required>
               <option value="">请选择仓库</option>
               <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">
                 {{ warehouse.code }} - {{ warehouse.name }}
+              </option>
+              <option
+                v-if="formData.warehouseId && !warehouses.some((warehouse) => String(warehouse.id) === String(formData.warehouseId))"
+                :value="formData.warehouseId"
+              >
+                {{ formData.warehouseId }} (当前已选历史值)
               </option>
             </select>
           </div>
@@ -107,8 +136,83 @@
           </div>
         </form>
 
-        <!-- 3. 客商通用表单 (客户/供应商) -->
-        <form v-else class="form-grid" @submit.prevent="handleSubmit">
+        <!-- 3. 仓库表单 (修复 F05) -->
+        <form v-else-if="type === 'warehouse'" class="form-grid" @submit.prevent="handleSubmit">
+          <div class="form-item">
+            <label>仓库编码 <span class="req">*</span></label>
+            <input v-model="formData.code" type="text" class="form-input" required :disabled="isEdit" placeholder="如: WH-MAIN" />
+          </div>
+          <div class="form-item">
+            <label>仓库名称 <span class="req">*</span></label>
+            <input v-model="formData.name" type="text" class="form-input" required placeholder="如: 主厂区综合仓库" />
+          </div>
+          <div class="form-item">
+            <label>仓库类型 <span class="req">*</span></label>
+            <select v-model="formData.type" class="form-select" required>
+              <option value="STORAGE">STORAGE (综合存储仓)</option>
+              <option value="RAW">RAW (原材料专属仓)</option>
+              <option value="FINISHED">FINISHED (产成品仓)</option>
+              <option value="WIP">WIP (线边缓冲仓)</option>
+            </select>
+          </div>
+          <div class="form-item">
+            <label>负责人</label>
+            <input v-model="formData.manager" type="text" class="form-input" placeholder="如: 张仓管" />
+          </div>
+          <div class="form-item">
+            <label>联系电话</label>
+            <input v-model="formData.contact" type="text" class="form-input" placeholder="手机或固话" />
+          </div>
+          <div class="form-item">
+            <label>状态</label>
+            <select v-model="formData.status" class="form-select">
+              <option value="ACTIVE">ACTIVE (启用)</option>
+              <option value="INACTIVE">INACTIVE (停用)</option>
+            </select>
+          </div>
+          <div class="form-item full-width">
+            <label>仓库物理地址</label>
+            <input v-model="formData.address" type="text" class="form-input" placeholder="如: 工业园区 A 区 1 号库房" />
+          </div>
+          <div class="form-item full-width">
+            <label>备注说明</label>
+            <textarea v-model="formData.remark" class="form-textarea" rows="2" placeholder="填写仓库管理制度或补充说明..."></textarea>
+          </div>
+        </form>
+
+        <!-- 4. 计量单位表单 (修复 F05) -->
+        <form v-else-if="type === 'uom'" class="form-grid" @submit.prevent="handleSubmit">
+          <div class="form-item">
+            <label>单位编码 (Code) <span class="req">*</span></label>
+            <input v-model="formData.code" type="text" class="form-input" required :disabled="isEdit" placeholder="如: PCS, KG, M, SET" />
+          </div>
+          <div class="form-item">
+            <label>单位名称 <span class="req">*</span></label>
+            <input v-model="formData.name" type="text" class="form-input" required placeholder="如: 件, 千克, 米, 套" />
+          </div>
+          <div class="form-item">
+            <label>显示符号 (Symbol)</label>
+            <input v-model="formData.symbol" type="text" class="form-input" placeholder="如: pcs, kg, m" />
+          </div>
+          <div class="form-item">
+            <label>小数位数 (0-6)</label>
+            <input v-model.number="formData.decimalScale" type="number" min="0" max="6" class="form-input" placeholder="0" />
+          </div>
+          <div class="form-item">
+            <label>状态</label>
+            <select v-model="formData.status" class="form-select">
+              <option value="ACTIVE">ACTIVE (启用)</option>
+              <option value="INACTIVE">INACTIVE (停用)</option>
+            </select>
+          </div>
+          <div class="form-item full-width">
+            <label>备注说明</label>
+            <textarea v-model="formData.remark" class="form-textarea" rows="2" placeholder="填写计量规则说明..."></textarea>
+          </div>
+        </form>
+
+        <!-- 5. 客商通用表单 (客户/供应商) -->
+        <form v-else-if="type === 'customer' || type === 'supplier'" class="form-grid" @submit.prevent="handleSubmit">
           <div class="form-item">
             <label>{{ type === 'customer' ? '客户编码' : '供应商编码' }} <span class="req">*</span></label>
             <input
@@ -168,13 +272,13 @@
  * 流程：通过 deep clone 传入的 initialData 进行编辑，提交时通过 save 事件派发
  */
 import { ref, watch, computed } from "vue";
-import { getWarehouses } from "@/api/masterData";
-import type { Warehouse } from "@/types/inventory";
+import { getWarehouses, getUoms } from "@/api/masterData";
+import type { Warehouse, Uom } from "@/types/inventory";
 
 const props = withDefaults(
   defineProps<{
     visible: boolean;
-    type: "product" | "location" | "customer" | "supplier";
+    type: "product" | "warehouse" | "location" | "uom" | "customer" | "supplier";
     initialData?: Record<string, any> | null;
     saving?: boolean;
   }>(),
@@ -197,7 +301,9 @@ const title = computed(() => {
   const prefix = isEdit.value ? "编辑" : "新建";
   const typeMap: Record<string, string> = {
     product: "商品物料",
+    warehouse: "仓库",
     location: "仓库库位",
+    uom: "计量单位",
     customer: "客户档案",
     supplier: "供应商档案",
   };
@@ -206,6 +312,9 @@ const title = computed(() => {
 
 const formData = ref<Record<string, any>>({});
 const warehouses = ref<Warehouse[]>([]);
+const uomList = ref<Uom[]>([]);
+const warehouseKeyword = ref("");
+const uomKeyword = ref("");
 
 watch(
   () => props.visible,
@@ -213,6 +322,8 @@ watch(
     if (val) {
       if (props.type === "location") {
         void loadWarehouses();
+      } else if (props.type === "product") {
+        void loadUoms();
       }
       if (props.initialData) {
         formData.value = JSON.parse(JSON.stringify(props.initialData));
@@ -229,7 +340,8 @@ function resetForm() {
       sku: "",
       name: "",
       spec: "",
-      uom: "件",
+      // 新建商品的 UOM 必须来自活动目录；目录为空时保持空值并阻止提交。
+      uom: "",
       category: "原材料",
       batchMgmt: false,
       status: "ACTIVE",
@@ -237,6 +349,17 @@ function resetForm() {
       minStock: "0",
       maxStock: "1000",
       safetyStock: "0",
+      remark: "",
+    };
+  } else if (props.type === "warehouse") {
+    formData.value = {
+      code: "",
+      name: "",
+      type: "STORAGE",
+      manager: "",
+      contact: "",
+      address: "",
+      status: "ACTIVE",
       remark: "",
     };
   } else if (props.type === "location") {
@@ -248,6 +371,15 @@ function resetForm() {
       capacity: "1000",
       status: "ACTIVE",
       description: "",
+    };
+  } else if (props.type === "uom") {
+    formData.value = {
+      code: "",
+      name: "",
+      symbol: "",
+      decimalScale: 0,
+      status: "ACTIVE",
+      remark: "",
     };
   } else if (props.type === "customer") {
     formData.value = {
@@ -275,10 +407,39 @@ function resetForm() {
  */
 async function loadWarehouses() {
   try {
-    const response = await getWarehouses({ page: 1, size: 200, status: "ACTIVE" });
-    warehouses.value = response.data.records;
+    const response = await getWarehouses({
+      page: 1,
+      size: 20,
+      keyword: warehouseKeyword.value.trim() || undefined,
+      status: "ACTIVE",
+    });
+    warehouses.value = response.data.records || [];
+    if (formData.value.warehouseId && !warehouses.value.some((item) => String(item.id) === String(formData.value.warehouseId))) {
+      // 编辑历史库位时保留原值；新建或切换搜索结果时不提交失效仓库 ID。
+      formData.value.warehouseId = isEdit.value ? formData.value.warehouseId : "";
+    }
   } catch (error) {
     console.error("[MasterDataEditor] 加载仓库失败", error);
+  }
+}
+
+/**
+ * 加载物料表单可选计量单位 (UOM 真实目录)，防止手工填写自由文本引发混淆。
+ */
+async function loadUoms() {
+  try {
+    const response = await getUoms({
+      page: 1,
+      size: 20,
+      keyword: uomKeyword.value.trim() || undefined,
+      status: "ACTIVE",
+    });
+    uomList.value = response.data.records || [];
+    if (!formData.value.uom && uomList.value.length > 0) {
+      formData.value.uom = uomList.value[0].code;
+    }
+  } catch (error) {
+    console.error("[MasterDataEditor] 加载计量单位目录失败", error);
   }
 }
 

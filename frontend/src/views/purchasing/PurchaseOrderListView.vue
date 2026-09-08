@@ -1,17 +1,27 @@
 <template>
   <div class="purchase-order-list-view">
-    <!-- 统一页面头部 -->
+    <CommandFeedback :error="lastError" :can-retry="canRetry" :executing="isExecuting" @retry="retry" />
+    <!-- 统一页面头部（支持到货验收工作台模式切换，修复 F04） -->
     <PageHeader
-      title="采购入库控制台"
-      tag="CORE / PURCHASING / INBOUND"
-      description="采购全链路状态流转：未提交 ➔ 已提交 ➔ 已审核 ➔ 部分收货 ➔ 已完成。仓库到货外观验收数量恒等（到货=拒收+实收），拒收数量不入库并保留为待收；实际接收货物全部进入质量隔离位（QualityHold），放行后入暂存位（ReceivingStaging）再上架存储位（Storage）。"
+      :title="isReceiptMode ? '采购到货验收工作台' : '采购入库控制台'"
+      :tag="isReceiptMode ? 'WAREHOUSE / INBOUND RECEIPT' : 'CORE / PURCHASING / INBOUND'"
+      :description="isReceiptMode ? '仓库人员执行采购到货外观验收：核对实到数量与外观拒收数量（到货=拒收+实收），实际接收货物统一送入 QualityHold 隔离位，放行前严禁上架。' : '采购全链路状态流转：未提交 ➔ 已提交 ➔ 已审核 ➔ 部分收货 ➔ 已完成。仓库到货外观验收数量恒等（到货=拒收+实收），拒收数量不入库并保留为待收；实际接收货物全部进入质量隔离位（QualityHold），放行后入暂存位（ReceivingStaging）再上架存储位（Storage）。'"
     >
       <template #actions>
-        <button type="button" class="btn-primary" @click="isCreateModalOpen = true">
+        <button v-if="!isReceiptMode" type="button" class="btn-primary" @click="isCreateModalOpen = true">
           <span>＋ 新建采购订单</span>
         </button>
       </template>
     </PageHeader>
+
+    <!-- 到货验收模式专属指引横幅 -->
+    <div v-if="isReceiptMode" class="receipt-guide-banner">
+      <div class="guide-icon">📦</div>
+      <div class="guide-content">
+        <strong>仓库到货验收工作台指引：</strong>
+        <span>请选择处于【已审核】或【部分收货】状态的采购订单，点击操作列的【外观验收接收】录入实收数量。实收后货物将自动转入 QualityHold 隔离位并可一键前往质检。</span>
+      </div>
+    </div>
 
     <!-- 顶层状态快速筛选标签条 -->
     <div class="status-tabs-row">
@@ -142,6 +152,25 @@
           <button type="button" class="btn-close" @click="isCreateModalOpen = false">✕</button>
         </div>
         <form class="modal-body" @submit.prevent="submitCreateOrder">
+          <div v-if="isOptionsLoading" class="options-hint text-muted text-sm">
+            ⏳ 正在校验并拉取基础主数据...
+          </div>
+          <div v-else-if="optionsErrorMessage" class="options-hint text-warning text-sm flex-between">
+            <span>⚠️ {{ optionsErrorMessage }}</span>
+            <button type="button" class="btn-retry-link" @click="loadCreateOptions">重试拉取</button>
+          </div>
+          <div class="options-search-row">
+            <label for="purchase-option-keyword">主数据搜索</label>
+            <input
+              id="purchase-option-keyword"
+              v-model="createOptionKeyword"
+              type="search"
+              class="form-input"
+              placeholder="输入供应商、仓库或物料编码/名称后回车搜索"
+              @keyup.enter="loadCreateOptions"
+            />
+            <button type="button" class="btn-retry-link" @click="loadCreateOptions">搜索</button>
+          </div>
           <div class="form-item">
             <label>供应商 <span class="req">*</span></label>
             <select v-model="createForm.supplierId" class="form-select" required>
@@ -205,7 +234,10 @@
  * 采购入库控制台列表视图 (PurchaseOrderListView)
  * 职责：展示采购订单队列，支持生命周期状态筛选、新建采购单与快速验收入库
  */
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, computed, onMounted } from "vue";
+import { useCommand } from "@/composables/useCommand";
+import CommandFeedback from "@/components/common/CommandFeedback.vue";
+import { useRoute, useRouter } from "vue-router";
 import PageHeader from "@/components/common/PageHeader.vue";
 import FilterBar from "@/components/common/FilterBar.vue";
 import DataTable, { type TableColumn } from "@/components/common/DataTable.vue";
@@ -223,8 +255,16 @@ import { getWorkOrders } from "@/api/manufacturing";
 import {
   getPurchaseOrders,
   createPurchaseOrder,
-  confirmPurchaseReceipt,
+  confirmPurchaseReceiptWithServerId,
 } from "@/api/purchasing";
+
+const route = useRoute();
+const router = useRouter();
+
+/** 是否处于仓库到货验收工作台模式 (/purchasing/receipts) */
+const isReceiptMode = computed(() => {
+  return route.path.includes("/purchasing/receipts") || route.name === "PurchaseReceiptConfirm";
+});
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
@@ -266,10 +306,11 @@ const selectedOrderId = ref<string | number | null>(null);
 
 const isReceiptModalOpen = ref(false);
 const selectedOrderForReceipt = ref<PurchaseOrder | null>(null);
-const isReceiving = ref(false);
+const { execute, retry, isExecuting, canRetry, lastError } = useCommand();
+const isReceiving = isExecuting;
 
 const isCreateModalOpen = ref(false);
-const isCreating = ref(false);
+const isCreating = isExecuting;
 const createForm = reactive({
   supplierId: "",
   targetWarehouseId: "",
@@ -278,6 +319,7 @@ const createForm = reactive({
   orderedQty: "",
   sourceWorkOrderId: "",
 });
+const createOptionKeyword = ref("");
 
 function statusBadgeType(status: string): any {
   const map: Record<string, string> = {
@@ -350,27 +392,60 @@ function openReceiptConfirm(row: PurchaseOrder) {
 }
 
 async function handleConfirmReceipt(payload: any) {
-  isReceiving.value = true;
   try {
-    const { receiptId, ...requestPayload } = payload;
-    await confirmPurchaseReceipt(receiptId, requestPayload);
-    isReceiptModalOpen.value = false;
-    await fetchOrders();
+    const { receiptId: _ignoredClientId, ...requestPayload } = payload;
+    const receiptResponse = await execute(async (key) => {
+      // 修改：收货事实 ID由服务端按幂等键分配，客户端不能用订单号、订单行 ID或随机 UUID代替。
+      const response = await confirmPurchaseReceiptWithServerId(requestPayload, key);
+      isReceiptModalOpen.value = false;
+      await fetchOrders();
+      return response;
+    }, { onConflict: fetchOrders });
+
+    // 修改用途：后续质检上下文只能接收收货接口返回的独立 ID，不能沿用提交载荷或订单行 ID。
+    const persistedReceipt = receiptResponse?.data;
+    const returnedReceiptId = String(persistedReceipt?.id || "");
+    const returnedReceiptLineId = String(persistedReceipt?.lines?.[0]?.id || "");
+    if (!returnedReceiptId || !returnedReceiptLineId) {
+      throw new Error("收货接口未返回 receiptId 或收货行 ID，已停止进入质检流程。");
+    }
+
+    // 成功提示并引导进入质检（修复 F04）
+    const poNo = selectedOrderForReceipt.value?.poNo || "";
+    const orderId = String(selectedOrderForReceipt.value?.id || "");
+    if (confirm(`采购到货验收成功！实收货物已送入 QualityHold 质量隔离位。\n\n订单号: ${poNo}\n收货凭证号: ${payload.receiptNo || returnedReceiptId}\n\n是否立即前往【采购到货质检】录入检验事实？`)) {
+      router.push({
+        path: "/purchasing/quality",
+        query: {
+          receiptId: returnedReceiptId,
+          receiptLineId: returnedReceiptLineId,
+          orderId,
+          poNo,
+          warehouseId: String(selectedOrderForReceipt.value?.lines?.find(
+            (line) => String(line.id) === String(persistedReceipt.lines[0].purchaseOrderLineId),
+          )?.targetWarehouseId || ""),
+          productId: String(persistedReceipt.lines[0].productId || ""),
+        },
+      });
+    }
   } catch (err: any) {
     alert(err?.message || "收货失败");
-  } finally {
-    isReceiving.value = false;
-  }
+  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
 async function submitCreateOrder() {
-  isCreating.value = true;
   try {
-    const product = products.value.find((item) => item.id === createForm.productId);
+    const product = products.value.find((item) => String(item.id) === String(createForm.productId));
     if (!product) {
       throw new Error("请选择真实物料");
     }
-    await createPurchaseOrder({
+    if (!suppliers.value.some((item) => String(item.id) === String(createForm.supplierId))) {
+      throw new Error("供应商选项已失效，请重新搜索并选择真实供应商");
+    }
+    if (!warehouses.value.some((item) => String(item.id) === String(createForm.targetWarehouseId))) {
+      throw new Error("仓库选项已失效，请重新搜索并选择真实仓库");
+    }
+    await execute((key) => createPurchaseOrder({
       supplierId: createForm.supplierId,
       expectedArrivalDate: createForm.expectedArrivalDate,
       lines: [
@@ -382,40 +457,87 @@ async function submitCreateOrder() {
           sourceWorkOrderId: createForm.sourceWorkOrderId || undefined,
         },
       ],
-    });
+    }, key), { onConflict: fetchOrders });
     isCreateModalOpen.value = false;
     await fetchOrders();
   } catch (err: any) {
     alert(err?.message || "创建采购单失败");
-  } finally {
-    isCreating.value = false;
-  }
+  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
 /**
- * 加载采购建单所需主数据和来源工单，选择值统一使用后端真实 UUID。
+ * 加载采购建单所需主数据和来源工单（修复 F10：采用 Promise.allSettled 避免可选工单失败拖垮必填选项）
  */
+const isOptionsLoading = ref(false);
+const optionsErrorMessage = ref("");
+
 async function loadCreateOptions() {
+  isOptionsLoading.value = true;
+  optionsErrorMessage.value = "";
   try {
-    const [supplierResponse, warehouseResponse, productResponse, workOrderResponse] = await Promise.all([
-      getSuppliers({ page: 1, size: 200, status: "ACTIVE" }),
-      getWarehouses({ page: 1, size: 200, status: "ACTIVE" }),
-      getProducts({ page: 1, size: 200, status: "ACTIVE" }),
-      getWorkOrders({ page: 1, size: 200 }),
+    const keyword = createOptionKeyword.value.trim() || undefined;
+    const [supplierSettled, warehouseSettled, productSettled, workOrderSettled] = await Promise.allSettled([
+      getSuppliers({ page: 1, size: 20, keyword, status: "ACTIVE" }),
+      getWarehouses({ page: 1, size: 20, keyword, status: "ACTIVE" }),
+      getProducts({ page: 1, size: 20, keyword, status: "ACTIVE" }),
+      getWorkOrders({ page: 1, size: 20, workOrderNo: keyword }),
     ]);
-    suppliers.value = supplierResponse.data.records;
-    warehouses.value = warehouseResponse.data.records;
-    products.value = productResponse.data.records;
-    workOrders.value = workOrderResponse.data.records.map((item: any) => ({
-      id: item.id,
-      workOrderNo: item.workOrderNo || item.woNo,
-    }));
-  } catch (error) {
-    console.error("[PurchaseOrderListView] 加载建单选项失败", error);
+
+    if (supplierSettled.status === "fulfilled") {
+      suppliers.value = supplierSettled.value.data.records || [];
+      if (createForm.supplierId && !suppliers.value.some((item) => String(item.id) === String(createForm.supplierId))) {
+        createForm.supplierId = "";
+      }
+    } else {
+      console.warn("[PurchaseOrderListView] 供应商选项加载失败:", supplierSettled.reason);
+    }
+
+    if (warehouseSettled.status === "fulfilled") {
+      warehouses.value = warehouseSettled.value.data.records || [];
+      if (createForm.targetWarehouseId && !warehouses.value.some((item) => String(item.id) === String(createForm.targetWarehouseId))) {
+        createForm.targetWarehouseId = "";
+      }
+    } else {
+      console.warn("[PurchaseOrderListView] 仓库选项加载失败:", warehouseSettled.reason);
+    }
+
+    if (productSettled.status === "fulfilled") {
+      products.value = productSettled.value.data.records || [];
+      if (createForm.productId && !products.value.some((item) => String(item.id) === String(createForm.productId))) {
+        createForm.productId = "";
+      }
+    } else {
+      console.warn("[PurchaseOrderListView] 物料选项加载失败:", productSettled.reason);
+    }
+
+    if (workOrderSettled.status === "fulfilled") {
+      workOrders.value = (workOrderSettled.value.data.records || []).map((item: any) => ({
+        id: item.id,
+        workOrderNo: item.workOrderNo || item.woNo,
+      }));
+    } else {
+      // 可选来源工单失败（如买方角色无 MES 查看权限）静默降级，不阻塞采购建单
+      console.info("[PurchaseOrderListView] 可选来源工单不可用或无权限，已自动降级跳过");
+      workOrders.value = [];
+    }
+
+    // 若必填核心数据全部为空，记录提示
+    if (suppliers.value.length === 0 && warehouses.value.length === 0 && products.value.length === 0) {
+      optionsErrorMessage.value = "基础数据（供应商/仓库/物料）加载受限，请确认主数据是否已录入";
+    }
+  } catch (error: any) {
+    console.error("[PurchaseOrderListView] 加载建单选项未知异常", error);
+    optionsErrorMessage.value = error?.message || "加载建单基础选项失败";
+  } finally {
+    isOptionsLoading.value = false;
   }
 }
 
 onMounted(() => {
+  // 若从 /purchasing/receipts 路由进入，默认筛选已审核可收货状态
+  if (isReceiptMode.value && !queryParams.status) {
+    queryParams.status = "Approved";
+  }
   fetchOrders();
   loadCreateOptions();
 });
@@ -426,6 +548,29 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.receipt-guide-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(14, 165, 233, 0.3);
+  border-radius: 8px;
+  padding: 12px 16px;
+  color: #bae6fd;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.receipt-guide-banner .guide-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.receipt-guide-banner strong {
+  color: #38bdf8;
+  margin-right: 4px;
 }
 
 .status-tabs-row {
@@ -619,6 +764,25 @@ label {
 
 .req {
   color: #f87171;
+}
+
+.options-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 6px;
+}
+
+.options-search-row label {
+  flex: 0 0 auto;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.options-search-row .form-input {
+  flex: 1;
 }
 
 .form-input,

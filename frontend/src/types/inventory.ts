@@ -110,6 +110,7 @@ export interface Warehouse extends BaseEntity {
   manager?: string;
   contact?: string;
   address?: string;
+  remark?: string;
 }
 
 /**
@@ -119,7 +120,9 @@ export interface Uom extends BaseEntity {
   code: string;
   name: string;
   symbol?: string;
+  decimalScale?: number;
   status: "ACTIVE" | "INACTIVE";
+  remark?: string;
 }
 
 /**

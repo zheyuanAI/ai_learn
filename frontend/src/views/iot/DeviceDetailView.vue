@@ -2,10 +2,20 @@
   <div class="device-detail-container">
     <!-- 头部返回与导航 -->
     <div class="detail-top-nav">
-      <button type="button" class="btn-back" @click="$emit('back')">
+      <button type="button" class="btn-back" @click="handleBack">
         ‹ 返回设备列表
       </button>
       <div class="top-nav-actions">
+        <!-- 穿透全链路追溯中心 -->
+        <button
+          v-if="device"
+          type="button"
+          class="btn btn-secondary"
+          title="穿透前往全链路全闭环追溯中心"
+          @click="goToTraceability"
+        >
+          <span>🔍 全链路追溯</span>
+        </button>
         <button type="button" class="btn btn-warning" @click="credentialDialogVisible = true">
           <span>签发新凭证</span>
         </button>
@@ -37,8 +47,8 @@
           </div>
           <p class="dev-meta-desc text-muted">
             所属模型: <strong>{{ device.deviceProfileName || device.deviceProfileId }}</strong>
-            · 归属车间: <strong>{{ device.workCenterName || "默认车间" }}</strong>
-            · 区域: <strong>{{ device.areaName || "加工区" }}</strong>
+            · 归属车间: <strong>{{ device.workCenterName || "未返回" }}</strong>
+            · 区域: <strong>{{ device.areaName || "未返回" }}</strong>
           </p>
         </div>
 
@@ -66,7 +76,7 @@
                 :text="statusSnapshot.runningStatus === 'RUNNING' ? '生产运转中' : statusSnapshot.runningStatus === 'IDLE' ? '就绪待机' : '停机关停'"
               />
             </div>
-            <span class="card-hint text-muted font-mono">去重键: {{ statusSnapshot.lastMessageKey || "none" }}</span>
+            <span class="card-hint text-muted font-mono">去重键: {{ statusSnapshot.lastMessageKey || "未返回" }}</span>
           </div>
 
           <!-- 告警状态 -->
@@ -223,7 +233,10 @@
 </template>
 
 <script setup lang="ts">
+import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
+import type { AllowedAction } from "../../types/common";
 import { ref, reactive, onMounted, watch } from "vue";
+import { useRouter } from "vue-router";
 import {
   StatusBadge,
   QuantityText,
@@ -252,10 +265,39 @@ const props = defineProps<{
   deviceId?: string;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (e: "back"): void;
   (e: "go-telemetry", dev: DeviceItem): void;
 }>();
+
+const router = useRouter();
+
+function handleBack() {
+  emit("back");
+  router.push("/iot/devices");
+}
+
+function goToTraceability() {
+  if (!device.value) return;
+  const targetAlarmId = activeAlarms.value.length > 0 ? (activeAlarms.value[0].id as string) : undefined;
+  if (targetAlarmId) {
+    router.push({
+      path: "/traceability",
+      query: {
+        entry_type: "DEVICE_ALARM",
+        entity_id: targetAlarmId,
+      },
+    });
+  } else {
+    router.push({
+      path: "/traceability",
+      query: {
+        entry_type: "DEVICE_ALARM",
+        entity_id: device.value.id as string,
+      },
+    });
+  }
+}
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
@@ -279,10 +321,9 @@ const revokeConfirm = reactive({
   item: null as DeviceCredentialItem | null,
 });
 
-function isActionAllowed(item: any, action: string): boolean {
-  if (!item.allowedActions || item.allowedActions.length === 0) return true;
-  const match = item.allowedActions.find((a: any) => a.action === action);
-  return match ? match.enabled : true;
+// 替换为调用 actionGuard 的版本
+function isActionAllowed(item: { allowedActions?: AllowedAction[] | null }, action: string): boolean {
+  return checkAction(item.allowedActions, action);
 }
 
 async function loadDeviceData() {

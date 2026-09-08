@@ -22,6 +22,11 @@ import type {
   PutawayConfirmPayload,
 } from "../types/purchasing";
 
+/** 为同一业务命令显式复用幂等键；未传时保留旧调用方兼容行为。 */
+function commandHeaders(idempotencyKey?: string) {
+  return idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined;
+}
+
 /**
  * 分页查询采购订单列表
  * 接口路径：GET /api/purchase-orders
@@ -49,11 +54,12 @@ export async function getPurchaseOrderById(id: string | number): Promise<ApiResp
  * 创建新采购订单（初始为 Draft 未提交状态）
  * 接口路径：POST /api/purchase-orders
  */
-export async function createPurchaseOrder(payload: PurchaseOrderCreatePayload): Promise<ApiResponse<PurchaseOrder>> {
+export async function createPurchaseOrder(payload: PurchaseOrderCreatePayload, idempotencyKey?: string): Promise<ApiResponse<PurchaseOrder>> {
   return await request<PurchaseOrder>({
     url: "/api/purchase-orders",
     method: "POST",
     data: payload,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -61,10 +67,11 @@ export async function createPurchaseOrder(payload: PurchaseOrderCreatePayload): 
  * 提交采购订单进入审核流程 (Draft -> Submitted)
  * 接口路径：POST /api/purchase-orders/{id}/submit
  */
-export async function submitPurchaseOrder(id: string | number): Promise<ApiResponse<PurchaseOrder>> {
+export async function submitPurchaseOrder(id: string | number, idempotencyKey?: string): Promise<ApiResponse<PurchaseOrder>> {
   return await request<PurchaseOrder>({
     url: `/api/purchase-orders/${id}/submit`,
     method: "POST",
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -72,10 +79,11 @@ export async function submitPurchaseOrder(id: string | number): Promise<ApiRespo
  * 审核通过采购订单 (Submitted -> Approved)
  * 接口路径：POST /api/purchase-orders/{id}/approve
  */
-export async function approvePurchaseOrder(id: string | number): Promise<ApiResponse<PurchaseOrder>> {
+export async function approvePurchaseOrder(id: string | number, idempotencyKey?: string): Promise<ApiResponse<PurchaseOrder>> {
   return await request<PurchaseOrder>({
     url: `/api/purchase-orders/${id}/approve`,
     method: "POST",
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -85,13 +93,15 @@ export async function approvePurchaseOrder(id: string | number): Promise<ApiResp
  */
 export async function completePurchaseOrder(
   id: string | number,
-  reasonOrPayload?: string | { completionReason: string }
+  reasonOrPayload?: string | { completionReason: string },
+  idempotencyKey?: string,
 ): Promise<ApiResponse<PurchaseOrder>> {
   const data = typeof reasonOrPayload === "string" ? { completionReason: reasonOrPayload } : reasonOrPayload || {};
   return await request<PurchaseOrder>({
     url: `/api/purchase-orders/${id}/complete`,
     method: "POST",
     data,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -103,12 +113,31 @@ export async function completePurchaseOrder(
  */
 export async function confirmPurchaseReceipt(
   receiptId: string,
-  payload: PurchaseReceiptConfirmPayload
+  payload: PurchaseReceiptConfirmPayload,
+  idempotencyKey?: string,
 ): Promise<ApiResponse<PurchaseReceipt>> {
   return await request<PurchaseReceipt>({
     url: `/api/purchase-receipts/${receiptId}/confirm`,
     method: "POST",
     data: payload,
+    headers: commandHeaders(idempotencyKey),
+  });
+}
+
+/**
+ * 仓库到货确认（服务端分配独立 receiptId）。
+ * 接口路径：POST /api/purchase-receipts/confirm
+ * 客户端只提交采购事实和幂等键，响应中的 id 才是后续质检使用的真实收货事实 ID。
+ */
+export async function confirmPurchaseReceiptWithServerId(
+  payload: PurchaseReceiptConfirmPayload,
+  idempotencyKey?: string,
+): Promise<ApiResponse<PurchaseReceipt>> {
+  return await request<PurchaseReceipt>({
+    url: "/api/purchase-receipts/confirm",
+    method: "POST",
+    data: payload,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -119,12 +148,14 @@ export async function confirmPurchaseReceipt(
  */
 export async function submitQualityInspection(
   receiptId: string,
-  payload: QualityInspectPayload
+  payload: QualityInspectPayload,
+  idempotencyKey?: string,
 ): Promise<ApiResponse<PurchaseQualityInspection>> {
   return await request<PurchaseQualityInspection>({
     url: `/api/purchase-receipts/${receiptId}/quality/inspect`,
     method: "POST",
     data: payload,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 export const inspectQuality = submitQualityInspection;
@@ -157,7 +188,8 @@ export async function getQualityInspections(): Promise<ApiResponse<PurchaseQuali
  */
 export async function decideQualityDisposition(
   receiptId: string,
-  payload: QualityDispositionDecidePayload
+  payload: QualityDispositionDecidePayload,
+  idempotencyKey?: string,
 ): Promise<ApiResponse<PurchaseQualityDisposition>> {
   const action = payload.dispositionType.toLowerCase();
 
@@ -165,6 +197,7 @@ export async function decideQualityDisposition(
     url: `/api/purchase-receipts/${receiptId}/quality/${action}`,
     method: "POST",
     data: payload,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -172,11 +205,12 @@ export async function decideQualityDisposition(
  * 质量处置决定：放行（入库收货暂存位）
  * 接口路径：POST /api/purchase-receipts/{id}/quality/release
  */
-export async function decideQualityRelease(receiptId: string | number, payload: QualityDispositionDecidePayload): Promise<ApiResponse<PurchaseQualityDisposition>> {
+export async function decideQualityRelease(receiptId: string | number, payload: QualityDispositionDecidePayload, idempotencyKey?: string): Promise<ApiResponse<PurchaseQualityDisposition>> {
   return await request<PurchaseQualityDisposition>({
     url: `/api/purchase-receipts/${receiptId}/quality/release`,
     method: "POST",
     data: payload,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -184,11 +218,12 @@ export async function decideQualityRelease(receiptId: string | number, payload: 
  * 质量处置决定：退回供应方
  * 接口路径：POST /api/purchase-receipts/{id}/quality/return
  */
-export async function decideQualityReturn(receiptId: string | number, payload: QualityDispositionDecidePayload): Promise<ApiResponse<PurchaseQualityDisposition>> {
+export async function decideQualityReturn(receiptId: string | number, payload: QualityDispositionDecidePayload, idempotencyKey?: string): Promise<ApiResponse<PurchaseQualityDisposition>> {
   return await request<PurchaseQualityDisposition>({
     url: `/api/purchase-receipts/${receiptId}/quality/return`,
     method: "POST",
     data: payload,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -196,11 +231,12 @@ export async function decideQualityReturn(receiptId: string | number, payload: Q
  * 质量处置决定：报废
  * 接口路径：POST /api/purchase-receipts/{id}/quality/scrap
  */
-export async function decideQualityScrap(receiptId: string | number, payload: QualityDispositionDecidePayload): Promise<ApiResponse<PurchaseQualityDisposition>> {
+export async function decideQualityScrap(receiptId: string | number, payload: QualityDispositionDecidePayload, idempotencyKey?: string): Promise<ApiResponse<PurchaseQualityDisposition>> {
   return await request<PurchaseQualityDisposition>({
     url: `/api/purchase-receipts/${receiptId}/quality/scrap`,
     method: "POST",
     data: payload,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -209,11 +245,12 @@ export async function decideQualityScrap(receiptId: string | number, payload: Qu
  * 放行执行移位至 ReceivingStaging，退回与报废执行扣减 QualityHold 库存并生成流水
  * 接口路径：POST /api/purchase-quality-dispositions/{id}/confirm
  */
-export async function confirmQualityDisposition(dispositionId: string | number, payload: QualityDispositionConfirmPayload): Promise<ApiResponse<PurchaseQualityDisposition>> {
+export async function confirmQualityDisposition(dispositionId: string | number, payload: QualityDispositionConfirmPayload, idempotencyKey?: string): Promise<ApiResponse<PurchaseQualityDisposition>> {
   return await request<PurchaseQualityDisposition>({
     url: `/api/purchase-quality-dispositions/${dispositionId}/confirm`,
     method: "POST",
     data: payload,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -233,10 +270,11 @@ export async function getPutawayTasks(query: { page?: number; size?: number; sta
  * 确认上架任务（从 ReceivingStaging 移动至目标 Storage 库位，不重复增加库存）
  * 接口路径：POST /api/putaway-tasks/{id}/confirm
  */
-export async function confirmPutawayTask(taskId: string | number, payload: PutawayConfirmPayload): Promise<ApiResponse<PutawayTask>> {
+export async function confirmPutawayTask(taskId: string | number, payload: PutawayConfirmPayload, idempotencyKey?: string): Promise<ApiResponse<PutawayTask>> {
   return await request<PutawayTask>({
     url: `/api/putaway-tasks/${taskId}/confirm`,
     method: "POST",
     data: payload,
+    headers: commandHeaders(idempotencyKey),
   });
 }

@@ -1,12 +1,22 @@
 <template>
   <div class="wo-detail-container">
+    <CommandFeedback :error="lastError" :can-retry="canRetry" :executing="isExecuting" @retry="retry" />
     <!-- 头部面包屑与状态导航 -->
     <div class="detail-header-nav">
-      <button type="button" class="btn-back" @click="$emit('back')">
+      <button type="button" class="btn-back" @click="handleBack">
         ‹ 返回工单列表
       </button>
       <div class="header-tags">
         <span class="font-mono text-muted">工单 ID: {{ workOrder?.id || id }}</span>
+        <button
+          v-if="workOrder"
+          type="button"
+          class="btn-nav-trace"
+          title="穿透前往全链路全闭环追溯中心"
+          @click="handleGoTrace"
+        >
+          <span>🔍 全链路追溯</span>
+        </button>
       </div>
     </div>
 
@@ -44,6 +54,28 @@
 
           <!-- 顶部状态驱动操作按钮组 (受 allowedActions 约束) -->
           <div class="banner-actions">
+            <!-- 去排产派工 (Released 状态快捷跳转) -->
+            <button
+              v-if="workOrder.status === 'Released'"
+              type="button"
+              class="btn btn-primary"
+              title="前往生产派工页面创建工序派工"
+              @click="router.push(`/mes/dispatch?workOrderId=${workOrder.id}`)"
+            >
+              去排产派工
+            </button>
+
+            <!-- 办理成品入库 (已开工或已下达状态) -->
+            <button
+              v-if="workOrder.status === 'InProgress' || workOrder.status === 'Released'"
+              type="button"
+              class="btn btn-secondary"
+              title="前往产成品入库页面办理入库"
+              @click="router.push(`/mes/fg-receipt?workOrderId=${workOrder.id}`)"
+            >
+              办理成品入库
+            </button>
+
             <!-- 提交审核 -->
             <button
               v-if="workOrder.status === 'Draft' || workOrder.status === 'Rejected'"
@@ -186,6 +218,14 @@
           <button
             type="button"
             class="tab-btn"
+            :class="{ 'is-active': activeTab === 'quality' }"
+            @click="activeTab = 'quality'"
+          >
+            生产质检
+          </button>
+          <button
+            type="button"
+            class="tab-btn"
             :class="{ 'is-active': activeTab === 'movement' }"
             @click="activeTab = 'movement'"
           >
@@ -272,7 +312,12 @@
           </table>
         </div>
 
-        <!-- Tab 3: 领退料 -->
+        <!-- Tab 3: 生产质检 -->
+        <div v-if="activeTab === 'quality'" class="tab-pane">
+          <ProductionQualityPanel :work-order-id="workOrder.id" @refresh="loadAllData" />
+        </div>
+
+        <!-- Tab 4: 领退料 -->
         <div v-if="activeTab === 'movement'" class="tab-pane">
           <div class="movement-split">
             <div class="split-card">
@@ -433,6 +478,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from "vue";
+import { useCommand } from "@/composables/useCommand";
+import CommandFeedback from "@/components/common/CommandFeedback.vue";
+import { useRoute, useRouter } from "vue-router";
+import ProductionQualityPanel from "./components/ProductionQualityPanel.vue";
+import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
+import type { AllowedAction } from "../../types/common";
 import {
   StatusBadge,
   QuantityText,
@@ -469,15 +520,34 @@ const props = withDefaults(
   }
 );
 
-defineEmits<{
+const emit = defineEmits<{
   (e: "back"): void;
 }>();
+
+const route = useRoute();
+const router = useRouter();
+
+function handleBack() {
+  emit("back");
+  router.push("/mes/work-orders");
+}
+
+function handleGoTrace() {
+  if (!workOrder.value) return;
+  router.push({
+    path: "/traceability",
+    query: {
+      entry_type: "WORK_ORDER",
+      entity_id: String(workOrder.value.id),
+    },
+  });
+}
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 const workOrder = ref<WorkOrderItem | null>(null);
 
-const activeTab = ref<"dispatch" | "execution" | "movement" | "receipt">("dispatch");
+const activeTab = ref<"dispatch" | "execution" | "quality" | "movement" | "receipt">("dispatch");
 
 const dispatchOrders = ref<DispatchOrderItem[]>([]);
 const executions = ref<OperationExecutionItem[]>([]);
@@ -489,6 +559,7 @@ const rejectModalVisible = ref(false);
 const rejectionReason = ref("");
 const manualModalVisible = ref(false);
 const manualCompleteReason = ref("");
+const { execute, retry, isExecuting, canRetry, lastError } = useCommand();
 const isSubmitting = ref(false);
 
 const confirmState = reactive({
@@ -523,15 +594,14 @@ function getStatusText(status?: WorkOrderStatus): string {
   }
 }
 
+// 使用 actionGuard 统一权限判断逻辑
 function isActionAllowed(action: string): boolean {
-  if (!workOrder.value?.allowedActions || workOrder.value.allowedActions.length === 0) return true;
-  const match = workOrder.value.allowedActions.find((a) => a.action === action);
-  return match ? match.enabled : true;
+  return checkAction(workOrder.value?.allowedActions, action);
 }
 
+// 使用 actionGuard 统一获取禁用原因逻辑
 function getActionDisabledReason(action: string): string | undefined {
-  const match = workOrder.value?.allowedActions?.find((a) => a.action === action);
-  return match && !match.enabled ? match.reason : undefined;
+  return getDisabledReason(workOrder.value?.allowedActions, action);
 }
 
 /**
@@ -584,11 +654,11 @@ async function executePromptAction() {
   try {
     const wid = workOrder.value.id as string;
     if (confirmState.actionType === "submit") {
-      await submitWorkOrder(wid);
+      await execute((key) => submitWorkOrder(wid, key), { onConflict: loadAllData });
     } else if (confirmState.actionType === "approve") {
-      await approveWorkOrder(wid);
+      await execute((key) => approveWorkOrder(wid, key), { onConflict: loadAllData });
     } else if (confirmState.actionType === "complete") {
-      await completeWorkOrder(wid);
+      await execute((key) => completeWorkOrder(wid, undefined, key), { onConflict: loadAllData });
     }
     confirmState.visible = false;
     await loadAllData();
@@ -606,11 +676,14 @@ function openRejectModal() {
 
 async function submitReject() {
   if (!workOrder.value || !rejectionReason.value.trim()) return;
+  const currentWorkOrder = workOrder.value;
   isSubmitting.value = true;
   try {
-    await rejectWorkOrder(workOrder.value.id as string, rejectionReason.value.trim());
-    rejectModalVisible.value = false;
-    await loadAllData();
+    await execute(async (key) => {
+      await rejectWorkOrder(currentWorkOrder.id as string, rejectionReason.value.trim(), key);
+      rejectModalVisible.value = false;
+      await loadAllData();
+    }, { onConflict: loadAllData });
   } catch (err: any) {
     alert(`退回失败：${err.message}`);
   } finally {
@@ -625,16 +698,13 @@ function openManualCompleteModal() {
 
 async function submitManualComplete() {
   if (!workOrder.value || !manualCompleteReason.value.trim()) return;
-  isSubmitting.value = true;
   try {
-    await manualCompleteWorkOrder(workOrder.value.id as string, manualCompleteReason.value.trim());
+    await execute((key) => manualCompleteWorkOrder(workOrder.value!.id as string, manualCompleteReason.value.trim(), key), { onConflict: loadAllData });
     manualModalVisible.value = false;
     await loadAllData();
   } catch (err: any) {
     alert(`结案失败：${err.message}`);
-  } finally {
-    isSubmitting.value = false;
-  }
+  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
 watch(
@@ -646,6 +716,9 @@ watch(
 
 onMounted(() => {
   loadAllData();
+  if (route.query.openQuality === "true" || route.query.tab === "quality") {
+    activeTab.value = "quality";
+  }
 });
 </script>
 
@@ -676,6 +749,33 @@ onMounted(() => {
 .btn-back:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #f8fafc;
+}
+
+.header-tags {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-nav-trace {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.btn-nav-trace:hover {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
 }
 
 .loading-box {

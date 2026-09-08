@@ -1,14 +1,7 @@
-# 本地练习 profile：与 platform-core 使用固定的服务间密钥完成阶段 7 只读联调。
-# MQTT 仍保持关闭，避免本地未配置真实设备凭证时阻断 HTTP 服务启动。
+# 本地练习 profile：保留 HTTP 模拟入口，跨服务 HMAC 只允许由运行环境注入。
+# 修改用途：移除提交态固定 HMAC；MQTT 与 Core 上下文补链仍沿用 application.yml 的默认关闭策略。
 iot:
   telemetry:
     # 本地练习允许通过 HTTP 模拟 MQTT 摄取；基础 application.yml 默认仍保持关闭。
     simulation:
       enabled: true
-  context:
-    core:
-      enabled: true
-      query-url: http://127.0.0.1:10003/internal/production-context
-      hmac-secret: stage07-local-context-secret
-  internal:
-    s7-hmac-secret: stage07-local-s7-secret

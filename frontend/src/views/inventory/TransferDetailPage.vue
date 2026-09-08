@@ -31,6 +31,7 @@ import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ErrorState from "@/components/common/ErrorState.vue";
 import { confirmTransfer, getTransferById } from "@/api/inventory";
+import { ApiError } from "@/utils/request";
 import type { TransferOrder } from "@/types/inventory";
 import type { ViewState } from "@/types/common";
 import TransferDetailView from "./TransferDetailView.vue";
@@ -50,6 +51,17 @@ const confirming = ref(false);
  * 出参：更新页面四态和真实调拨单数据。
  * 流程：校验 ID 后请求详情接口；成功进入 ready，接口异常进入 error 并保留重试入口。
  */
+/**
+ * 用途：把调拨详情查询错误转换为可区分的页面文案。
+ * 入参：详情 API 抛出的错误对象；出参：面向用户的错误说明。
+ * 流程：优先按 HTTP 403/404 显示权限或资源错误，其余错误沿用后端消息。
+ */
+function detailLoadErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.httpStatus === 404) return "调拨单资源不存在或已被删除（404）。";
+  if (error instanceof ApiError && error.httpStatus === 403) return "您没有查看该调拨单的权限（403）。";
+  return error instanceof Error ? error.message : "网络请求异常，请稍后重试。";
+}
+
 async function loadTransfer() {
   if (!transferId.value) {
     transfer.value = null;
@@ -67,7 +79,7 @@ async function loadTransfer() {
   } catch (error: any) {
     console.error("[TransferDetailPage] 获取调拨单详情失败:", error);
     transfer.value = null;
-    errorMessage.value = error?.message || "网络请求异常，请稍后重试。";
+    errorMessage.value = detailLoadErrorMessage(error);
     viewState.value = "error";
   }
 }

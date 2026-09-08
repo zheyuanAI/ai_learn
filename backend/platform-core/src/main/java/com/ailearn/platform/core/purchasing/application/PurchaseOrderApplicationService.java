@@ -53,4 +53,9 @@ public interface PurchaseOrderApplicationService {
      */
     PurchaseReceiptView confirmReceipt(UUID receiptId, PurchaseReceiptConfirmRequest request,
                                        String idempotencyKey);
+
+    /**
+     * 服务端分配独立收货事实 ID并确认到货；客户端只提交业务事实和幂等键。
+     */
+    PurchaseReceiptView confirmReceipt(PurchaseReceiptConfirmRequest request, String idempotencyKey);
 }

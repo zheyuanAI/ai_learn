@@ -26,6 +26,15 @@ import type {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/** 将服务端底图 MIME 类型转换为页面使用的渲染类别，避免把 MIME 当成地图事实编码展示。 */
+function mapBackgroundType(value: unknown): "SVG" | "IMAGE" | "GRID" {
+  const normalized = String(value || "").toLowerCase();
+  if (normalized === "svg" || normalized === "image/svg+xml") return "SVG";
+  if (normalized === "grid") return "GRID";
+  if (normalized.startsWith("image/")) return "IMAGE";
+  return "IMAGE";
+}
+
 /** 校验冻结接口要求的 UUID，禁止将业务编码误作实体标识提交。 */
 function requireUuid(value: string | number | undefined, field: string): string {
   const normalized = String(value || "").trim();
@@ -192,8 +201,10 @@ export async function fetchSiteMapList(query: any = {}): Promise<SiteMapItem[]> 
     id: item.id,
     mapCode: item.mapCode || item.map_code,
     mapName: item.mapName || item.map_name,
-    backgroundType: item.asset?.mimeType || item.asset?.mime_type || "",
+    backgroundType: mapBackgroundType(item.backgroundType || item.background_type || item.asset?.mimeType || item.asset?.mime_type),
     backgroundUrl: item.asset?.storageKey || item.asset?.storage_key,
+    pointCount: item.pointCount ?? item.point_count,
+    description: item.description,
     createdAt: item.createdAt || item.created_at,
     updatedAt: item.updatedAt || item.updated_at,
   }));
@@ -220,7 +231,7 @@ export async function fetchSiteMapProjection(
     siteMapId: normalizedMapId,
     mapCode: projection.map_code || projection.mapCode,
     mapName: projection.map_name || projection.mapName,
-    backgroundType: projection.background_type || projection.backgroundType,
+    backgroundType: mapBackgroundType(projection.background_type || projection.backgroundType),
     storageKey: projection.storage_key || projection.storageKey,
     points: (projection.points || []).map((point: any) => mapPointProjection(point, normalizedMapId)),
     generatedAt: projection.generated_at || projection.generatedAt,
@@ -245,8 +256,10 @@ export async function createSiteMap(payload: CreateSiteMapCommand): Promise<ApiR
       id: item.id,
       mapCode: item.mapCode || item.map_code,
       mapName: item.mapName || item.map_name,
-      backgroundType: item.asset?.mimeType || item.asset?.mime_type || "",
+      backgroundType: mapBackgroundType(item.backgroundType || item.background_type || item.asset?.mimeType || item.asset?.mime_type),
       backgroundUrl: item.asset?.storageKey || item.asset?.storage_key,
+      pointCount: item.pointCount ?? item.point_count,
+      description: item.description,
       createdAt: item.createdAt || item.created_at,
       updatedAt: item.updatedAt || item.updated_at,
     },
@@ -452,30 +465,55 @@ export async function fetchDashboardOverview(query: {
     res: PromiseSettledResult<ApiResponse<DashboardSummaryProjection>>,
     linkedRoute: string
   ): DashboardCardData {
+    /**
+     * 修改用途：统一构造不可用卡片，确保缺失 stale 或事实值时不生成零值并冒充实时。
+     * 入参：服务端或请求链路给出的错误说明；出参：无指标、stale 未知的不可用卡片。
+     */
+    const unavailableCard = (message: string, requestId?: string): DashboardCardData => ({
+      summaryType: type,
+      title,
+      icon,
+      metrics: [],
+      timeRange,
+      sourceSummary: "数据源响应异常",
+      generatedAt: undefined,
+      sourceUpdatedAt: undefined,
+      requestId,
+      stale: undefined,
+      staleSince: undefined,
+      error: message,
+      linkedRoute,
+    });
+
     if (res.status === "rejected") {
-      return {
-        summaryType: type,
-        title,
-        icon,
-        metrics: [],
-        timeRange,
-        sourceSummary: "数据源响应异常",
-        generatedAt: undefined,
-        sourceUpdatedAt: undefined,
-        stale: undefined,
-        staleSince: undefined,
-        error: res.reason?.message || "请求失败",
-        linkedRoute,
-      };
+      const requestId = typeof res.reason?.requestId === "string" ? res.reason.requestId : undefined;
+      return unavailableCard(res.reason?.message || "请求失败", requestId);
     }
 
+    const envelopeRequestId = res.value.request_id || res.value.requestId;
     const data = res.value.data;
-    const metrics: CardMetric[] = Object.entries(data?.metrics || {}).map(([k, v]) => {
+    const projectionRequestId = data?.request_id || envelopeRequestId;
+    if (!data || (data.stale !== true && data.stale !== false)) {
+      return unavailableCard("看板响应缺少明确 stale 状态，当前数据不可用", projectionRequestId);
+    }
+    if (data.stale === true && (!data.generated_at || !data.stale_since)) {
+      return unavailableCard(
+        "陈旧看板响应缺少原生成时间或 stale_since，当前数据不可用",
+        projectionRequestId,
+      );
+    }
+
+    const metricEntries = Object.entries(data.metrics || {});
+    if (metricEntries.some(([, value]) => value === null || value === undefined)) {
+      return unavailableCard("看板响应包含缺失事实指标，当前数据不可用", projectionRequestId);
+    }
+
+    const metrics: CardMetric[] = metricEntries.map(([k, v]) => {
       const isQty = typeof v === "number" || (!isNaN(Number(v)) && String(v).trim() !== "");
       return {
         key: k,
         label: k,
-        value: v !== null && v !== undefined ? String(v) : "0",
+        value: String(v),
         isQuantity: isQty,
         status: "normal",
       };
@@ -490,6 +528,7 @@ export async function fetchDashboardOverview(query: {
       sourceSummary: data?.source_summary || `已聚合 ${metrics.length} 项指标`,
       generatedAt: data?.generated_at,
       sourceUpdatedAt: data?.source_updated_at,
+      requestId: data?.request_id || res.value.request_id || res.value.requestId,
       stale: data?.stale,
       staleSince: data?.stale_since,
       linkedRoute,

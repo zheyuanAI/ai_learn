@@ -34,18 +34,22 @@
       </button>
 
       <button type="button" class="btn btn-secondary" @click="toggleSimulateCard">
-        <span>{{ showSimulateCard ? "收起模拟器" : "打开 MQTT QoS 1 模拟测试器" }}</span>
+        <span>{{ showSimulateCard ? "收起模拟器" : "[开发模拟] 打开 HTTP QoS 1 模拟测试器" }}</span>
       </button>
     </div>
 
-    <!-- MQTT QoS 1 模拟上报与去重测试卡片 -->
+    <!-- [开发模拟] HTTP QoS 1 模拟上报与去重测试卡片 -->
     <div v-if="showSimulateCard" class="simulate-card">
       <div class="sim-header">
         <div class="sim-title-group">
-          <span class="sim-tag font-mono">QoS 1 SIMULATOR</span>
-          <h4 class="sim-title">MQTT 遥测消息模拟上报与幂等去重测试</h4>
+          <span class="sim-tag font-mono">DEV SIMULATOR</span>
+          <h4 class="sim-title">[开发联调] HTTP QoS 1 遥测模拟上报与去重测试</h4>
         </div>
         <button type="button" class="btn-close" @click="showSimulateCard = false">✕</button>
+      </div>
+
+      <div class="sim-dev-notice">
+        ℹ️ <strong>开发模拟声明</strong>：本测试器通过后端开发辅助端点 <code>POST /api/iot/telemetry/simulate</code> 发送测试数据，用于快速联调验证 <code>(device_id + message_id)</code> 幂等去重逻辑，<strong>不代表</strong>真实的 Mosquitto MQTT Broker (1883 端口) 物理链路或网络断连重试机制。
       </div>
 
       <form class="sim-body" @submit.prevent="handleSendSimulate">
@@ -109,7 +113,7 @@
 
         <div class="sim-footer">
           <div class="sim-hint text-muted">
-            测试提示：连续以相同 Message ID 发送，将触发 QoS 1 幂等成功响应（不重复插入记录）。
+            测试提示：通过 HTTP 模拟端点连续以相同 Message ID 发送，将触发 QoS 1 幂等成功响应（Duplicate = true，不重复插入记录）。
           </div>
           <div class="sim-actions">
             <button
@@ -124,7 +128,7 @@
               class="btn btn-primary"
               :disabled="simulating"
             >
-              {{ simulating ? "上报中..." : "模拟发送 MQTT 消息" }}
+              {{ simulating ? "上报中..." : "模拟发送 HTTP QoS 1 消息" }}
             </button>
           </div>
         </div>
@@ -411,6 +415,24 @@ onMounted(async () => {
   margin: 2px 0 0;
   font-size: 15px;
   color: #f8fafc;
+}
+
+.sim-dev-notice {
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+
+.sim-dev-notice code {
+  color: #38bdf8;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: monospace;
 }
 
 .sim-body {

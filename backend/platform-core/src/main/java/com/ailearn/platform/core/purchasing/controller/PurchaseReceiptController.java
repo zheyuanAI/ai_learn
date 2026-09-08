@@ -29,6 +29,16 @@ public class PurchaseReceiptController {
     }
 
     /**
+     * 确认到货并由服务端分配独立收货 ID；客户端不能用订单号或随机 UUID 代替事实 ID。
+     */
+    @PostMapping("/confirm")
+    public ApiResponse<PurchaseReceiptView> confirmWithServerId(
+            @RequestBody PurchaseReceiptConfirmRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        return ApiResponse.success(applicationService.confirmReceipt(request, idempotencyKey));
+    }
+
+    /**
      * 确认外观验收、拒收和实际接收。
      */
     @PostMapping("/{id}/confirm")

@@ -387,18 +387,42 @@ async function refreshSingleCard(type: DashboardCardType) {
         res = await getTraceabilityDashboard({ time_range: currentTimeRange.value });
         break;
     }
+    if (!overviewData.value || !overviewData.value.cards[type]) {
+      return;
+    }
+    const responseRequestId = res?.request_id || res?.requestId || "";
+    const withRequestId = (message: string) => {
+      const error = new Error(message) as Error & { requestId?: string };
+      error.requestId = responseRequestId;
+      return error;
+    };
+    if (!res?.data) {
+      throw withRequestId("看板响应缺少 data，当前数据不可用");
+    }
     if (overviewData.value && res?.data) {
       const data = res.data;
+      if (data.stale !== true && data.stale !== false) {
+        throw withRequestId("看板响应缺少明确 stale 状态，当前数据不可用");
+      }
+      if (data.stale === true && (!data.generated_at || !data.stale_since)) {
+        throw withRequestId("陈旧看板响应缺少原生成时间或 stale_since，当前数据不可用");
+      }
+      const metricEntries = Object.entries(data.metrics || {});
+      if (metricEntries.some(([, value]) => value === null || value === undefined)) {
+        throw withRequestId("看板响应包含缺失事实指标，当前数据不可用");
+      }
       const card = overviewData.value.cards[type];
-      card.stale = !!data.stale;
+      // 修改用途：只接受后端明确返回的 stale 布尔值，禁止用强制转换把未知状态标成实时。
+      card.stale = data.stale;
       card.staleSince = data.stale_since;
       card.error = undefined;
+      card.requestId = data.request_id || responseRequestId || undefined;
       card.generatedAt = data.generated_at;
       card.sourceUpdatedAt = data.source_updated_at;
-      card.metrics = Object.entries(data.metrics || {}).map(([k, v]) => ({
+      card.metrics = metricEntries.map(([k, v]) => ({
         key: k,
         label: k,
-        value: v !== null && v !== undefined ? String(v) : "0",
+        value: String(v),
         isQuantity: typeof v === "number" || (!isNaN(Number(v)) && String(v).trim() !== ""),
         status: "normal",
       }));
@@ -406,7 +430,11 @@ async function refreshSingleCard(type: DashboardCardType) {
     }
   } catch (err: any) {
     if (overviewData.value && overviewData.value.cards[type]) {
-      overviewData.value.cards[type].error = err?.message || "单项刷新失败";
+      const card = overviewData.value.cards[type];
+      card.error = err?.message || "单项刷新失败";
+      card.requestId = err?.requestId || "";
+      card.stale = undefined;
+      card.staleSince = undefined;
       overviewData.value.staleCardsCount = Object.values(overviewData.value.cards).filter((c) => c.stale).length;
     }
   } finally {

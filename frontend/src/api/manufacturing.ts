@@ -30,6 +30,11 @@ import type {
   FinishedGoodsReceiptPayload,
 } from "../types/manufacturing";
 
+/** 为同一业务命令显式复用幂等键；未传时保留旧调用方兼容行为。 */
+function commandHeaders(idempotencyKey?: string) {
+  return idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined;
+}
+
 /**
  * 分页查询 BOM 清单列表
  * 接口路径：GET /api/boms
@@ -162,10 +167,11 @@ export async function createWorkOrder(payload: WorkOrderCreatePayload): Promise<
  * 提交工单审核 (Draft/Rejected -> PendingApproval)
  * 接口路径：POST /api/work-orders/{id}/submit
  */
-export async function submitWorkOrder(id: string | number): Promise<ApiResponse<WorkOrder>> {
+export async function submitWorkOrder(id: string | number, idempotencyKey?: string): Promise<ApiResponse<WorkOrder>> {
   return await request<WorkOrder>({
     url: `/api/work-orders/${id}/submit`,
     method: "POST",
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -173,10 +179,11 @@ export async function submitWorkOrder(id: string | number): Promise<ApiResponse<
  * 审核下达工单 (PendingApproval -> Released)
  * 接口路径：POST /api/work-orders/{id}/approve
  */
-export async function approveWorkOrder(id: string | number): Promise<ApiResponse<WorkOrder>> {
+export async function approveWorkOrder(id: string | number, idempotencyKey?: string): Promise<ApiResponse<WorkOrder>> {
   return await request<WorkOrder>({
     url: `/api/work-orders/${id}/approve`,
     method: "POST",
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -184,11 +191,12 @@ export async function approveWorkOrder(id: string | number): Promise<ApiResponse
  * 驳回工单 (PendingApproval -> Rejected)
  * 接口路径：POST /api/work-orders/{id}/reject
  */
-export async function rejectWorkOrder(id: string | number, reason?: string): Promise<ApiResponse<WorkOrder>> {
+export async function rejectWorkOrder(id: string | number, reason?: string, idempotencyKey?: string): Promise<ApiResponse<WorkOrder>> {
   return await request<WorkOrder>({
     url: `/api/work-orders/${id}/reject`,
     method: "POST",
     data: { reason: reason || "" },
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -198,13 +206,14 @@ export async function rejectWorkOrder(id: string | number, reason?: string): Pro
  */
 export async function completeWorkOrder(
   id: string | number,
-  reasonOrPayload?: string | { reason?: string; completionReason?: string }
+  reasonOrPayload?: string | { reason?: string; completionReason?: string }, idempotencyKey?: string
 ): Promise<ApiResponse<WorkOrder>> {
   const data = typeof reasonOrPayload === "string" ? { reason: reasonOrPayload } : reasonOrPayload || {};
   return await request<WorkOrder>({
     url: `/api/work-orders/${id}/complete`,
     method: "POST",
     data,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 export const manualCompleteWorkOrder = completeWorkOrder;
@@ -227,7 +236,7 @@ export const getDispatches = getDispatchOrders;
  * 接口路径：POST /api/dispatch-orders
  * 正式字段：work_order_id, operation_id, operator_id, dispatch_qty, device_id
  */
-export async function createDispatchOrder(payload: any): Promise<ApiResponse<DispatchRecord>> {
+export async function createDispatchOrder(payload: any, idempotencyKey?: string): Promise<ApiResponse<DispatchRecord>> {
   const requestBody = {
     work_order_id: payload.work_order_id || payload.workOrderId,
     operation_id: payload.operation_id || payload.operationId,
@@ -239,6 +248,7 @@ export async function createDispatchOrder(payload: any): Promise<ApiResponse<Dis
     url: "/api/dispatch-orders",
     method: "POST",
     data: requestBody,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 export const createDispatch = createDispatchOrder;
@@ -247,10 +257,11 @@ export const createDispatch = createDispatchOrder;
  * 发布派工单
  * 接口路径：POST /api/dispatch-orders/{id}/release
  */
-export async function releaseDispatchOrder(id: string | number): Promise<ApiResponse<DispatchRecord>> {
+export async function releaseDispatchOrder(id: string | number, idempotencyKey?: string): Promise<ApiResponse<DispatchRecord>> {
   return await request<DispatchRecord>({
     url: `/api/dispatch-orders/${id}/release`,
     method: "POST",
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -271,7 +282,7 @@ export async function getOperationExecutions(query: OperationExecutionQuery = {}
  * 接口路径：POST /api/operation-executions
  * 正式字段：dispatch_order_id, work_order_id, operation_id, device_id
  */
-export async function createOperationExecution(payload: any): Promise<ApiResponse<OperationExecution>> {
+export async function createOperationExecution(payload: any, idempotencyKey?: string): Promise<ApiResponse<OperationExecution>> {
   const requestBody = {
     dispatch_order_id: payload.dispatch_order_id || payload.dispatchOrderId,
     work_order_id: payload.work_order_id || payload.workOrderId,
@@ -282,6 +293,7 @@ export async function createOperationExecution(payload: any): Promise<ApiRespons
     url: "/api/operation-executions",
     method: "POST",
     data: requestBody,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -289,10 +301,11 @@ export async function createOperationExecution(payload: any): Promise<ApiRespons
  * 开始工序执行
  * 接口路径：POST /api/operation-executions/{id}/start
  */
-export async function startOperationExecution(id: string | number): Promise<ApiResponse<OperationExecution>> {
+export async function startOperationExecution(id: string | number, idempotencyKey?: string): Promise<ApiResponse<OperationExecution>> {
   return await request<OperationExecution>({
     url: `/api/operation-executions/${id}/start`,
     method: "POST",
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -300,11 +313,12 @@ export async function startOperationExecution(id: string | number): Promise<ApiR
  * 暂停工序执行
  * 接口路径：POST /api/operation-executions/{id}/pause
  */
-export async function pauseOperationExecution(id: string | number, reason?: string): Promise<ApiResponse<OperationExecution>> {
+export async function pauseOperationExecution(id: string | number, reason?: string, idempotencyKey?: string): Promise<ApiResponse<OperationExecution>> {
   return await request<OperationExecution>({
     url: `/api/operation-executions/${id}/pause`,
     method: "POST",
     data: { reason: reason || "" },
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -312,10 +326,11 @@ export async function pauseOperationExecution(id: string | number, reason?: stri
  * 恢复工序执行
  * 接口路径：POST /api/operation-executions/{id}/resume
  */
-export async function resumeOperationExecution(id: string | number): Promise<ApiResponse<OperationExecution>> {
+export async function resumeOperationExecution(id: string | number, idempotencyKey?: string): Promise<ApiResponse<OperationExecution>> {
   return await request<OperationExecution>({
     url: `/api/operation-executions/${id}/resume`,
     method: "POST",
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -323,10 +338,11 @@ export async function resumeOperationExecution(id: string | number): Promise<Api
  * 完工工序执行
  * 接口路径：POST /api/operation-executions/{id}/complete
  */
-export async function completeOperationExecution(id: string | number): Promise<ApiResponse<OperationExecution>> {
+export async function completeOperationExecution(id: string | number, idempotencyKey?: string): Promise<ApiResponse<OperationExecution>> {
   return await request<OperationExecution>({
     url: `/api/operation-executions/${id}/complete`,
     method: "POST",
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -335,7 +351,7 @@ export async function completeOperationExecution(id: string | number): Promise<A
  * 接口路径：POST /api/work-reports
  * 正式字段：reportNo, operationExecutionId, workOrderId, operationId, reportTime, qualifiedQty, defectQty, remark
  */
-export async function createWorkReport(payload: any): Promise<ApiResponse<any>> {
+export async function createWorkReport(payload: any, idempotencyKey?: string): Promise<ApiResponse<any>> {
   const requestBody = {
     reportNo: payload.reportNo,
     operationExecutionId: payload.operationExecutionId,
@@ -350,6 +366,7 @@ export async function createWorkReport(payload: any): Promise<ApiResponse<any>> 
     url: "/api/work-reports",
     method: "POST",
     data: requestBody,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 export const submitWorkReport = createWorkReport;
@@ -371,7 +388,7 @@ export async function getWorkReports(workOrderId: string | number): Promise<ApiR
  * 接口路径：POST /api/material-issues
  * 正式字段：issueNo, workOrderId, items[{productId, warehouseId, locationId, quantity}], overageReason
  */
-export async function createMaterialIssue(payload: any): Promise<ApiResponse<MaterialMovement>> {
+export async function createMaterialIssue(payload: any, idempotencyKey?: string): Promise<ApiResponse<MaterialMovement>> {
   const items = (payload.items || []).map((item: any) => ({
     productId: item.productId,
     warehouseId: item.warehouseId,
@@ -388,6 +405,7 @@ export async function createMaterialIssue(payload: any): Promise<ApiResponse<Mat
     url: "/api/material-issues",
     method: "POST",
     data: requestBody,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 export const issueMaterials = createMaterialIssue;
@@ -396,10 +414,11 @@ export const issueMaterials = createMaterialIssue;
  * 确认生产领料出库
  * 接口路径：POST /api/material-issues/{id}/confirm
  */
-export async function confirmMaterialIssue(id: string | number): Promise<ApiResponse<any>> {
+export async function confirmMaterialIssue(id: string | number, idempotencyKey?: string): Promise<ApiResponse<any>> {
   return await request<any>({
     url: `/api/material-issues/${id}/confirm`,
     method: "POST",
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -408,7 +427,7 @@ export async function confirmMaterialIssue(id: string | number): Promise<ApiResp
  * 接口路径：POST /api/material-returns
  * 正式字段：returnNo, workOrderId, items[{productId, warehouseId, locationId, quantity}], reason
  */
-export async function createMaterialReturn(payload: any): Promise<ApiResponse<MaterialMovement>> {
+export async function createMaterialReturn(payload: any, idempotencyKey?: string): Promise<ApiResponse<MaterialMovement>> {
   const items = (payload.items || []).map((item: any) => ({
     productId: item.productId,
     warehouseId: item.warehouseId,
@@ -425,6 +444,7 @@ export async function createMaterialReturn(payload: any): Promise<ApiResponse<Ma
     url: "/api/material-returns",
     method: "POST",
     data: requestBody,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 export const returnMaterials = createMaterialReturn;
@@ -433,10 +453,11 @@ export const returnMaterials = createMaterialReturn;
  * 确认生产退料入库
  * 接口路径：POST /api/material-returns/{id}/confirm
  */
-export async function confirmMaterialReturn(id: string | number): Promise<ApiResponse<any>> {
+export async function confirmMaterialReturn(id: string | number, idempotencyKey?: string): Promise<ApiResponse<any>> {
   return await request<any>({
     url: `/api/material-returns/${id}/confirm`,
     method: "POST",
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -445,7 +466,7 @@ export async function confirmMaterialReturn(id: string | number): Promise<ApiRes
  * 接口路径：POST /api/quality-inspections
  * 正式字段：inspectionNo, workReportId, inspectionType, sampleQty
  */
-export async function createQualityInspection(payload: any): Promise<ApiResponse<any>> {
+export async function createQualityInspection(payload: any, idempotencyKey?: string): Promise<ApiResponse<any>> {
   const requestBody = {
     inspectionNo: payload.inspectionNo || `INS-${Date.now().toString().slice(-6)}`,
     workReportId: payload.workReportId,
@@ -456,6 +477,7 @@ export async function createQualityInspection(payload: any): Promise<ApiResponse
     url: "/api/quality-inspections",
     method: "POST",
     data: requestBody,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -464,7 +486,7 @@ export async function createQualityInspection(payload: any): Promise<ApiResponse
  * 接口路径：POST /api/quality-inspections/{id}/submit
  * 正式字段：qualifiedQty, defectQty, result
  */
-export async function submitQualityInspection(id: string | number, payload: any): Promise<ApiResponse<any>> {
+export async function submitQualityInspection(id: string | number, payload: any, idempotencyKey?: string): Promise<ApiResponse<any>> {
   const requestBody = {
     qualifiedQty: String(payload.qualifiedQty || "0"),
     defectQty: String(payload.defectQty || "0"),
@@ -474,6 +496,7 @@ export async function submitQualityInspection(id: string | number, payload: any)
     url: `/api/quality-inspections/${id}/submit`,
     method: "POST",
     data: requestBody,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -482,11 +505,12 @@ export async function submitQualityInspection(id: string | number, payload: any)
  * 接口路径：POST /api/quality-inspections/{id}/close
  * 正式字段：disposition ("ISOLATE" | "SCRAP" | "CLOSE")
  */
-export async function closeQualityInspection(id: string | number, disposition: "ISOLATE" | "SCRAP" | "CLOSE"): Promise<ApiResponse<any>> {
+export async function closeQualityInspection(id: string | number, disposition: "ISOLATE" | "SCRAP" | "CLOSE", idempotencyKey?: string): Promise<ApiResponse<any>> {
   return await request<any>({
     url: `/api/quality-inspections/${id}/close`,
     method: "POST",
     data: { disposition },
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -519,7 +543,7 @@ export async function getFinishedGoodsReceipts(workOrderId: string): Promise<Api
  * 接口路径：POST /api/finished-goods-receipts
  * 正式字段：receiptNo, workOrderId, receiptQty, warehouseId, locationId
  */
-export async function createFinishedGoodsReceipt(payload: FinishedGoodsReceiptPayload): Promise<ApiResponse<FinishedGoodsReceipt>> {
+export async function createFinishedGoodsReceipt(payload: FinishedGoodsReceiptPayload, idempotencyKey?: string): Promise<ApiResponse<FinishedGoodsReceipt>> {
   const requestBody = {
     receiptNo: payload.receiptNo,
     workOrderId: payload.workOrderId,
@@ -531,6 +555,7 @@ export async function createFinishedGoodsReceipt(payload: FinishedGoodsReceiptPa
     url: "/api/finished-goods-receipts",
     method: "POST",
     data: requestBody,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -538,9 +563,10 @@ export async function createFinishedGoodsReceipt(payload: FinishedGoodsReceiptPa
  * 确认成品完工入库
  * 接口路径：POST /api/finished-goods-receipts/{id}/confirm
  */
-export async function confirmFinishedGoodsReceipt(id: string | number): Promise<ApiResponse<any>> {
+export async function confirmFinishedGoodsReceipt(id: string | number, idempotencyKey?: string): Promise<ApiResponse<any>> {
   return await request<any>({
     url: `/api/finished-goods-receipts/${id}/confirm`,
     method: "POST",
+    headers: commandHeaders(idempotencyKey),
   });
 }

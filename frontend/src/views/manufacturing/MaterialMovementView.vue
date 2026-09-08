@@ -1,5 +1,6 @@
 <template>
   <div class="manufacturing-view-container">
+    <CommandFeedback :error="lastError" :can-retry="canRetry" :executing="isExecuting" @retry="retry" />
     <!-- 统一页面头部 -->
     <PageHeader
       title="生产领料与退料协同 (Material Movement)"
@@ -203,47 +204,84 @@
           <button type="button" class="btn-close" @click="createIssueModalVisible = false">✕</button>
         </div>
         <form class="modal-body" @submit.prevent="submitCreateIssue">
-          <div class="form-item">
-            <label>关联工单编号/ID <span class="req">*</span></label>
+          <div class="options-search-row">
+            <label for="issue-option-keyword">目录搜索</label>
             <input
-              v-model="issueForm.workOrderId"
-              type="text"
-              class="form-input font-mono"
-              placeholder="真实工单 UUID"
-              required
+              id="issue-option-keyword"
+              v-model="movementOptionsKeyword"
+              type="search"
+              class="form-input"
+              placeholder="输入工单、物料或仓库编码/名称后回车搜索"
+              @keyup.enter="loadMovementOptions"
             />
+            <button type="button" class="btn-text text-primary" @click="loadMovementOptions">搜索</button>
+          </div>
+          <div v-if="isMovementOptionsLoading" class="options-hint text-muted">⏳ 正在加载真实主数据目录...</div>
+          <div v-else-if="movementOptionsError" class="options-hint text-warning">⚠️ {{ movementOptionsError }}</div>
+          <div class="form-item">
+            <label>关联生产工单 <span class="req">*</span></label>
+            <select v-model="issueForm.workOrderId" class="form-select" required>
+              <option value="">请选择关联生产工单</option>
+              <option v-for="wo in availableWorkOrders" :key="wo.id" :value="wo.id">
+                {{ wo.workOrderNo || wo.woNo }} - {{ wo.productName || '工单' }} (计划: {{ wo.plannedQty }}件, {{ wo.status }})
+              </option>
+            </select>
           </div>
 
           <div class="form-section">
-            <label class="section-title">领料明细项</label>
-            <div class="grid-form-row">
+            <label class="section-title">领料明细项（消除手填 UUID，级联选择）</label>
+            <div class="form-grid two-col" style="margin-bottom: 10px;">
+              <div class="form-item">
+                <label>领用物料 <span class="req">*</span></label>
+                <select v-model="issueForm.productId" class="form-select" required>
+                  <option value="">请选择领用物料</option>
+                  <option v-for="p in availableProducts" :key="p.id" :value="p.id">
+                    {{ p.sku }} - {{ p.name }} ({{ p.uom }})
+                  </option>
+                </select>
+              </div>
+              <div class="form-item">
+                <label>领料数量 <span class="req">*</span></label>
+                <input
+                  v-model="issueForm.issueQty"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  class="form-input font-mono"
+                  placeholder="领料数量 (如 100.00)"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="form-grid two-col">
+              <div class="form-item">
+                <label>出库仓库 <span class="req">*</span></label>
+                <select v-model="issueForm.warehouseId" class="form-select" required @change="handleIssueWarehouseChange">
+                  <option value="">请选择出库仓库</option>
+                  <option v-for="w in availableWarehouses" :key="w.id" :value="w.id">
+                    {{ w.code }} - {{ w.name }}
+                  </option>
+                </select>
+              </div>
+              <div class="form-item">
+                <label>出库库位 <span class="req">*</span></label>
+                <select v-model="issueForm.locationId" class="form-select font-mono" required :disabled="!issueForm.warehouseId">
+                  <option value="">{{ !issueForm.warehouseId ? '请先选择出库仓库' : '请选择库位' }}</option>
+                  <option v-for="l in filteredIssueLocations" :key="l.id" :value="l.id">
+                    {{ l.code }} - {{ l.name }} ({{ l.type }})
+                  </option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-item" style="margin-top: 10px;">
+              <label>超领原因 (可选，超出定额时必填说明)</label>
               <input
-                v-model="issueForm.productId"
+                v-model="issueForm.overageReason"
                 type="text"
                 class="form-input"
-                placeholder="真实产品 UUID"
-                required
-              />
-              <input
-                v-model="issueForm.issueQty"
-                type="text"
-                class="form-input font-mono"
-                placeholder="领料数量 (如 100.00)"
-                required
-              />
-              <input
-                v-model="issueForm.warehouseId"
-                type="text"
-                class="form-input"
-                placeholder="真实仓库 UUID"
-                required
-              />
-              <input
-                v-model="issueForm.locationId"
-                type="text"
-                class="form-input font-mono"
-                placeholder="真实库位 UUID"
-                required
+                placeholder="如: 原料损耗补料、工艺调整追加领料..."
               />
             </div>
           </div>
@@ -264,46 +302,84 @@
           <button type="button" class="btn-close" @click="createReturnModalVisible = false">✕</button>
         </div>
         <form class="modal-body" @submit.prevent="submitCreateReturn">
-          <div class="form-item">
-            <label>关联工单编号/ID <span class="req">*</span></label>
+          <div class="options-search-row">
+            <label for="return-option-keyword">目录搜索</label>
             <input
-              v-model="returnForm.workOrderId"
-              type="text"
-              class="form-input font-mono"
-              placeholder="真实工单 UUID"
-              required
+              id="return-option-keyword"
+              v-model="movementOptionsKeyword"
+              type="search"
+              class="form-input"
+              placeholder="输入工单、物料或仓库编码/名称后回车搜索"
+              @keyup.enter="loadMovementOptions"
             />
+            <button type="button" class="btn-text text-primary" @click="loadMovementOptions">搜索</button>
+          </div>
+          <div v-if="isMovementOptionsLoading" class="options-hint text-muted">⏳ 正在加载真实主数据目录...</div>
+          <div v-else-if="movementOptionsError" class="options-hint text-warning">⚠️ {{ movementOptionsError }}</div>
+          <div class="form-item">
+            <label>关联生产工单 <span class="req">*</span></label>
+            <select v-model="returnForm.workOrderId" class="form-select" required>
+              <option value="">请选择关联生产工单</option>
+              <option v-for="wo in availableWorkOrders" :key="wo.id" :value="wo.id">
+                {{ wo.workOrderNo || wo.woNo }} - {{ wo.productName || '工单' }} (计划: {{ wo.plannedQty }}件, {{ wo.status }})
+              </option>
+            </select>
           </div>
 
           <div class="form-section">
-            <label class="section-title">退料明细项</label>
-            <div class="grid-form-row">
+            <label class="section-title">退料明细项（消除手填 UUID，级联选择）</label>
+            <div class="form-grid two-col" style="margin-bottom: 10px;">
+              <div class="form-item">
+                <label>退回物料 <span class="req">*</span></label>
+                <select v-model="returnForm.productId" class="form-select" required>
+                  <option value="">请选择退回物料</option>
+                  <option v-for="p in availableProducts" :key="p.id" :value="p.id">
+                    {{ p.sku }} - {{ p.name }} ({{ p.uom }})
+                  </option>
+                </select>
+              </div>
+              <div class="form-item">
+                <label>退料数量 <span class="req">*</span></label>
+                <input
+                  v-model="returnForm.returnQty"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  class="form-input font-mono"
+                  placeholder="退料数量 (如 2.00)"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="form-grid two-col">
+              <div class="form-item">
+                <label>退入仓库 <span class="req">*</span></label>
+                <select v-model="returnForm.warehouseId" class="form-select" required @change="handleReturnWarehouseChange">
+                  <option value="">请选择退入仓库</option>
+                  <option v-for="w in availableWarehouses" :key="w.id" :value="w.id">
+                    {{ w.code }} - {{ w.name }}
+                  </option>
+                </select>
+              </div>
+              <div class="form-item">
+                <label>退入库位 <span class="req">*</span></label>
+                <select v-model="returnForm.locationId" class="form-select font-mono" required :disabled="!returnForm.warehouseId">
+                  <option value="">{{ !returnForm.warehouseId ? '请先选择退入仓库' : '请选择库位' }}</option>
+                  <option v-for="l in filteredReturnLocations" :key="l.id" :value="l.id">
+                    {{ l.code }} - {{ l.name }} ({{ l.type }})
+                  </option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-item" style="margin-top: 10px;">
+              <label>退料原因 <span class="req">*</span></label>
               <input
-                v-model="returnForm.productId"
+                v-model="returnForm.reason"
                 type="text"
                 class="form-input"
-                placeholder="真实产品 UUID"
-                required
-              />
-              <input
-                v-model="returnForm.returnQty"
-                type="text"
-                class="form-input font-mono"
-                placeholder="退料数量 (如 2.00)"
-                required
-              />
-              <input
-                v-model="returnForm.warehouseId"
-                type="text"
-                class="form-input"
-                placeholder="真实仓库 UUID"
-                required
-              />
-              <input
-                v-model="returnForm.locationId"
-                type="text"
-                class="form-input font-mono"
-                placeholder="真实库位 UUID"
+                placeholder="如: 工单完工余料退回、来料不良退库..."
                 required
               />
             </div>
@@ -330,6 +406,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from "vue";
+import { useCommand } from "@/composables/useCommand";
+import CommandFeedback from "@/components/common/CommandFeedback.vue";
+import { useRoute } from "vue-router";
+import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
+import type { AllowedAction } from "../../types/common";
 import {
   PageHeader,
   FilterBar,
@@ -350,8 +431,12 @@ import {
   confirmMaterialIssue,
   createMaterialReturn,
   confirmMaterialReturn,
+  getWorkOrders,
 } from "../../api/manufacturing";
+import { getProducts, getWarehouses, getLocations } from "../../api/masterData";
+import type { Product, Warehouse, Location } from "../../types/inventory";
 
+const route = useRoute();
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 const activeTab = ref<"issue" | "return">("issue");
@@ -361,6 +446,14 @@ const statusFilter = ref("");
 
 const issueList = ref<MaterialIssueItem[]>([]);
 const returnList = ref<MaterialReturnItem[]>([]);
+
+const availableWorkOrders = ref<any[]>([]);
+const availableProducts = ref<Product[]>([]);
+const availableWarehouses = ref<Warehouse[]>([]);
+const availableLocations = ref<Location[]>([]);
+const movementOptionsKeyword = ref("");
+const movementOptionsError = ref("");
+const isMovementOptionsLoading = ref(false);
 
 const issueColumns: TableColumn[] = [
   { key: "issueNo", label: "领料单号", width: "180px" },
@@ -419,6 +512,7 @@ const issueForm = reactive({
   issueQty: "",
   warehouseId: "",
   locationId: "",
+  overageReason: "",
 });
 
 const createReturnModalVisible = ref(false);
@@ -428,9 +522,21 @@ const returnForm = reactive({
   returnQty: "",
   warehouseId: "",
   locationId: "",
+  reason: "工单完工余料退回",
 });
 
-const isSubmitting = ref(false);
+const filteredIssueLocations = computed(() => {
+  if (!issueForm.warehouseId) return [];
+  return availableLocations.value.filter((l) => String(l.warehouseId) === String(issueForm.warehouseId));
+});
+
+const filteredReturnLocations = computed(() => {
+  if (!returnForm.warehouseId) return [];
+  return availableLocations.value.filter((l) => String(l.warehouseId) === String(returnForm.warehouseId));
+});
+
+const { execute, retry, isExecuting, canRetry, lastError } = useCommand();
+const isSubmitting = isExecuting;
 
 const confirmDialog = reactive({
   visible: false,
@@ -441,15 +547,14 @@ const confirmDialog = reactive({
   targetId: "",
 });
 
-function isActionAllowed(item: any, action: string): boolean {
-  if (!item.allowedActions || item.allowedActions.length === 0) return true;
-  const match = item.allowedActions.find((a: any) => a.action === action);
-  return match ? match.enabled : true;
+// 替换为调用 actionGuard 的版本
+function isActionAllowed(item: { allowedActions?: AllowedAction[] | null }, action: string): boolean {
+  return checkAction(item.allowedActions, action);
 }
 
-function getActionDisabledReason(item: any, action: string): string | undefined {
-  const match = item.allowedActions?.find((a: any) => a.action === action);
-  return match && !match.enabled ? match.reason : undefined;
+// 替换为调用 actionGuard 的版本
+function getActionDisabledReason(item: { allowedActions?: AllowedAction[] | null }, action: string): string | undefined {
+  return getDisabledReason(item.allowedActions, action);
 }
 
 async function loadData() {
@@ -457,6 +562,70 @@ async function loadData() {
   issueList.value = [];
   returnList.value = [];
   viewState.value = "ready";
+}
+
+async function loadMovementOptions() {
+  isMovementOptionsLoading.value = true;
+  movementOptionsError.value = "";
+  try {
+    const keyword = movementOptionsKeyword.value.trim() || undefined;
+    const selectedWarehouseId = activeTab.value === "issue" ? issueForm.warehouseId : returnForm.warehouseId;
+    const [woRes, prodRes, whRes, locRes] = await Promise.allSettled([
+      getWorkOrders({ page: 1, size: 20, workOrderNo: keyword }),
+      getProducts({ page: 1, size: 20, keyword, status: "ACTIVE" }),
+      getWarehouses({ page: 1, size: 20, keyword, status: "ACTIVE" }),
+      selectedWarehouseId
+        ? getLocations({ page: 1, size: 20, keyword, warehouseId: selectedWarehouseId, status: "ACTIVE" })
+        : Promise.resolve(null),
+    ]);
+    if (woRes.status === "fulfilled") {
+      availableWorkOrders.value = woRes.value.data?.records || [];
+    }
+    if (prodRes.status === "fulfilled") {
+      availableProducts.value = prodRes.value.data?.records || [];
+    }
+    if (whRes.status === "fulfilled") {
+      availableWarehouses.value = whRes.value.data?.records || [];
+    }
+    if (locRes.status === "fulfilled") {
+      availableLocations.value = locRes.value?.data?.records || [];
+    } else {
+      availableLocations.value = [];
+    }
+    if (woRes.status === "rejected" || prodRes.status === "rejected" || whRes.status === "rejected" || locRes.status === "rejected") {
+      movementOptionsError.value = "部分主数据目录加载失败，请重试或缩小搜索条件";
+    }
+    // 搜索/切换页面后清理已经不在当前真实目录中的下游值，禁止把旧 UUID 提交给后端。
+    if (issueForm.productId && !availableProducts.value.some((item) => String(item.id) === String(issueForm.productId))) issueForm.productId = "";
+    if (returnForm.productId && !availableProducts.value.some((item) => String(item.id) === String(returnForm.productId))) returnForm.productId = "";
+    if (issueForm.warehouseId && !availableWarehouses.value.some((item) => String(item.id) === String(issueForm.warehouseId))) {
+      issueForm.warehouseId = "";
+      issueForm.locationId = "";
+    }
+    if (returnForm.warehouseId && !availableWarehouses.value.some((item) => String(item.id) === String(returnForm.warehouseId))) {
+      returnForm.warehouseId = "";
+      returnForm.locationId = "";
+    }
+  } catch (err: any) {
+    movementOptionsError.value = err?.message || "加载基础选项失败";
+    availableLocations.value = [];
+  } finally {
+    isMovementOptionsLoading.value = false;
+  }
+}
+
+/** 仓库变更后仅查询该仓真实活动库位，并清除失效下游值。 */
+async function handleIssueWarehouseChange() {
+  issueForm.locationId = "";
+  activeTab.value = "issue";
+  await loadMovementOptions();
+}
+
+/** 仓库变更后仅查询该仓真实活动库位，并清除失效下游值。 */
+async function handleReturnWarehouseChange() {
+  returnForm.locationId = "";
+  activeTab.value = "return";
+  await loadMovementOptions();
 }
 
 function switchTab(tab: "issue" | "return") {
@@ -473,19 +642,23 @@ function handleReset() {
 }
 
 function openCreateIssueModal() {
-  issueForm.workOrderId = "";
-  issueForm.productId = "";
-  issueForm.issueQty = "";
-  issueForm.warehouseId = "";
-  issueForm.locationId = "";
+  if (!issueForm.workOrderId && availableWorkOrders.value.length > 0) {
+    issueForm.workOrderId = String(availableWorkOrders.value[0].id);
+  }
+  if (!issueForm.productId && availableProducts.value.length > 0) {
+    issueForm.productId = String(availableProducts.value[0].id);
+  }
+  if (!issueForm.warehouseId && availableWarehouses.value.length > 0) {
+    issueForm.warehouseId = String(availableWarehouses.value[0].id);
+  }
+  void loadMovementOptions();
   createIssueModalVisible.value = true;
 }
 
 async function submitCreateIssue() {
   if (!issueForm.workOrderId || !issueForm.productId || !issueForm.issueQty || !issueForm.warehouseId || !issueForm.locationId) return;
-  isSubmitting.value = true;
   try {
-    await createMaterialIssue({
+    const created = await execute((key) => createMaterialIssue({
       workOrderId: issueForm.workOrderId,
       items: [
         {
@@ -495,30 +668,37 @@ async function submitCreateIssue() {
           issueQty: issueForm.issueQty,
         },
       ],
-    });
+      overageReason: issueForm.overageReason || undefined,
+    }, key), { onConflict: loadData });
+    if (!created?.data?.id) {
+      throw new Error("服务端未返回 materialIssueId，已阻止继续确认领料");
+    }
     createIssueModalVisible.value = false;
+    alert("领料单已成功创建！可在领料单列表中执行出库确认。");
     await loadData();
   } catch (err: any) {
     alert(`创建领料单失败：${err.message}`);
-  } finally {
-    isSubmitting.value = false;
-  }
+  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
 function openCreateReturnModal() {
-  returnForm.workOrderId = "";
-  returnForm.productId = "";
-  returnForm.returnQty = "";
-  returnForm.warehouseId = "";
-  returnForm.locationId = "";
+  if (!returnForm.workOrderId && availableWorkOrders.value.length > 0) {
+    returnForm.workOrderId = String(availableWorkOrders.value[0].id);
+  }
+  if (!returnForm.productId && availableProducts.value.length > 0) {
+    returnForm.productId = String(availableProducts.value[0].id);
+  }
+  if (!returnForm.warehouseId && availableWarehouses.value.length > 0) {
+    returnForm.warehouseId = String(availableWarehouses.value[0].id);
+  }
+  void loadMovementOptions();
   createReturnModalVisible.value = true;
 }
 
 async function submitCreateReturn() {
   if (!returnForm.workOrderId || !returnForm.productId || !returnForm.returnQty || !returnForm.warehouseId || !returnForm.locationId) return;
-  isSubmitting.value = true;
   try {
-    await createMaterialReturn({
+    const created = await execute((key) => createMaterialReturn({
       workOrderId: returnForm.workOrderId,
       items: [
         {
@@ -528,14 +708,17 @@ async function submitCreateReturn() {
           returnQty: returnForm.returnQty,
         },
       ],
-    });
+      reason: returnForm.reason,
+    }, key), { onConflict: loadData });
+    if (!created?.data?.id) {
+      throw new Error("服务端未返回 materialReturnId，已阻止继续确认退料");
+    }
     createReturnModalVisible.value = false;
+    alert("退料单已成功创建！可在退料单列表中执行退库确认。");
     await loadData();
   } catch (err: any) {
     alert(`创建退料单失败：${err.message}`);
-  } finally {
-    isSubmitting.value = false;
-  }
+  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
 function promptConfirmIssue(item: MaterialIssueItem) {
@@ -558,9 +741,9 @@ async function handleExecuteConfirm() {
   confirmDialog.loading = true;
   try {
     if (confirmDialog.type === "issue") {
-      await confirmMaterialIssue(confirmDialog.targetId);
+      await execute((key) => confirmMaterialIssue(confirmDialog.targetId, key), { onConflict: loadData });
     } else {
-      await confirmMaterialReturn(confirmDialog.targetId);
+      await execute((key) => confirmMaterialReturn(confirmDialog.targetId, key), { onConflict: loadData });
     }
     confirmDialog.visible = false;
     await loadData();
@@ -571,8 +754,20 @@ async function handleExecuteConfirm() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadData();
+  await loadMovementOptions();
+  if (route.query.workOrderId) {
+    const qWoId = String(route.query.workOrderId);
+    issueForm.workOrderId = qWoId;
+    returnForm.workOrderId = qWoId;
+    if (route.query.tab === "return") {
+      activeTab.value = "return";
+      openCreateReturnModal();
+    } else {
+      openCreateIssueModal();
+    }
+  }
 });
 </script>
 
@@ -755,6 +950,30 @@ onMounted(() => {
 .form-item label, .section-title {
   font-size: 12px;
   color: #94a3b8;
+}
+
+.options-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 6px;
+}
+
+.options-search-row label {
+  flex: 0 0 auto;
+}
+
+.options-search-row .form-input {
+  flex: 1;
+}
+
+.options-hint {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(30, 41, 59, 0.6);
+  font-size: 12px;
 }
 
 .req { color: #f87171; }

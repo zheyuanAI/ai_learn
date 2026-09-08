@@ -20,6 +20,11 @@ import type {
   SalesFulfillmentResult,
 } from "../types/sales";
 
+/** 为同一业务命令显式复用幂等键；未传时保留旧调用方兼容行为。 */
+function commandHeaders(idempotencyKey?: string) {
+  return idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined;
+}
+
 /**
  * 分页查询销售订单列表（返回持久化状态与派生履约状态）
  * 接口路径：GET /api/sales-orders
@@ -47,11 +52,12 @@ export async function getSalesOrderById(id: string | number): Promise<ApiRespons
  * 创建新销售订单（初始为 Draft 未提交状态）
  * 接口路径：POST /api/sales-orders
  */
-export async function createSalesOrder(payload: SalesOrderCreatePayload): Promise<ApiResponse<SalesOrder>> {
+export async function createSalesOrder(payload: SalesOrderCreatePayload, idempotencyKey?: string): Promise<ApiResponse<SalesOrder>> {
   return await request<SalesOrder>({
     url: "/api/sales-orders",
     method: "POST",
     data: payload,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -59,10 +65,11 @@ export async function createSalesOrder(payload: SalesOrderCreatePayload): Promis
  * 提交销售订单审核 (Draft -> Submitted)
  * 接口路径：POST /api/sales-orders/{id}/submit
  */
-export async function submitSalesOrder(id: string | number): Promise<ApiResponse<SalesOrder>> {
+export async function submitSalesOrder(id: string | number, idempotencyKey?: string): Promise<ApiResponse<SalesOrder>> {
   return await request<SalesOrder>({
     url: `/api/sales-orders/${id}/submit`,
     method: "POST",
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -70,10 +77,11 @@ export async function submitSalesOrder(id: string | number): Promise<ApiResponse
  * 审核通过销售订单 (Submitted -> Approved)
  * 接口路径：POST /api/sales-orders/{id}/approve
  */
-export async function approveSalesOrder(id: string | number): Promise<ApiResponse<SalesOrder>> {
+export async function approveSalesOrder(id: string | number, idempotencyKey?: string): Promise<ApiResponse<SalesOrder>> {
   return await request<SalesOrder>({
     url: `/api/sales-orders/${id}/approve`,
     method: "POST",
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -83,13 +91,15 @@ export async function approveSalesOrder(id: string | number): Promise<ApiRespons
  */
 export async function completeSalesOrder(
   id: string | number,
-  reasonOrPayload?: string | { completionReason: string }
+  reasonOrPayload?: string | { completionReason: string },
+  idempotencyKey?: string,
 ): Promise<ApiResponse<SalesFulfillmentResult>> {
   const data = typeof reasonOrPayload === "string" ? { completionReason: reasonOrPayload } : reasonOrPayload || { completionReason: "" };
   return await request<SalesFulfillmentResult>({
     url: `/api/sales-orders/${id}/complete`,
     method: "POST",
     data,
+    headers: commandHeaders(idempotencyKey),
   });
 }
 
@@ -99,7 +109,8 @@ export async function completeSalesOrder(
  */
 export async function releaseSalesReservation(
   orderId: string | number,
-  payload: SalesReservationReleasePayload
+  payload: SalesReservationReleasePayload,
+  idempotencyKey?: string,
 ): Promise<ApiResponse<SalesFulfillmentResult>> {
   return await request<SalesFulfillmentResult>({
     url: `/api/sales-orders/${orderId}/reservations/release`,
@@ -107,6 +118,7 @@ export async function releaseSalesReservation(
     data: {
       releaseLines: payload.releaseLines,
     },
+    headers: commandHeaders(idempotencyKey),
   });
 }
 export const releaseReservation = releaseSalesReservation;
@@ -130,15 +142,34 @@ export async function getPickTasks(query: SalesOrderQuery = {}): Promise<ApiResp
  */
 export async function confirmPickTask(
   operationId: string,
-  payload: PickTaskConfirmRequest
+  payload: PickTaskConfirmRequest,
+  idempotencyKey?: string,
 ): Promise<ApiResponse<SalesFulfillmentResult>> {
   return await request<SalesFulfillmentResult>({
     url: `/api/pick-tasks/${operationId}/confirm`,
     method: "POST",
     data: payload,
+    headers: commandHeaders(idempotencyKey),
   });
 }
-export const confirmDirectPick = confirmPickTask;
+
+/**
+ * 确认直接拣货（服务端分配 operationId）。
+ * 接口路径：POST /api/pick-tasks/confirm
+ * 响应中的 operationId 才是可追溯履约事实 ID。
+ */
+export async function confirmPickTaskWithServerId(
+  payload: PickTaskConfirmRequest,
+  idempotencyKey?: string,
+): Promise<ApiResponse<SalesFulfillmentResult>> {
+  return await request<SalesFulfillmentResult>({
+    url: "/api/pick-tasks/confirm",
+    method: "POST",
+    data: payload,
+    headers: commandHeaders(idempotencyKey),
+  });
+}
+export const confirmDirectPick = confirmPickTaskWithServerId;
 
 /**
  * 退回未发货拣货
@@ -147,15 +178,33 @@ export const confirmDirectPick = confirmPickTask;
  */
 export async function returnPickTask(
   operationId: string,
-  payload: PickTaskReturnRequest
+  payload: PickTaskReturnRequest,
+  idempotencyKey?: string,
 ): Promise<ApiResponse<SalesFulfillmentResult>> {
   return await request<SalesFulfillmentResult>({
     url: `/api/pick-tasks/${operationId}/return`,
     method: "POST",
     data: payload,
+    headers: commandHeaders(idempotencyKey),
   });
 }
-export const returnPick = returnPickTask;
+
+/**
+ * 退回未发货拣货（服务端分配 operationId）。
+ * 接口路径：POST /api/pick-tasks/return
+ */
+export async function returnPickTaskWithServerId(
+  payload: PickTaskReturnRequest,
+  idempotencyKey?: string,
+): Promise<ApiResponse<SalesFulfillmentResult>> {
+  return await request<SalesFulfillmentResult>({
+    url: "/api/pick-tasks/return",
+    method: "POST",
+    data: payload,
+    headers: commandHeaders(idempotencyKey),
+  });
+}
+export const returnPick = returnPickTaskWithServerId;
 
 /**
  * 销售发货确认（扣减企业总实物库存，释放业务预留，更新履约数量）
@@ -164,7 +213,8 @@ export const returnPick = returnPickTask;
  */
 export async function confirmSalesShipment(
   operationId: string,
-  payload: SalesShipmentConfirmPayload
+  payload: SalesShipmentConfirmPayload,
+  idempotencyKey?: string,
 ): Promise<ApiResponse<SalesFulfillmentResult>> {
   const requestBody = {
     salesOrderId: String(payload.salesOrderId),
@@ -180,6 +230,32 @@ export async function confirmSalesShipment(
     url: `/api/sales-shipments/${operationId}/confirm`,
     method: "POST",
     data: requestBody,
+    headers: commandHeaders(idempotencyKey),
   });
 }
-export const confirmShipment = confirmSalesShipment;
+
+/**
+ * 销售发货确认（服务端分配 operationId）。
+ * 接口路径：POST /api/sales-shipments/confirm
+ */
+export async function confirmSalesShipmentWithServerId(
+  payload: SalesShipmentConfirmPayload,
+  idempotencyKey?: string,
+): Promise<ApiResponse<SalesFulfillmentResult>> {
+  const requestBody = {
+    salesOrderId: String(payload.salesOrderId),
+    shipTime: payload.shipTime,
+    shipmentLines: (payload.shipmentLines || payload.lines || []).map((line) => ({
+      salesOrderLineId: String(line.salesOrderLineId),
+      productId: String(line.productId),
+      shipQty: String(line.shipQty),
+    })),
+  };
+  return await request<SalesFulfillmentResult>({
+    url: "/api/sales-shipments/confirm",
+    method: "POST",
+    data: requestBody,
+    headers: commandHeaders(idempotencyKey),
+  });
+}
+export const confirmShipment = confirmSalesShipmentWithServerId;

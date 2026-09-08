@@ -44,10 +44,93 @@ async (page) => {
     }
   }
 
+  // 动态读取当前账号可见菜单叶节点，避免把固定路径列表当成菜单覆盖率证据。
+  // 入参：当前登录页面；出参：包含 menuCode、请求路径、最终路径和结果的叶节点记录；流程：读取菜单树、递归过滤后逐页验证。
+  async function collectMenuLeaves() {
+    const menuResponse = await page.evaluate(async () => {
+      const token = localStorage.getItem("ai_learn_token");
+      const response = await fetch("/api/me/menus", {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const text = await response.text();
+      let body = null;
+      try {
+        body = text ? JSON.parse(text) : null;
+      } catch {
+        body = { raw: text };
+      }
+      return { status: response.status, body };
+    });
+
+    if (menuResponse.status !== 200) {
+      throw new Error(`菜单接口 HTTP ${menuResponse.status}`);
+    }
+
+    const root = Array.isArray(menuResponse.body)
+      ? menuResponse.body
+      : Array.isArray(menuResponse.body?.data)
+        ? menuResponse.body.data
+        : Array.isArray(menuResponse.body?.data?.items)
+          ? menuResponse.body.data.items
+          : [];
+    const leaves = [];
+
+    function visit(node) {
+      if (!node || node.visible === false || node.status === "DISABLED") {
+        return;
+      }
+      const children = Array.isArray(node.children) ? node.children : [];
+      const routePath = typeof node.routePath === "string" ? node.routePath.trim() : "";
+      if (routePath && children.length === 0) {
+        leaves.push({
+          menuCode: node.menuCode || node.code || "unknown",
+          requestedPath: routePath,
+          componentPath: node.componentPath || "",
+        });
+      }
+      children.forEach(visit);
+    }
+
+    root.forEach(visit);
+    if (leaves.length === 0) {
+      throw new Error("/api/me/menus 未返回可验证的可见叶节点");
+    }
+
+    const results = [];
+    for (const leaf of leaves) {
+      await page.goto(`${origin}${leaf.requestedPath}`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(150);
+      const finalPath = getUrlPathname(page.url());
+      const bodyText = await page.locator("body").innerText().catch(() => "");
+      const isForbidden = finalPath === "/forbidden" || /403|无权限|无权访问|没有操作权限/.test(bodyText);
+      const isNotFound = finalPath === "/404" || /404|页面不存在|未找到页面/.test(bodyText);
+      const result = finalPath === "/" ? "FAIL_SILENT_HOME" : isForbidden ? "FORBIDDEN" : isNotFound ? "NOT_FOUND" : "OK";
+      results.push({
+        menuCode: leaf.menuCode,
+        requestedPath: leaf.requestedPath,
+        finalPath,
+        result,
+      });
+    }
+
+    const silentHome = results.filter((item) => item.result === "FAIL_SILENT_HOME");
+    return { count: results.length, results, passed: silentHome.length === 0 };
+  }
+
   // 登录后页面可能仍在等待用户画像和动态菜单，先等待非登录路由稳定。
   if (getUrlPathname(page.url()) === "/login") {
-    await page.waitForURL((url) => getUrlPathname(url) !== "/login", { timeout: 15000 }).catch(() => {});
+    await page.waitForURL((url) => getUrlPathname(url) !== "/login", { timeout: 15000 });
   }
+
+  await check("MENU_LEAVES", "动态菜单叶节点必须有明确落点", async () => {
+    const report = await collectMenuLeaves();
+    if (!report.passed) {
+      const failed = report.results.filter((item) => item.result === "FAIL_SILENT_HOME");
+      throw new Error(`菜单叶节点静默回首页：${JSON.stringify(failed)}`);
+    }
+    return report;
+  });
 
   await check("F01", "采购菜单点击应进入正式采购订单页", async () => {
     await page.goto(`${origin}/`);

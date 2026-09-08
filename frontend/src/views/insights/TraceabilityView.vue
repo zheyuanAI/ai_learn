@@ -235,8 +235,8 @@
  * 5. 内置四态（Loading, Ready, Empty, Error）及模拟演练开关。
  */
 
-import { ref, reactive, onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { ref, reactive, onMounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import type {
   TraceabilityChainResult,
   TraceNodeType,
@@ -253,6 +253,7 @@ import EmptyState from "../../components/common/EmptyState.vue";
 import ErrorState from "../../components/common/ErrorState.vue";
 import TraceNodeCard from "./components/TraceNodeCard.vue";
 
+const route = useRoute();
 const router = useRouter();
 
 // 界面状态
@@ -341,8 +342,34 @@ function navigateToRoute(routePath: string) {
   router.push(routePath);
 }
 
+/**
+ * 从当前路由 Query 自动恢复实体类型与 ID，并自动执行全闭环追溯
+ */
+function syncRouteQuery() {
+  const rawType = (route.query.entry_type || route.query.entity_type || route.query.entityType || "") as string;
+  const rawId = (route.query.entity_id || route.query.entityId || route.query.id || "") as string;
+  const rawDir = (route.query.direction || "") as string;
+
+  if (rawType && ["SALES_ORDER", "WORK_ORDER", "DEVICE_ALARM", "INVENTORY_BATCH"].includes(rawType.toUpperCase())) {
+    queryParams.entryType = rawType.toUpperCase() as TraceNodeType;
+  }
+  if (rawDir && ["FORWARD", "REVERSE"].includes(rawDir.toUpperCase())) {
+    queryParams.direction = rawDir.toUpperCase() as TraceDirection;
+  }
+  if (rawId.trim()) {
+    queryParams.entityId = rawId.trim();
+    loadTraceChain();
+  } else {
+    viewState.value = "empty";
+  }
+}
+
 onMounted(() => {
-  viewState.value = "empty";
+  syncRouteQuery();
+});
+
+watch(() => route.query, () => {
+  syncRouteQuery();
 });
 </script>
 

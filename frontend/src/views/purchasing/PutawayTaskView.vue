@@ -1,5 +1,6 @@
 <template>
   <div class="putaway-task-view">
+    <CommandFeedback :error="lastError" :can-retry="canRetry" :executing="isExecuting" @retry="retry" />
     <!-- 统一页面头部 -->
     <PageHeader
       title="采购上架任务控制台"
@@ -63,9 +64,9 @@
       <!-- 移位路径 -->
       <template #route="{ row }">
         <div class="route-cell">
-          <span class="loc-code">{{ row.fromLocationCode }} (收货暂存)</span>
+          <span class="loc-code">{{ sourceLocations[String(row.fromLocationId)]?.code || row.fromLocationId }} (收货暂存)</span>
           <span class="route-arrow">➔</span>
-          <span class="loc-code target">{{ row.toLocationCode || '待选存储位' }}</span>
+          <span class="loc-code target">{{ row.toLocationCode || row.toLocationId || '待选存储位' }}</span>
         </div>
       </template>
 
@@ -108,8 +109,8 @@
             <label>目标常规存储库位 (Storage) <span class="req">*</span></label>
             <select v-model="targetLocationId" class="form-select" required>
               <option value="">请选择 Storage 库位</option>
-              <option v-for="location in storageLocations" :key="location.id" :value="location.id">
-                {{ location.code }} - {{ location.name }}
+              <option v-for="location in filteredStorageLocations" :key="location.id" :value="location.id">
+                {{ location.code }} - {{ location.name }} {{ location.warehouseName ? `(${location.warehouseName})` : '' }}
               </option>
             </select>
           </div>
@@ -134,7 +135,9 @@
  * 采购上架任务管理视图 (PutawayTaskView)
  * 职责：展示待上架任务，指定目标常规存储库位并确认实物上架
  */
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, computed, onMounted } from "vue";
+import { useCommand } from "@/composables/useCommand";
+import CommandFeedback from "@/components/common/CommandFeedback.vue";
 import PageHeader from "@/components/common/PageHeader.vue";
 import FilterBar from "@/components/common/FilterBar.vue";
 import DataTable, { type TableColumn } from "@/components/common/DataTable.vue";
@@ -145,7 +148,7 @@ import ErrorState from "@/components/common/ErrorState.vue";
 import type { ViewState } from "@/types/common";
 import type { PutawayTask } from "@/types/purchasing";
 import type { Location } from "@/types/inventory";
-import { getLocations } from "@/api/masterData";
+import { getLocationById, getLocations } from "@/api/masterData";
 import { getPutawayTasks, confirmPutawayTask } from "@/api/purchasing";
 
 const viewState = ref<ViewState>("loading");
@@ -153,6 +156,12 @@ const errorMessage = ref("");
 const taskList = ref<PutawayTask[]>([]);
 const totalCount = ref(0);
 const storageLocations = ref<Location[]>([]);
+const sourceLocations = ref<Record<string, Location>>({});
+
+/** 根据当前上架任务所属仓库，过滤出同仓 Storage 库位 */
+const filteredStorageLocations = computed(() => {
+  return selectedTask.value ? storageLocations.value : [];
+});
 
 const queryParams = reactive({
   page: 1,
@@ -177,7 +186,8 @@ const isConfirmModalOpen = ref(false);
 const selectedTask = ref<PutawayTask | null>(null);
 const targetLocationId = ref("");
 const putawayQtyInput = ref("");
-const isSubmitting = ref(false);
+const { execute, retry, isExecuting, canRetry, lastError } = useCommand();
+const isSubmitting = isExecuting;
 
 async function fetchPutawayTasks() {
   viewState.value = "loading";
@@ -190,6 +200,7 @@ async function fetchPutawayTasks() {
     });
     taskList.value = res.data.records;
     totalCount.value = res.data.total;
+    await loadSourceLocations(taskList.value);
     viewState.value = taskList.value.length === 0 ? "empty" : "ready";
   } catch (err: any) {
     console.error("[PutawayTaskView] 获取失败:", err);
@@ -210,46 +221,100 @@ function resetFilter() {
   fetchPutawayTasks();
 }
 
-function openConfirmModal(row: PutawayTask) {
+/**
+ * 用途：加载当前上架任务来源暂存位及同仓 Storage 库位。
+ * 入参：后端返回的真实上架任务；出参：无，更新当前弹窗可选库位。
+ * 流程：先按任务真实 fromLocationId 读取库位，再按返回的 warehouseId 查询启用 Storage；缺事实时保持空集合。
+ */
+async function loadSourceLocations(tasks: PutawayTask[]) {
+  const entries = await Promise.all(tasks
+    .filter((task) => task.fromLocationId)
+    .map(async (task) => {
+      try {
+        const response = await getLocationById(String(task.fromLocationId));
+        return [String(task.fromLocationId), response.data] as const;
+      } catch (error) {
+        console.error("[PutawayTaskView] 加载来源库位失败", error);
+        return null;
+      }
+    }));
+  sourceLocations.value = Object.fromEntries(entries.filter((entry): entry is readonly [string, Location] => Boolean(entry)));
+}
+
+async function loadStorageLocationsForTask(task: PutawayTask): Promise<boolean> {
+  if (!task.fromLocationId) {
+    storageLocations.value = [];
+    return false;
+  }
+  const source = sourceLocations.value[String(task.fromLocationId)];
+  if (!source || source.type !== "ReceivingStaging" || !source.warehouseId) {
+    storageLocations.value = [];
+    return false;
+  }
+  try {
+    const response = await getLocations({
+      page: 1,
+      size: 20,
+      warehouseId: source.warehouseId,
+      type: "Storage",
+      status: "ACTIVE",
+    });
+    storageLocations.value = response.data.records.filter(
+      (location) => String(location.warehouseId) === String(source.warehouseId)
+        && location.type === "Storage"
+        && location.status === "ACTIVE",
+    );
+    return storageLocations.value.length > 0;
+  } catch (error) {
+    storageLocations.value = [];
+    console.error("[PutawayTaskView] 加载同仓 Storage 库位失败", error);
+    return false;
+  }
+}
+
+async function openConfirmModal(row: PutawayTask) {
   selectedTask.value = row;
-  targetLocationId.value = row.toLocationId || "";
+  if (!(await loadStorageLocationsForTask(row))) {
+    targetLocationId.value = "";
+    alert("未找到该上架任务来源仓库下启用的 Storage 库位，请先维护真实库位。");
+    selectedTask.value = null;
+    return;
+  }
+  targetLocationId.value = row.toLocationId && filteredStorageLocations.value.some(
+    (location) => String(location.id) === String(row.toLocationId),
+  ) ? String(row.toLocationId) : "";
   putawayQtyInput.value = row.putawayQty;
   isConfirmModalOpen.value = true;
 }
 
 async function submitPutaway() {
   if (!selectedTask.value) return;
-  isSubmitting.value = true;
+  const task = selectedTask.value;
+  if (!targetLocationId.value || !filteredStorageLocations.value.some(
+    (location) => String(location.id) === String(targetLocationId.value),
+  )) {
+    alert("请选择当前来源仓库下真实、启用的 Storage 库位。");
+    return;
+  }
+  if (!putawayQtyInput.value || Number.parseFloat(putawayQtyInput.value) <= 0) {
+    alert("上架数量必须来自真实任务且大于 0。");
+    return;
+  }
   try {
-    await confirmPutawayTask(String(selectedTask.value.id), {
-      taskId: String(selectedTask.value.id),
+    await execute((key) => confirmPutawayTask(String(task.id), {
+      taskId: String(task.id),
       toLocationId: targetLocationId.value,
       putawayQty: putawayQtyInput.value,
-    });
+    }, key), { onConflict: fetchPutawayTasks });
     isConfirmModalOpen.value = false;
     await fetchPutawayTasks();
   } catch (err: any) {
     alert(err?.message || "上架确认失败");
-  } finally {
-    isSubmitting.value = false;
-  }
-}
-
-/**
- * 加载上架可选 Storage 库位，确认上架时提交真实 UUID。
- */
-async function loadStorageLocations() {
-  try {
-    const response = await getLocations({ page: 1, size: 200, type: "Storage", status: "ACTIVE" });
-    storageLocations.value = response.data.records;
-  } catch (error) {
-    console.error("[PutawayTaskView] 加载 Storage 库位失败", error);
-  }
+  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
 onMounted(() => {
   fetchPutawayTasks();
-  loadStorageLocations();
 });
 </script>
 

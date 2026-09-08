@@ -15,7 +15,7 @@
           <div class="rule-icon">🚚</div>
           <div class="rule-text">
             <strong>发货出库与库存扣减规则：</strong>
-            <span>确认发货将从发货暂存位（{{ order.shippingLocationCode || 'SHP-01' }}）移出货物，正式扣减企业实物在库库存，并将对应有效预留转入已释放（released_qty）。当全部订单行均满足 shipped_qty = ordered_qty 时，系统自动进入【已完成 (Completed / FullyShipped / Normal)】。</span>
+            <span>确认发货将从发货暂存位（{{ order.shippingLocationCode || '未返回真实库位' }}）移出货物，正式扣减企业实物在库库存，并将对应有效预留转入已释放（released_qty）。当全部订单行均满足 shipped_qty = ordered_qty 时，系统自动进入【已完成 (Completed / FullyShipped / Normal)】。</span>
           </div>
         </div>
 
@@ -41,10 +41,6 @@
           <div class="form-item">
             <label>物流运单号</label>
             <input v-model="trackingNo" type="text" class="form-input mono-text" placeholder="如: SF20260826001" />
-          </div>
-          <div class="form-item">
-            <label>后端履约操作 UUID <span class="req">*</span></label>
-            <input v-model="operationId" type="text" class="form-input mono-text" placeholder="输入真实 operationId" required />
           </div>
         </div>
 
@@ -151,7 +147,6 @@ const emit = defineEmits<{
 const shipTime = ref(new Date().toISOString().slice(0, 16));
 const carrierName = ref("顺丰冷链物流");
 const trackingNo = ref("");
-const operationId = ref("");
 const editableShipLines = ref<EditableShipLine[]>([]);
 
 watch(
@@ -180,7 +175,7 @@ function handleClose() {
 }
 
 function submitShipment() {
-  if (!props.order || !operationId.value) return;
+  if (!props.order) return;
 
   const linesToShip = editableShipLines.value.filter((l) => parseFloat(l.shipQty) > 0);
   if (linesToShip.length === 0) {
@@ -196,7 +191,6 @@ function submitShipment() {
   }
 
   const payload = {
-    operationId: operationId.value,
     salesOrderId: props.order.id,
     shipTime: shipTime.value.replace("T", " ") + ":00",
     carrierName: carrierName.value,
@@ -319,6 +313,12 @@ label {
 
 .req {
   color: #f87171;
+}
+
+.field-hint {
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .form-input,

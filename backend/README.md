@@ -18,6 +18,8 @@
 | `platform-core` | 10003 |
 | `platform-iot` | 10004 |
 
+Core / IoT 的 `dev` profile 与 S7 Facts 联调必须通过运行环境注入配对 HMAC，仓库不保存实际密钥；完整变量清单和手工启动命令见 `../runtime/README.md`。Gateway 的本地统一入口保持为 20001。
+
 ## 当前状态
 - **父工程与骨架**：已创建多模块父工程与各服务启动类，各服务均提供 `/internal/ping` 探活接口。
 - **platform-auth（阶段1基础能力与本轮修复中，阶段验收未完成）**：

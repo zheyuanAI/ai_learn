@@ -1,6 +1,7 @@
 <template>
   <div v-if="visible" class="detail-drawer-mask" @click.self="handleClose">
     <div class="detail-drawer">
+      <CommandFeedback :error="lastError" :can-retry="canRetry" :executing="isExecuting" @retry="retry" />
       <!-- 头部 -->
       <div class="drawer-header">
         <div class="header-info">
@@ -26,7 +27,18 @@
             </div>
           </div>
         </div>
-        <button type="button" class="btn-close" @click="handleClose">✕</button>
+        <div class="header-right-btns">
+          <button
+            v-if="order"
+            type="button"
+            class="btn-act-trace"
+            title="穿透前往全链路全闭环追溯中心"
+            @click="handleGoTrace"
+          >
+            <span>🔍 全链路追溯</span>
+          </button>
+          <button type="button" class="btn-close" @click="handleClose">✕</button>
+        </div>
       </div>
 
       <!-- 四态展示 -->
@@ -71,7 +83,7 @@
 
             <!-- 直接拣货 -->
             <button
-              v-if="isActionEnabled('pick')"
+              v-if="isActionEnabled('directPick')"
               type="button"
               class="btn-act btn-primary highlight-btn"
               :disabled="actionLoading"
@@ -105,7 +117,7 @@
 
             <!-- 退回未发货拣货 -->
             <button
-              v-if="isActionEnabled('return_pick')"
+              v-if="isActionEnabled('returnPick')"
               type="button"
               class="btn-act btn-warning"
               :disabled="actionLoading"
@@ -116,7 +128,7 @@
 
             <!-- 人工完成 -->
             <button
-              v-if="isActionEnabled('complete')"
+              v-if="isActionEnabled('manualComplete')"
               type="button"
               class="btn-act btn-danger"
               :disabled="actionLoading"
@@ -132,7 +144,7 @@
           <div class="meta-card">
             <span class="lbl">客户信息</span>
             <strong>{{ order.customerName }}</strong>
-            <span class="sub">{{ order.customerCode }} | 业务员: {{ order.owner || '陈敏' }}</span>
+            <span class="sub">{{ order.customerCode }} | 业务员: {{ order.owner || '未返回真实业务员' }}</span>
           </div>
           <div class="meta-card">
             <span class="lbl">计划发货日</span>
@@ -141,8 +153,8 @@
           </div>
           <div class="meta-card">
             <span class="lbl">出库仓库</span>
-            <strong>{{ order.warehouseName || '成品一仓' }}</strong>
-            <span class="sub">发货暂存库位: {{ order.shippingLocationCode || 'SHP-01' }}</span>
+            <strong>{{ order.warehouseName || '未返回仓库事实' }}</strong>
+            <span class="sub">发货暂存库位: {{ order.shippingLocationCode || '未返回真实库位' }}</span>
           </div>
         </div>
 
@@ -220,7 +232,7 @@
                   <td style="text-align: center;">
                     <div class="line-actions">
                       <button
-                        v-if="order.status === 'Approved' && parseFloat(line.unshippedQty) > 0 && parseFloat(line.orderedQty) > parseFloat(line.pickedQty)"
+                        v-if="isActionEnabled('directPick') && order.status === 'Approved' && parseFloat(line.unshippedQty) > 0 && parseFloat(line.orderedQty) > parseFloat(line.pickedQty)"
                         type="button"
                         class="btn-mini"
                         @click="openDirectPick(line)"
@@ -228,7 +240,7 @@
                         直接拣货
                       </button>
                       <button
-                        v-if="order.status === 'Approved' && parseFloat(line.shippingStagedQty) > 0"
+                        v-if="isActionEnabled('returnPick') && order.status === 'Approved' && parseFloat(line.shippingStagedQty) > 0"
                         type="button"
                         class="btn-mini btn-warn-mini"
                         @click="openReturnPickModal(line)"
@@ -277,7 +289,7 @@
         </div>
         <form class="modal-body" @submit.prevent="submitPick">
           <div class="rule-hint">
-            优先消耗未拣预留，不足部分自动预留；实物与预留同步移动至发货暂存位（SHP-01）。
+            优先消耗未拣预留，不足部分自动预留；实物与预留同步移动至后端返回的发货暂存位。
           </div>
           <div class="form-item">
             <label>物料信息</label>
@@ -291,10 +303,6 @@
                 {{ location.code }} ({{ location.name }})
               </option>
             </select>
-          </div>
-          <div class="form-item">
-            <label>后端履约操作 UUID <span class="req">*</span></label>
-            <input v-model="pickOperationId" type="text" class="form-input font-mono" placeholder="输入真实 operationId" required />
           </div>
           <div class="form-item">
             <label>本次拣货数量 <span class="req">*</span></label>
@@ -317,7 +325,7 @@
         </div>
         <form class="modal-body" @submit.prevent="submitReturnPick">
           <div class="rule-hint">
-            将发货暂存位（SHP-01）中未发货的实物及等量有效预留移回合法存储位，减少订单行 pickedQty。
+            将后端返回的发货暂存位中未发货的实物及等量有效预留移回合法存储位，减少订单行 pickedQty。
           </div>
           <div class="form-item">
             <label>退回目标库位 <span class="req">*</span></label>
@@ -327,10 +335,6 @@
                 {{ location.code }} ({{ location.name }})
               </option>
             </select>
-          </div>
-          <div class="form-item">
-            <label>后端履约操作 UUID <span class="req">*</span></label>
-            <input v-model="returnOperationId" type="text" class="form-input font-mono" placeholder="输入真实 operationId" required />
           </div>
           <div class="form-item">
             <label>退回数量 (最大: {{ selectedLineForReturn.shippingStagedQty }}) <span class="req">*</span></label>
@@ -388,11 +392,17 @@
 </template>
 
 <script setup lang="ts">
+import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
+import type { AllowedAction } from "../../types/common";
 /**
  * 销售订单详情抽屉组件 (SalesOrderDetailView)
  * 职责：并列展示生命周期、履约进度与完成方式；按行展示 5 个派生数量；严格依据 allowedActions 控制按钮
  */
 import { ref, watch } from "vue";
+import { ApiError } from "@/utils/request";
+import { useCommand } from "@/composables/useCommand";
+import CommandFeedback from "@/components/common/CommandFeedback.vue";
+import { useRouter } from "vue-router";
 import StatusBadge from "@/components/common/StatusBadge.vue";
 import QuantityText from "@/components/common/QuantityText.vue";
 import ErrorState from "@/components/common/ErrorState.vue";
@@ -403,6 +413,9 @@ import type { ViewState } from "@/types/common";
 import type { SalesOrder, SalesOrderLine } from "@/types/sales";
 import { stringSub, type Location } from "@/types/inventory";
 import { getLocations } from "@/api/masterData";
+
+const router = useRouter();
+
 import {
   getSalesOrderById,
   submitSalesOrder,
@@ -429,26 +442,37 @@ const emit = defineEmits<{
   (e: "update:visible", val: boolean): void;
   (e: "close"): void;
   (e: "refresh"): void;
+  (e: "pick-success"): void;
 }>();
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 const order = ref<SalesOrder | null>(null);
+const { execute, retry, isExecuting, canRetry, lastError } = useCommand();
 const actionLoading = ref(false);
 const sourceLocations = ref<Location[]>([]);
 const shippingLocationId = ref("");
+
+function handleGoTrace() {
+  if (!order.value) return;
+  router.push({
+    path: "/traceability",
+    query: {
+      entry_type: "SALES_ORDER",
+      entity_id: String(order.value.id),
+    },
+  });
+}
 
 // 弹窗状态
 const isPickModalOpen = ref(false);
 const selectedLineForPick = ref<SalesOrderLine | null>(null);
 const pickSourceLocationId = ref("");
-const pickOperationId = ref("");
 const pickQtyInput = ref("");
 
 const isReturnModalOpen = ref(false);
 const selectedLineForReturn = ref<SalesOrderLine | null>(null);
 const returnToLocationId = ref("");
-const returnOperationId = ref("");
 const returnQtyInput = ref("");
 const returnReason = ref("");
 
@@ -469,6 +493,17 @@ watch(
   { immediate: true }
 );
 
+/**
+ * 用途：把详情查询错误转换为可区分的页面文案。
+ * 入参：详情 API 抛出的错误对象；出参：面向用户的错误说明。
+ * 流程：优先按 HTTP 403/404 显示权限或资源错误，其余错误沿用后端消息。
+ */
+function detailLoadErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.httpStatus === 404) return "销售订单资源不存在或已被删除（404）。";
+  if (error instanceof ApiError && error.httpStatus === 403) return "您没有查看该销售订单的权限（403）。";
+  return error instanceof Error ? error.message : "网络请求异常";
+}
+
 async function fetchDetail() {
   if (!props.orderId) return;
   viewState.value = "loading";
@@ -480,16 +515,15 @@ async function fetchDetail() {
     viewState.value = "ready";
   } catch (err: any) {
     console.error("[SalesOrderDetailView] 获取失败:", err);
-    errorMessage.value = err?.message || "网络请求异常";
+    errorMessage.value = detailLoadErrorMessage(err);
     viewState.value = "error";
   }
 }
 
+// 替换为调用 actionGuard 的版本
 function isActionEnabled(actionKey: string): boolean {
   if (!order.value) return false;
-  if (!order.value.allowedActions) return true;
-  const act = order.value.allowedActions.find((a) => a.action === actionKey);
-  return act ? act.enabled : false;
+  return checkAction(order.value.allowedActions, actionKey);
 }
 
 function lifecycleBadgeType(status: string): any {
@@ -539,7 +573,7 @@ async function handleSubmit() {
   if (!order.value) return;
   actionLoading.value = true;
   try {
-    await submitSalesOrder(order.value.id);
+    await execute((key) => submitSalesOrder(order.value!.id, key), { onConflict: fetchDetail });
     await fetchDetail();
     emit("refresh");
   } catch (err: any) {
@@ -553,7 +587,7 @@ async function handleApprove() {
   if (!order.value) return;
   actionLoading.value = true;
   try {
-    await approveSalesOrder(order.value.id);
+    await execute((key) => approveSalesOrder(order.value!.id, key), { onConflict: fetchDetail });
     await fetchDetail();
     emit("refresh");
   } catch (err: any) {
@@ -570,27 +604,34 @@ function openDirectPick(line?: SalesOrderLine) {
   if (!line) return;
   selectedLineForPick.value = line;
   pickQtyInput.value = stringSub(line.orderedQty, line.pickedQty);
-  pickSourceLocationId.value = "";
-  pickOperationId.value = "";
+  pickSourceLocationId.value = line.sourceLocationId ? String(line.sourceLocationId) : "";
   isPickModalOpen.value = true;
 }
 
 async function submitPick() {
-  if (!order.value || !selectedLineForPick.value || !pickOperationId.value || !pickSourceLocationId.value || !shippingLocationId.value) return;
+  if (!order.value || !selectedLineForPick.value || !pickSourceLocationId.value || !shippingLocationId.value) return;
+  const currentOrder = order.value;
+  const line = selectedLineForPick.value;
   actionLoading.value = true;
   try {
-    await confirmDirectPick(pickOperationId.value, {
-      salesOrderId: String(order.value.id),
+    await execute(async (key) => {
+      const response = await confirmDirectPick({
+      salesOrderId: String(currentOrder.id),
       lines: [{
-        salesOrderLineId: String(selectedLineForPick.value.id),
+        salesOrderLineId: String(line.id),
         pickedQty: pickQtyInput.value,
         sourceLocationId: pickSourceLocationId.value,
         shippingLocationId: shippingLocationId.value,
       }],
-    });
-    isPickModalOpen.value = false;
-    await fetchDetail();
-    emit("refresh");
+      }, key);
+      if (!response?.data?.operationId) {
+        throw new Error("直接拣货响应未返回服务端 operationId，已停止后续页面跳转。");
+      }
+      isPickModalOpen.value = false;
+      await fetchDetail();
+      emit("refresh");
+      emit("pick-success");
+    }, { onConflict: fetchDetail });
   } catch (err: any) {
     alert(err?.message || "直接拣货失败");
   } finally {
@@ -605,26 +646,32 @@ function openReturnPickModal(line?: SalesOrderLine) {
   if (!line) return;
   selectedLineForReturn.value = line;
   returnQtyInput.value = line.shippingStagedQty;
-  returnToLocationId.value = "";
-  returnOperationId.value = "";
+  returnToLocationId.value = line.sourceLocationId ? String(line.sourceLocationId) : "";
   isReturnModalOpen.value = true;
 }
 
 async function submitReturnPick() {
-  if (!order.value || !selectedLineForReturn.value || !returnOperationId.value || !returnToLocationId.value) return;
+  if (!order.value || !selectedLineForReturn.value || !returnToLocationId.value) return;
+  const currentOrder = order.value;
+  const line = selectedLineForReturn.value;
   actionLoading.value = true;
   try {
-    await returnPick(returnOperationId.value, {
-      salesOrderId: String(order.value.id),
+    await execute(async (key) => {
+      const response = await returnPick({
+      salesOrderId: String(currentOrder.id),
       lines: [{
-        salesOrderLineId: String(selectedLineForReturn.value.id),
+        salesOrderLineId: String(line.id),
         returnQty: returnQtyInput.value,
         toLocationId: returnToLocationId.value,
       }],
-    });
-    isReturnModalOpen.value = false;
-    await fetchDetail();
-    emit("refresh");
+      }, key);
+      if (!response?.data?.operationId) {
+        throw new Error("拣货退回响应未返回服务端 operationId，已停止后续页面跳转。");
+      }
+      isReturnModalOpen.value = false;
+      await fetchDetail();
+      emit("refresh");
+    }, { onConflict: fetchDetail });
   } catch (err: any) {
     alert(err?.message || "退回失败");
   } finally {
@@ -635,10 +682,15 @@ async function submitReturnPick() {
 async function handleConfirmShipment(payload: any) {
   actionLoading.value = true;
   try {
-    await confirmShipment(payload.operationId, payload);
-    isShipmentOpen.value = false;
-    await fetchDetail();
-    emit("refresh");
+    await execute(async (key) => {
+      const response = await confirmShipment(payload, key);
+      if (!response?.data?.operationId) {
+        throw new Error("发货响应未返回服务端 operationId，已停止后续页面刷新。");
+      }
+      isShipmentOpen.value = false;
+      await fetchDetail();
+      emit("refresh");
+    }, { onConflict: fetchDetail });
   } catch (err: any) {
     alert(err?.message || "发货失败");
   } finally {
@@ -652,18 +704,31 @@ async function loadLocations() {
     sourceLocations.value = [];
     return;
   }
-  const response = await getLocations({ warehouseId: order.value.warehouseId, status: "ACTIVE", page: 1, size: 200 });
-  sourceLocations.value = response.data.records || [];
-  shippingLocationId.value = String(sourceLocations.value.find((location) => location.type === "ShippingStaging")?.id || "");
+  const [sourceResponse, shippingResponse] = await Promise.all([
+    getLocations({ warehouseId: order.value.warehouseId, type: "Storage", status: "ACTIVE", page: 1, size: 20 }),
+    getLocations({ warehouseId: order.value.warehouseId, type: "ShippingStaging", status: "ACTIVE", page: 1, size: 20 }),
+  ]);
+  sourceLocations.value = (sourceResponse.data.records || []).filter((location) =>
+    String(location.warehouseId) === String(order.value?.warehouseId)
+    && location.type === "Storage"
+    && location.status === "ACTIVE",
+  );
+  shippingLocationId.value = String((shippingResponse.data.records || []).find((location) =>
+    String(location.warehouseId) === String(order.value?.warehouseId)
+    && location.type === "ShippingStaging"
+    && location.status === "ACTIVE",
+  )?.id || "");
 }
 
 async function handleReleaseReservation(payload: any) {
   actionLoading.value = true;
   try {
-    await releaseReservation(payload.salesOrderId, payload);
-    isReservationDetailOpen.value = false;
-    await fetchDetail();
-    emit("refresh");
+    await execute(async (key) => {
+      await releaseReservation(payload.salesOrderId, payload, key);
+      isReservationDetailOpen.value = false;
+      await fetchDetail();
+      emit("refresh");
+    }, { onConflict: fetchDetail });
   } catch (err: any) {
     alert(err?.message || "释放预留失败");
   } finally {
@@ -690,12 +755,15 @@ async function executeManualComplete() {
   }
   actionLoading.value = true;
   try {
-    await completeSalesOrder(order.value.id, {
-      completionReason: manualCompleteReason.value,
-    });
-    isManualCompleteOpen.value = false;
-    await fetchDetail();
-    emit("refresh");
+    const currentOrder = order.value;
+    await execute(async (key) => {
+      await completeSalesOrder(currentOrder.id, {
+        completionReason: manualCompleteReason.value,
+      }, key);
+      isManualCompleteOpen.value = false;
+      await fetchDetail();
+      emit("refresh");
+    }, { onConflict: fetchDetail });
   } catch (err: any) {
     alert(err?.message || "人工完成失败");
   } finally {
@@ -1144,6 +1212,12 @@ label {
   color: #f87171;
 }
 
+.field-hint {
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .form-input,
 .form-select {
   background: rgba(30, 41, 59, 0.8);
@@ -1178,12 +1252,29 @@ label {
   outline: none;
 }
 
-@keyframes slide-in {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
+.header-right-btns {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-act-trace {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: rgba(14, 165, 233, 0.15);
+  border: 1px solid rgba(14, 165, 233, 0.4);
+  color: #38bdf8;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-act-trace:hover {
+  background: rgba(14, 165, 233, 0.3);
+  color: #ffffff;
 }
 </style>

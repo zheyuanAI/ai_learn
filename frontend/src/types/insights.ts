@@ -216,6 +216,8 @@ export interface DashboardCardData {
   sourceSummary: string;
   generatedAt?: string;
   sourceUpdatedAt?: string;
+  /** 不可用卡片对应的后端链路请求号，便于定位故障。 */
+  requestId?: string;
   stale?: boolean;
   staleSince?: string;
   error?: string;
@@ -291,12 +293,12 @@ export interface TraceabilityProjection {
  */
 export interface DashboardSummaryProjection {
   summary_type: string;
-  metrics: Record<string, any>;
+  metrics: Record<string, unknown>;
   time_range: string;
   source_summary?: string;
   generated_at?: string;
   source_updated_at?: string;
-  stale: boolean;
+  stale?: boolean;
   stale_since?: string;
   request_id?: string;
 }

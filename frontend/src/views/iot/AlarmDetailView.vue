@@ -2,10 +2,21 @@
   <div class="alarm-detail-container">
     <!-- 头部返回与导航 -->
     <div class="detail-top-nav">
-      <button type="button" class="btn-back" @click="$emit('back')">
+      <button type="button" class="btn-back" @click="handleBack">
         ‹ 返回告警列表
       </button>
       <div class="top-nav-actions">
+        <!-- 穿透全链路追溯中心 -->
+        <button
+          v-if="alarm"
+          type="button"
+          class="btn btn-secondary"
+          title="穿透前往全链路全闭环追溯中心"
+          @click="goToTraceability"
+        >
+          <span>🔍 全链路追溯</span>
+        </button>
+
         <!-- 确认告警 (受 allowedActions 约束) -->
         <button
           v-if="alarm && (alarm.status === 'Triggered' || alarm.status === 'RecoveredUnacked')"
@@ -58,15 +69,15 @@
         <div class="trigger-metric-strip">
           <div class="metric-block">
             <span class="lbl">监控指标：</span>
-            <span class="val font-mono">{{ alarm.metricCode || "spindle_temp" }}</span>
+            <span class="val font-mono">{{ alarm.metricCode || "未返回" }}</span>
           </div>
           <div class="metric-block">
             <span class="lbl">触发异常读数：</span>
-            <span class="val text-danger font-bold">{{ alarm.triggerMetricValue || "68.50 ℃" }}</span>
+            <span class="val text-danger font-bold">{{ alarm.triggerMetricValue || "未返回" }}</span>
           </div>
           <div class="metric-block">
             <span class="lbl">规则阈值判定：</span>
-            <span class="val font-mono text-warning">{{ alarm.triggerThreshold || "> 65.00 ℃" }}</span>
+            <span class="val font-mono text-warning">{{ alarm.triggerThreshold || "未返回" }}</span>
           </div>
         </div>
       </section>
@@ -248,7 +259,10 @@
 </template>
 
 <script setup lang="ts">
+import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
+import type { AllowedAction } from "../../types/common";
 import { ref, reactive, onMounted, watch } from "vue";
+import { useRouter } from "vue-router";
 import {
   StatusBadge,
   ErrorState,
@@ -268,9 +282,27 @@ const props = defineProps<{
   alarmId?: string;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (e: "back"): void;
 }>();
+
+const router = useRouter();
+
+function handleBack() {
+  emit("back");
+  router.push("/iot/alarms");
+}
+
+function goToTraceability() {
+  if (!alarm.value) return;
+  router.push({
+    path: "/traceability",
+    query: {
+      entry_type: "DEVICE_ALARM",
+      entity_id: alarm.value.id as string,
+    },
+  });
+}
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
@@ -307,10 +339,9 @@ function getAlarmStatusText(status?: AlarmLifecycleStatus): string {
   }
 }
 
+// 替换为调用 actionGuard 的版本
 function isActionAllowed(action: string): boolean {
-  if (!alarm.value?.allowedActions || alarm.value.allowedActions.length === 0) return true;
-  const match = alarm.value.allowedActions.find((a) => a.action === action);
-  return match ? match.enabled : true;
+  return checkAction(alarm.value?.allowedActions, action);
 }
 
 async function loadAlarmData() {

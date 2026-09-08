@@ -1,13 +1,19 @@
 <template>
   <div class="manufacturing-view-container">
-    <!-- 统一页面头部 -->
+    <CommandFeedback :error="lastError" :can-retry="canRetry" :executing="isExecuting" @retry="retry" />
+    <!-- 统一页面头部（新建派工单入口严格受 mes:dispatch:manage 权限约束，修复 F03） -->
     <PageHeader
       title="生产派工 (Dispatch) 管理"
       tag="MES / DISPATCH"
       description="将已下达工单中的工序任务、派工数量分配给现场操作员及机台设备。下达派工仅表达安排生效，不代表现场已实际开工。"
     >
       <template #actions>
-        <button type="button" class="btn btn-primary" @click="openCreateModal">
+        <button
+          v-if="hasPermission('mes:dispatch:manage')"
+          type="button"
+          class="btn btn-primary"
+          @click="openCreateModal"
+        >
           <span class="btn-icon">＋</span>
           <span>新建派工单</span>
         </button>
@@ -70,7 +76,7 @@
       <template #operationId="{ row }">
         <div class="op-cell">
           <span class="op-title">{{ row.operationName }}</span>
-          <span class="op-no font-mono text-muted">工序序号: #{{ row.operationNo || 10 }}</span>
+              <span class="op-no font-mono text-muted">工序序号: #{{ row.operationNo ?? "待返回" }}</span>
         </div>
       </template>
 
@@ -115,7 +121,17 @@
           >
             下达
           </button>
-          <span v-else class="text-muted font-xs">无需操作</span>
+          <!-- 前往执行 (Released -> Executions) -->
+          <button
+            v-else-if="row.status === 'Released'"
+            type="button"
+            class="btn-text text-primary font-bold"
+            title="前往工序执行页面并开始加工"
+            @click="goToExecution(row)"
+          >
+            前往执行
+          </button>
+          <span v-else class="text-muted font-xs">已执行</span>
         </div>
       </template>
     </DataTable>
@@ -129,45 +145,56 @@
         </div>
 
         <form class="modal-body" @submit.prevent="submitCreateDispatch">
+          <div v-if="isLoadingOptions" class="text-muted text-sm" style="margin-bottom: 8px;">
+            ⏳ 正在拉取已下达工单与设备台账...
+          </div>
           <div class="form-grid two-col">
             <div class="form-item">
-              <label>关联工单编号/ID <span class="req">*</span></label>
-              <input
+              <label>关联已下达工单 <span class="req">*</span></label>
+              <select
                 v-model="createForm.workOrderId"
-                type="text"
-                class="form-input font-mono"
-                placeholder="输入真实工单 UUID"
+                class="form-select"
                 required
-              />
+                @change="onWorkOrderChange"
+              >
+                <option value="">请选择已下达工单 (Released)</option>
+                <option v-for="wo in releasedWorkOrders" :key="wo.id" :value="wo.id">
+                  {{ wo.workOrderNo || wo.woNo }} - {{ wo.productName || '工单' }} (计划: {{ wo.plannedQty }}件)
+                </option>
+              </select>
             </div>
             <div class="form-item">
-              <label>关联工序 ID/名称 <span class="req">*</span></label>
-              <input
+              <label>指派工序步骤 <span class="req">*</span></label>
+              <select
                 v-model="createForm.operationId"
-                type="text"
-                class="form-input font-mono"
-                placeholder="输入真实工序 UUID"
+                class="form-select"
                 required
-              />
+                :disabled="!createForm.workOrderId || isLoadingOperations"
+              >
+                <option value="">
+                  {{ !createForm.workOrderId ? '请先选择左侧工单' : isLoadingOperations ? '正在加载工序...' : availableOperations.length === 0 ? '该工单暂无可用工序' : '请选择执行工序' }}
+                </option>
+                <option v-for="op in availableOperations" :key="op.id" :value="op.id">
+                  #{{ op.operationNo }} - {{ op.operationName }} (标准工时: {{ op.standardTimeMinutes || 0 }}分)
+                </option>
+              </select>
             </div>
           </div>
 
           <div class="form-grid two-col">
             <div class="form-item">
-              <label>派工指派操作工 <span class="req">*</span></label>
-              <input
-                v-model="createForm.operatorId"
-                type="text"
-                class="form-input"
-                placeholder="输入真实操作员 UUID"
-                required
-              />
+              <label>责任操作工 <span class="req">*</span></label>
+              <div class="selector-unavailable" role="status">
+                受控同租户操作员目录未提供，派工创建已阻止。请先由平台管理员确认最小只读人员目录契约。
+              </div>
             </div>
             <div class="form-item">
               <label>派工指派数量 <span class="req">*</span></label>
               <input
                 v-model="createForm.dispatchQty"
-                type="text"
+                type="number"
+                min="0.01"
+                step="0.01"
                 class="form-input font-mono"
                 placeholder="例如 100.00"
                 required
@@ -176,18 +203,18 @@
           </div>
 
           <div class="form-item">
-            <label>指定加工设备 (可选，未指定为纯手工工序)</label>
-            <input
-              v-model="createForm.deviceId"
-              type="text"
-              class="form-input font-mono"
-              placeholder="输入真实设备 UUID（可选）"
-            />
+            <label>指定加工设备 (可选，未指定为人工通用工位)</label>
+            <select v-model="createForm.deviceId" class="form-select">
+              <option value="">人工通用工位 (无需专用设备)</option>
+              <option v-for="dev in availableDevices" :key="dev.id" :value="dev.id">
+                {{ dev.deviceCode }} - {{ dev.deviceName }} ({{ dev.status || 'ACTIVE' }})
+              </option>
+            </select>
           </div>
 
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" @click="createModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
+            <button type="submit" class="btn btn-primary" :disabled="isSubmitting || !operatorDirectoryAvailable">
               {{ isSubmitting ? "创建中..." : "保存派工单 (Draft)" }}
             </button>
           </div>
@@ -208,6 +235,16 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
+import { useCommand } from "@/composables/useCommand";
+import CommandFeedback from "@/components/common/CommandFeedback.vue";
+import { useRoute, useRouter } from "vue-router";
+import { usePermission } from "../../composables/usePermission";
+import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
+import type { AllowedAction } from "../../types/common";
+
+const { hasPermission } = usePermission();
+const route = useRoute();
+const router = useRouter();
 import {
   PageHeader,
   FilterBar,
@@ -224,7 +261,14 @@ import type {
   DispatchOrderCreateRequest,
   DispatchOrderStatus,
 } from "../../types/manufacturing";
-import { getDispatchOrders, createDispatchOrder, releaseDispatchOrder } from "../../api/manufacturing";
+import {
+  getDispatchOrders,
+  createDispatchOrder,
+  releaseDispatchOrder,
+  getWorkOrders,
+  getRoutingById,
+} from "../../api/manufacturing";
+import { getDevices } from "../../api/iot";
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
@@ -246,11 +290,23 @@ const columns: TableColumn[] = [
   { key: "operatorId", label: "责任操作工", width: "120px" },
   { key: "deviceId", label: "分配设备", width: "160px" },
   { key: "status", label: "状态", width: "110px", align: "center" },
-  { key: "actions", label: "操作", width: "100px", align: "center" },
+  { key: "actions", label: "操作", width: "130px", align: "center" },
 ];
 
 const createModalVisible = ref(false);
-const isSubmitting = ref(false);
+const { execute, retry, isExecuting, canRetry, lastError } = useCommand();
+const isSubmitting = isExecuting;
+const isLoadingOptions = ref(false);
+const isLoadingOperations = ref(false);
+
+const releasedWorkOrders = ref<any[]>([]);
+const availableOperations = ref<any[]>([]);
+const availableDevices = ref<any[]>([]);
+
+// 当前 Auth 仅确认存在 auth:user:manage 管理接口，未确认面向生产角色的同租户只读目录。
+// 在用户确认最小目录契约前保持阻塞，禁止用固定 UUID 或管理员接口伪造操作工选项。
+const operatorDirectoryAvailable = false;
+
 const createForm = reactive<DispatchOrderCreateRequest>({
   workOrderId: "",
   operationId: "",
@@ -265,15 +321,14 @@ const releaseConfirm = reactive({
   item: null as DispatchOrderItem | null,
 });
 
-function isActionAllowed(item: DispatchOrderItem, action: string): boolean {
-  if (!item.allowedActions || item.allowedActions.length === 0) return true;
-  const match = item.allowedActions.find((a) => a.action === action);
-  return match ? match.enabled : true;
+// 使用 actionGuard 统一权限判断逻辑
+function isActionAllowed(item: { allowedActions?: AllowedAction[] | null }, action: string): boolean {
+  return checkAction(item.allowedActions, action);
 }
 
-function getActionDisabledReason(item: DispatchOrderItem, action: string): string | undefined {
-  const match = item.allowedActions?.find((a) => a.action === action);
-  return match && !match.enabled ? match.reason : undefined;
+// 使用 actionGuard 统一获取禁用原因逻辑
+function getActionDisabledReason(item: { allowedActions?: AllowedAction[] | null }, action: string): string | undefined {
+  return getDisabledReason(item.allowedActions, action);
 }
 
 async function fetchDispatchList() {
@@ -323,27 +378,100 @@ function handlePageChange(page: number) {
   fetchDispatchList();
 }
 
-function openCreateModal() {
+async function openCreateModal() {
   createForm.workOrderId = "";
   createForm.operationId = "";
+  // 操作员目录尚未具备受控只读契约，保持空值并阻止提交。
   createForm.operatorId = "";
   createForm.dispatchQty = "";
   createForm.deviceId = "";
+  availableOperations.value = [];
   createModalVisible.value = true;
+  await loadDispatchModalOptions();
+}
+
+/**
+ * 拉取已下达工单与设备台账选项
+ */
+async function loadDispatchModalOptions() {
+  isLoadingOptions.value = true;
+  try {
+    const [woRes, devRes] = await Promise.allSettled([
+      getWorkOrders({ page: 1, size: 20, status: "Released" }),
+      getDevices({ page: 1, size: 20 }),
+    ]);
+
+    if (woRes.status === "fulfilled") {
+      const records = woRes.value.data?.records || [];
+      // 派工只允许选择后端明确返回的 Released 工单，不用其他状态冒充可派工来源。
+      releasedWorkOrders.value = records.filter((w: any) => w.status === "Released");
+    }
+
+    if (devRes.status === "fulfilled") {
+      availableDevices.value = devRes.value.data?.records || [];
+    }
+  } catch (err) {
+    console.error("[DispatchView] 加载派工建单选项失败:", err);
+  } finally {
+    isLoadingOptions.value = false;
+  }
+}
+
+/**
+ * 当所选工单变动时，自动清空旧工序并拉取该工单锁定 Routing 的有效工序列表
+ */
+async function onWorkOrderChange() {
+  createForm.operationId = "";
+  availableOperations.value = [];
+  if (!createForm.workOrderId) return;
+
+  const selectedWo = releasedWorkOrders.value.find((w: any) => String(w.id) === String(createForm.workOrderId));
+  if (!selectedWo) return;
+
+  // 默认联动填入计划数量
+  if (selectedWo.plannedQty) {
+    createForm.dispatchQty = String(selectedWo.plannedQty);
+  }
+
+  if (!selectedWo.routingId) {
+    console.warn("[DispatchView] 该工单未关联有效的工艺路线 (routingId 为空)");
+    return;
+  }
+
+  isLoadingOperations.value = true;
+  try {
+    const routingRes = await getRoutingById(selectedWo.routingId);
+    if (routingRes.data && routingRes.data.operations) {
+      availableOperations.value = routingRes.data.operations;
+      if (availableOperations.value.length > 0) {
+        createForm.operationId = (availableOperations.value[0].id || "") as string;
+      }
+    }
+  } catch (err) {
+    console.error("[DispatchView] 加载工艺路线工序失败:", err);
+  } finally {
+    isLoadingOperations.value = false;
+  }
 }
 
 async function submitCreateDispatch() {
+  if (!operatorDirectoryAvailable) {
+    alert("当前没有受控的同租户操作员目录，派工创建已阻止；请先确认最小只读人员目录契约。");
+    return;
+  }
   if (!createForm.workOrderId || !createForm.operationId || !createForm.operatorId || !createForm.dispatchQty) return;
-  isSubmitting.value = true;
   try {
-    await createDispatchOrder(createForm);
-    createModalVisible.value = false;
-    await fetchDispatchList();
+    await execute(async (key) => {
+      const created = await createDispatchOrder(createForm, key);
+      if (!created?.data?.id) {
+        throw new Error("服务端未返回 dispatchOrderId，已阻止继续派工");
+      }
+      createModalVisible.value = false;
+      await fetchDispatchList();
+    }, { onConflict: fetchDispatchList });
   } catch (err: any) {
     alert(`创建派工单失败：${err.message}`);
-  } finally {
-    isSubmitting.value = false;
-  }
+  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
 function promptRelease(item: DispatchOrderItem) {
@@ -355,9 +483,11 @@ async function handleConfirmRelease() {
   if (!releaseConfirm.item) return;
   releaseConfirm.loading = true;
   try {
-    await releaseDispatchOrder(releaseConfirm.item.id as string);
-    releaseConfirm.visible = false;
-    await fetchDispatchList();
+    await execute(async (key) => {
+      await releaseDispatchOrder(releaseConfirm.item!.id as string, key);
+      releaseConfirm.visible = false;
+      await fetchDispatchList();
+    }, { onConflict: fetchDispatchList });
   } catch (err: any) {
     alert(`下达失败：${err.message}`);
   } finally {
@@ -365,8 +495,23 @@ async function handleConfirmRelease() {
   }
 }
 
-onMounted(() => {
+function goToExecution(row: DispatchOrderItem) {
+  router.push({
+    path: "/mes/executions",
+    query: {
+      dispatchOrderId: String(row.id),
+      workOrderId: String(row.workOrderId),
+    },
+  });
+}
+
+onMounted(async () => {
   fetchDispatchList();
+  if (route.query.workOrderId) {
+    await openCreateModal();
+    createForm.workOrderId = String(route.query.workOrderId);
+    await onWorkOrderChange();
+  }
 });
 </script>
 
@@ -522,6 +667,16 @@ onMounted(() => {
 .form-item label {
   font-size: 12px;
   color: #94a3b8;
+}
+
+.selector-unavailable {
+  border: 1px dashed rgba(248, 113, 113, 0.55);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #fca5a5;
+  background: rgba(127, 29, 29, 0.18);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .req {

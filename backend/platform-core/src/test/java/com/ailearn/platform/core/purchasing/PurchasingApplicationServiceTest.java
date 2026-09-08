@@ -170,6 +170,20 @@ class PurchasingApplicationServiceTest {
     }
 
     @Test
+    void serverAssignedReceiptIdIsIndependentAndIdempotent() {
+        PurchaseOrderView approved = approvedOrder("PO-002-SERVER-ID", "3");
+        PurchaseReceiptConfirmRequest request = receiptRequest(approved, "3", "1", "2", "包装破损");
+
+        PurchaseReceiptView first = service.confirmReceipt(request, "receipt-server-id");
+        PurchaseReceiptView replay = service.confirmReceipt(request, "receipt-server-id");
+
+        assertNotEquals(approved.getId(), first.getId());
+        assertEquals(first.getId(), replay.getId());
+        assertEquals(1, repository.receipts.size());
+        verify(inventoryCommandService, times(1)).increase(any(InventoryIncreaseCommand.class));
+    }
+
+    @Test
     void allRejectedCreatesReceiptButDoesNotIncreaseInventoryOrReceivedTotal() {
         PurchaseOrderView approved = approvedOrder("PO-003", "10");
         PurchaseReceiptConfirmRequest request = receiptRequest(approved, "10", "10", "0", "型号错误");

@@ -1,6 +1,7 @@
 <template>
   <div v-if="visible" class="detail-drawer-mask" @click.self="handleClose">
     <div class="detail-drawer">
+      <CommandFeedback :error="lastError" :can-retry="canRetry" :executing="isExecuting" @retry="retry" />
       <!-- 头部 -->
       <div class="drawer-header">
         <div class="header-info">
@@ -17,7 +18,18 @@
             </span>
           </div>
         </div>
-        <button type="button" class="btn-close" @click="handleClose">✕</button>
+        <div class="header-right-btns">
+          <button
+            v-if="order"
+            type="button"
+            class="btn-act-trace"
+            title="穿透前往全链路全闭环追溯中心"
+            @click="handleGoTrace"
+          >
+            <span>🔍 全链路追溯</span>
+          </button>
+          <button type="button" class="btn-close" @click="handleClose">✕</button>
+        </div>
       </div>
 
       <!-- 四态展示 -->
@@ -109,12 +121,14 @@
           </div>
           <div class="meta-card">
             <span class="lbl">质量隔离库位</span>
-            <span class="loc-code">{{ order.qualityHoldLocationCode || 'QH-01' }}</span>
+            <span v-if="order.qualityHoldLocationCode" class="loc-code">{{ order.qualityHoldLocationCode }}</span>
+            <span v-else class="text-muted text-sm">待到货分配</span>
             <span class="sub">实际到货接管进入此库位</span>
           </div>
           <div class="meta-card">
             <span class="lbl">收货暂存过渡位</span>
-            <span class="loc-code">{{ order.receivingStagingLocationCode || 'RS-01' }}</span>
+            <span v-if="order.receivingStagingLocationCode" class="loc-code">{{ order.receivingStagingLocationCode }}</span>
+            <span v-else class="text-muted text-sm">待质检放行后分配</span>
             <span class="sub">质检放行后上架前库位</span>
           </div>
         </div>
@@ -246,11 +260,17 @@
 </template>
 
 <script setup lang="ts">
+import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
+import type { AllowedAction } from "../../types/common";
 /**
  * 采购订单详情抽屉组件 (PurchaseOrderDetailView)
  * 职责：展示采购订单生命周期、明细数量不变量、操作权限入口与审计时间线
  */
 import { ref, watch } from "vue";
+import { ApiError } from "@/utils/request";
+import { useCommand } from "@/composables/useCommand";
+import CommandFeedback from "@/components/common/CommandFeedback.vue";
+import { useRouter } from "vue-router";
 import StatusBadge from "@/components/common/StatusBadge.vue";
 import QuantityText from "@/components/common/QuantityText.vue";
 import ErrorState from "@/components/common/ErrorState.vue";
@@ -263,8 +283,10 @@ import {
   submitPurchaseOrder,
   approvePurchaseOrder,
   completePurchaseOrder,
-  confirmPurchaseReceipt,
+  confirmPurchaseReceiptWithServerId,
 } from "@/api/purchasing";
+
+const router = useRouter();
 
 const props = withDefaults(
   defineProps<{
@@ -286,6 +308,7 @@ const emit = defineEmits<{
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 const order = ref<PurchaseOrder | null>(null);
+const { execute, retry, isExecuting, canRetry, lastError } = useCommand();
 const actionLoading = ref(false);
 
 const isReceiptConfirmOpen = ref(false);
@@ -304,6 +327,17 @@ watch(
   { immediate: true }
 );
 
+/**
+ * 用途：把详情查询错误转换为可区分的页面文案。
+ * 入参：详情 API 抛出的错误对象；出参：面向用户的错误说明。
+ * 流程：优先按 HTTP 403/404 显示权限或资源错误，其余错误沿用后端消息。
+ */
+function detailLoadErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.httpStatus === 404) return "采购订单资源不存在或已被删除（404）。";
+  if (error instanceof ApiError && error.httpStatus === 403) return "您没有查看该采购订单的权限（403）。";
+  return error instanceof Error ? error.message : "网络请求异常";
+}
+
 async function fetchDetail() {
   if (!props.orderId) return;
   viewState.value = "loading";
@@ -314,16 +348,32 @@ async function fetchDetail() {
     viewState.value = "ready";
   } catch (err: any) {
     console.error("[PurchaseOrderDetailView] 获取失败:", err);
-    errorMessage.value = err?.message || "网络请求异常";
+    errorMessage.value = detailLoadErrorMessage(err);
     viewState.value = "error";
   }
 }
 
+/**
+ * 用途：一键穿透直达全链路追溯中心
+ * 入参：当前采购订单 ID (order.id)
+ * 出参：无；通过路由导航跳转 /traceability
+ */
+function handleGoTrace() {
+  if (!order.value?.id) return;
+  router.push({
+    path: "/traceability",
+    query: {
+      entry_type: "PURCHASE_ORDER",
+      entity_id: String(order.value.id),
+      direction: "FORWARD",
+    },
+  });
+}
+
+// 替换为调用 actionGuard 的版本
 function isActionEnabled(actionKey: string): boolean {
   if (!order.value) return false;
-  if (!order.value.allowedActions) return true;
-  const act = order.value.allowedActions.find((a) => a.action === actionKey);
-  return act ? act.enabled : false;
+  return checkAction(order.value.allowedActions, actionKey);
 }
 
 function statusBadgeType(status: string): any {
@@ -355,45 +405,64 @@ function handleClose() {
 
 async function handleSubmitOrder() {
   if (!order.value) return;
-  actionLoading.value = true;
   try {
-    await submitPurchaseOrder(order.value.id);
+    await execute((key) => submitPurchaseOrder(order.value!.id, key), { onConflict: fetchDetail });
     await fetchDetail();
     emit("refresh");
   } catch (err: any) {
     alert(err?.message || "提交失败");
-  } finally {
-    actionLoading.value = false;
-  }
+  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
 async function handleApproveOrder() {
   if (!order.value) return;
-  actionLoading.value = true;
   try {
-    await approvePurchaseOrder(order.value.id);
+    await execute((key) => approvePurchaseOrder(order.value!.id, key), { onConflict: fetchDetail });
     await fetchDetail();
     emit("refresh");
   } catch (err: any) {
     alert(err?.message || "审核失败");
-  } finally {
-    actionLoading.value = false;
-  }
+  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
 async function handleConfirmReceipt(payload: any) {
-  actionLoading.value = true;
   try {
-    const { receiptId, ...requestPayload } = payload;
-    await confirmPurchaseReceipt(receiptId, requestPayload);
+    const { receiptId: _ignoredClientId, ...requestPayload } = payload;
+    // 修改：收货事实 ID由服务端按幂等键分配，客户端不能用订单号、订单行 ID或随机 UUID代替。
+    const receiptResponse = await execute((key) => confirmPurchaseReceiptWithServerId(requestPayload, key), { onConflict: fetchDetail });
     isReceiptConfirmOpen.value = false;
     await fetchDetail();
     emit("refresh");
+
+    // 修改用途：质检必须沿收货接口返回的独立 ID 继续，禁止把提交载荷或订单行 ID 当作收货事实。
+    const persistedReceipt = receiptResponse?.data;
+    const returnedReceiptId = String(persistedReceipt?.id || "");
+    const returnedReceiptLineId = String(persistedReceipt?.lines?.[0]?.id || "");
+    if (!returnedReceiptId || !returnedReceiptLineId) {
+      throw new Error("收货接口未返回 receiptId 或收货行 ID，已停止进入质检流程。");
+    }
+
+    // 成功提示并引导进入质检（修复 F04）
+    const poNo = order.value?.poNo || "";
+    const orderId = String(order.value?.id || "");
+    if (confirm(`采购到货验收成功！实收货物已送入 QualityHold 质量隔离位。\n\n订单号: ${poNo}\n收货凭证号: ${payload.receiptNo || returnedReceiptId}\n\n是否立即前往【采购到货质检】录入检验事实？`)) {
+      router.push({
+        path: "/purchasing/quality",
+        query: {
+          receiptId: returnedReceiptId,
+          receiptLineId: returnedReceiptLineId,
+          orderId,
+          poNo,
+          warehouseId: String(order.value?.lines?.find(
+            (line) => String(line.id) === String(persistedReceipt.lines[0].purchaseOrderLineId),
+          )?.targetWarehouseId || ""),
+          productId: String(persistedReceipt.lines[0].productId || ""),
+        },
+      });
+    }
   } catch (err: any) {
     alert(err?.message || "收货确认失败");
-  } finally {
-    actionLoading.value = false;
-  }
+  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
 async function handleConfirmManualComplete() {
@@ -402,20 +471,17 @@ async function handleConfirmManualComplete() {
     alert("必须填写人工完成原因！");
     return;
   }
-  actionLoading.value = true;
   try {
-    await completePurchaseOrder(order.value.id, {
+    await execute((key) => completePurchaseOrder(order.value!.id, {
       completionReason: manualCompleteReason.value,
-    });
+    }, key), { onConflict: fetchDetail });
     isCompleteDialogOpen.value = false;
     manualCompleteReason.value = "";
     await fetchDetail();
     emit("refresh");
   } catch (err: any) {
     alert(err?.message || "人工完成失败");
-  } finally {
-    actionLoading.value = false;
-  }
+  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 </script>
 
@@ -773,5 +839,31 @@ async function handleConfirmManualComplete() {
   to {
     transform: translateX(0);
   }
+}
+
+.header-right-btns {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-act-trace {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: rgba(14, 165, 233, 0.15);
+  border: 1px solid rgba(14, 165, 233, 0.4);
+  color: #38bdf8;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-act-trace:hover {
+  background: rgba(14, 165, 233, 0.3);
+  color: #ffffff;
 }
 </style>

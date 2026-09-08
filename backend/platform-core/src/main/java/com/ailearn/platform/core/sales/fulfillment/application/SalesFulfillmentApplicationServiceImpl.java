@@ -125,6 +125,16 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
     @Override
     @Transactional(rollbackFor = Exception.class)
     @PreAuthorize("hasAuthority('sales:pick:confirm')")
+    public SalesFulfillmentResult confirmPick(PickTaskConfirmRequest request, String idempotencyKey) {
+        Actor actor = actor();
+        requireKey(idempotencyKey);
+        // 修改：由服务端依据可信租户与幂等键分配履约操作 ID，避免浏览器随机生成操作事实。
+        return confirmPick(serverOperationId("pick", actor, idempotencyKey), request, idempotencyKey);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    @PreAuthorize("hasAuthority('sales:pick:confirm')")
     public SalesFulfillmentResult confirmPick(UUID pickTaskId, PickTaskConfirmRequest request, String idempotencyKey) {
         Actor actor = actor();
         requireKey(idempotencyKey);
@@ -211,6 +221,16 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
     /**
      * 将未发货暂存数量连同有效预留分配退回指定合法来源库位。
      */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    @PreAuthorize("hasAuthority('sales:pick:return')")
+    public SalesFulfillmentResult returnPick(PickTaskReturnRequest request, String idempotencyKey) {
+        Actor actor = actor();
+        requireKey(idempotencyKey);
+        // 修改：由服务端依据可信租户与幂等键分配退回操作 ID，禁止页面伪造或复用订单行 ID。
+        return returnPick(serverOperationId("pick-return", actor, idempotencyKey), request, idempotencyKey);
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     @PreAuthorize("hasAuthority('sales:pick:return')")
@@ -349,6 +369,16 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
     /**
      * 从发货暂存位先释放对应有效预留，再扣减实物并累计发货数量。
      */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    @PreAuthorize("hasAuthority('sales:shipment:confirm')")
+    public SalesFulfillmentResult confirmShipment(ShipmentConfirmRequest request, String idempotencyKey) {
+        Actor actor = actor();
+        requireKey(idempotencyKey);
+        // 修改：由服务端依据可信租户与幂等键分配发货操作 ID，响应再返回可追溯 operationId。
+        return confirmShipment(serverOperationId("shipment", actor, idempotencyKey), request, idempotencyKey);
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     @PreAuthorize("hasAuthority('sales:shipment:confirm')")
@@ -805,6 +835,16 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
 
     private String childKey(String parent, String suffix) {
         return "sales-" + UUID.nameUUIDFromBytes((parent + "|" + suffix).getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * 用途：把服务端接收的幂等键稳定映射为本次履约操作 ID。
+     * 入参：操作类型、可信执行人和幂等键；出参：租户隔离且可重放复用的 UUID。
+     * 流程：同一业务键始终得到同一操作 ID，避免网络重试创建第二个履约事实。
+     */
+    private UUID serverOperationId(String operation, Actor actor, String idempotencyKey) {
+        return UUID.nameUUIDFromBytes(("sales-operation|" + operation + "|" + actor.tenantId() + "|"
+                + idempotencyKey).getBytes(StandardCharsets.UTF_8));
     }
 
     private String digest(String operation, Object value) {

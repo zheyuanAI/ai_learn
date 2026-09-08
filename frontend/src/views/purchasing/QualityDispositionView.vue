@@ -1,5 +1,6 @@
 <template>
   <div class="quality-disposition-view">
+    <CommandFeedback :error="lastError" :can-retry="canRetry" :executing="isExecuting" @retry="retry" />
     <!-- 统一页面头部 -->
     <PageHeader
       title="采购到货质检与处置控制台"
@@ -128,19 +129,42 @@
           <button type="button" class="btn-close" @click="isInspectOpen = false">✕</button>
         </div>
         <form class="modal-body" @submit.prevent="submitInspect">
-          <div class="form-item">
-            <label>对应采购收货凭证 <span class="req">*</span></label>
-            <input v-model="inspectForm.purchaseReceiptId" type="text" class="form-input" required placeholder="输入收货确认返回的 receiptId UUID" />
+          <div v-if="!inspectForm.purchaseReceiptId || !inspectForm.purchaseReceiptLineId" class="contract-alert" role="alert">
+            <strong>质检提交已阻止：</strong>
+            必须从真实收货确认响应取得独立 receiptId 和收货行 ID；采购订单行 ID、订单 ID 或随机 UUID 不能代用。
           </div>
-          <div class="form-item">
-            <label>采购订单 UUID <span class="req">*</span></label>
-            <input v-model="inspectForm.purchaseOrderId" type="text" class="form-input" required placeholder="输入收货单所属 purchaseOrderId" />
+          <!-- 订单与凭证上下文选择（消除手填 UUID，修复 F04） -->
+          <div v-if="queryPoNo" class="info-alert" style="margin-bottom: 12px; padding: 8px 12px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; font-size: 13px; color: #bae6fd;">
+            <span>当前针对订单 <strong>{{ queryPoNo }}</strong> 录入质检（收货凭证: <span class="font-mono text-xs">{{ inspectForm.purchaseReceiptId }}</span>；收货行: <span class="font-mono text-xs">{{ inspectForm.purchaseReceiptLineId || '未返回' }}</span>）</span>
           </div>
-          <div class="form-item">
-            <label>收货明细 UUID <span class="req">*</span></label>
-            <input v-model="inspectForm.purchaseReceiptLineId" type="text" class="form-input" required placeholder="输入收货确认返回的收货明细 ID" />
+          <div v-else class="form-item">
+            <label>关联采购订单 <span class="req">*</span></label>
+            <select v-model="inspectForm.purchaseOrderId" class="form-select" required @change="onOrderChange(inspectForm.purchaseOrderId)">
+              <option value="">请选择待质检采购订单</option>
+              <option v-for="order in availableOrders" :key="order.id" :value="order.id">
+                {{ order.poNo }} - {{ order.supplierName }} ({{ order.status }})
+              </option>
+            </select>
           </div>
-          <div class="form-item">
+
+          <div v-if="selectedOrderLines.length > 0 && !queryPoNo" class="form-item">
+            <label>检验物料行项 <span class="req">*</span></label>
+            <select
+              :value="selectedOrderLineId"
+              class="form-select"
+              required
+              @change="(e: any) => {
+                const target = selectedOrderLines.find(l => String(l.id) === e.target.value);
+                if (target) onLineChange(target);
+              }"
+            >
+              <option value="">请选择检验物料行</option>
+              <option v-for="line in selectedOrderLines" :key="line.id" :value="line.id">
+                {{ line.sku }} ({{ line.productName }}) - 实收待检: {{ line.receivedQty || line.orderedQty }} {{ line.uom }}
+              </option>
+            </select>
+          </div>
+          <div v-else-if="!queryPoNo" class="form-item">
             <label>物料 <span class="req">*</span></label>
             <select v-model="inspectForm.productId" class="form-select" required>
               <option value="">请选择物料</option>
@@ -224,16 +248,16 @@
           <label>放行至收货暂存位 <span class="req">*</span></label>
           <select v-model="receivingStagingLocationId" class="form-select" required>
             <option value="">请选择 ReceivingStaging 库位</option>
-            <option v-for="location in receivingStagingLocations" :key="location.id" :value="location.id">
-              {{ location.code }} - {{ location.name }}
-            </option>
+              <option v-for="location in filteredReceivingStagingLocations" :key="location.id" :value="location.id">
+                {{ location.code }} - {{ location.name }}
+              </option>
           </select>
         </div>
         <div class="form-item">
           <label>后续上架目标库位（可选）</label>
           <select v-model="putawayTargetLocationId" class="form-select">
             <option value="">由后端选择默认 Storage 库位</option>
-            <option v-for="location in storageLocations" :key="location.id" :value="location.id">
+            <option v-for="location in filteredStorageLocations" :key="location.id" :value="location.id">
               {{ location.code }} - {{ location.name }}
             </option>
           </select>
@@ -249,6 +273,9 @@
  * 职责：质检录入、处置决定（放行/报废/退回）与仓库实物执行确认
  */
 import { ref, reactive, computed, onMounted } from "vue";
+import { useCommand } from "@/composables/useCommand";
+import CommandFeedback from "@/components/common/CommandFeedback.vue";
+import { useRoute, useRouter } from "vue-router";
 import PageHeader from "@/components/common/PageHeader.vue";
 import DataTable, { type TableColumn } from "@/components/common/DataTable.vue";
 import StatusBadge from "@/components/common/StatusBadge.vue";
@@ -267,11 +294,18 @@ import {
   getQualityDispositions,
   decideQualityDisposition,
   confirmQualityDisposition,
+  getPurchaseOrders,
+  getPurchaseOrderById,
 } from "@/api/purchasing";
+
+const route = useRoute();
+const { execute, retry, isExecuting, canRetry, lastError } = useCommand();
+const router = useRouter();
 
 const activeTab = ref<"inspections" | "dispositions">("inspections");
 const loading = ref(false);
 const submitting = ref(false);
+const inspectionWarehouseId = ref("");
 
 const inspections = ref<PurchaseQualityInspection[]>([]);
 const dispositions = ref<PurchaseQualityDisposition[]>([]);
@@ -299,8 +333,13 @@ const dispositionColumns: TableColumn[] = [
   { key: "actions", label: "操作", width: "130px", align: "center" },
 ];
 
-// 质检弹窗
+// 质检弹窗与选择联动
 const isInspectOpen = ref(false);
+const queryPoNo = ref("");
+const availableOrders = ref<any[]>([]);
+const selectedOrderLines = ref<any[]>([]);
+const selectedOrderLineId = ref("");
+
 const inspectForm = reactive({
   purchaseOrderId: "",
   purchaseReceiptId: "",
@@ -316,8 +355,53 @@ const products = ref<Product[]>([]);
 const receivingStagingLocations = ref<Location[]>([]);
 const storageLocations = ref<Location[]>([]);
 
+/**
+ * 用途：只暴露与收货事实同仓、启用且类型正确的处置库位。
+ * 入参：当前收货上下文的真实目标仓库 ID；出参：可供仓库执行选择的库位。
+ * 流程：缺少同仓事实时返回空集合，防止把跨仓或未确认库位提交给后端。
+ */
+const filteredReceivingStagingLocations = computed(() => {
+  if (!inspectionWarehouseId.value) return [];
+  return receivingStagingLocations.value.filter(
+    (location) => String(location.warehouseId) === String(inspectionWarehouseId.value),
+  );
+});
+
+const filteredStorageLocations = computed(() => {
+  if (!inspectionWarehouseId.value) return [];
+  return storageLocations.value.filter(
+    (location) => String(location.warehouseId) === String(inspectionWarehouseId.value),
+  );
+});
+
 function calcUnqualified() {
   inspectForm.unqualifiedQty = stringSub(inspectForm.inspectedQty, inspectForm.qualifiedQty);
+}
+
+/** 订单选择联动：自动拉取明细行并选中第一行，消除手填 UUID (修复 F04) */
+async function onOrderChange(orderId: string) {
+  inspectForm.purchaseOrderId = orderId;
+  inspectForm.purchaseReceiptLineId = "";
+  selectedOrderLineId.value = "";
+  try {
+    const res = await getPurchaseOrderById(orderId);
+    if (res.data && res.data.lines) {
+      selectedOrderLines.value = res.data.lines;
+    }
+  } catch (err) {
+    console.warn("[QualityDispositionView] 加载订单行项失败", err);
+  }
+}
+
+/** 明细行选择联动：自动回显物料与默认实收数量 */
+function onLineChange(line: any) {
+  // 修改用途：订单行只用于预览产品和数量，绝不能冒充收货行 ID。
+  selectedOrderLineId.value = String(line.id);
+  inspectForm.productId = line.productId;
+  const targetQty = String(line.receivedQty && parseFloat(line.receivedQty) > 0 ? line.receivedQty : "");
+  inspectForm.inspectedQty = targetQty;
+  inspectForm.qualifiedQty = targetQty;
+  inspectForm.unqualifiedQty = "0";
 }
 
 // 处置决定弹窗
@@ -325,8 +409,8 @@ const isDecideOpen = ref(false);
 const selectedInspect = ref<PurchaseQualityInspection | null>(null);
 const decideForm = reactive({
   dispositionType: "Release" as "Release" | "Return" | "Scrap",
-  dispositionQty: "70",
-  reason: "外观合格准予放行上架",
+  dispositionQty: "",
+  reason: "",
 });
 
 // 仓库执行弹窗
@@ -364,14 +448,16 @@ async function loadData() {
  * 加载质检与处置所需主数据，所有选择值使用后端返回的真实 UUID。
  */
 async function loadReferenceOptions() {
-  const [productResponse, receivingResponse, storageResponse] = await Promise.all([
-    getProducts({ page: 1, size: 200, status: "ACTIVE" }),
-    getLocations({ page: 1, size: 200, type: "ReceivingStaging", status: "ACTIVE" }),
-    getLocations({ page: 1, size: 200, type: "Storage", status: "ACTIVE" }),
+  const [productResponse, receivingResponse, storageResponse, poResponse] = await Promise.all([
+    getProducts({ page: 1, size: 20, status: "ACTIVE" }),
+    getLocations({ page: 1, size: 20, warehouseId: inspectionWarehouseId.value || undefined, type: "ReceivingStaging", status: "ACTIVE" }),
+    getLocations({ page: 1, size: 20, warehouseId: inspectionWarehouseId.value || undefined, type: "Storage", status: "ACTIVE" }),
+    getPurchaseOrders({ page: 1, size: 20 }),
   ]);
   products.value = productResponse.data.records;
   receivingStagingLocations.value = receivingResponse.data.records;
   storageLocations.value = storageResponse.data.records;
+  availableOrders.value = poResponse.data.records || [];
 }
 
 /**
@@ -387,11 +473,21 @@ async function openInspectModal() {
 }
 
 async function submitInspect() {
+  if (!inspectForm.purchaseReceiptId || !inspectForm.purchaseReceiptLineId || !inspectForm.productId) {
+    alert("缺少真实收货事实 ID：请从收货确认响应进入，不能使用采购订单行 ID 或随机 UUID。");
+    return;
+  }
+  if (!inspectForm.inspectedQty || parseFloat(inspectForm.inspectedQty) <= 0) {
+    alert("检验数量必须来自真实收货明细且大于 0。");
+    return;
+  }
   submitting.value = true;
   try {
-    await inspectQuality(inspectForm.purchaseReceiptId, { ...inspectForm });
-    isInspectOpen.value = false;
-    await loadData();
+    await execute(async (key) => {
+      await inspectQuality(inspectForm.purchaseReceiptId, { ...inspectForm }, key);
+      isInspectOpen.value = false;
+      await loadData();
+    }, { onConflict: loadData });
   } catch (err: any) {
     alert(err?.message || "提交质检失败");
   } finally {
@@ -408,14 +504,15 @@ function openDecideModal(row: PurchaseQualityInspection) {
 
 async function submitDecide() {
   if (!selectedInspect.value) return;
+  const inspection = selectedInspect.value;
   submitting.value = true;
   try {
-    await decideQualityDisposition(selectedInspect.value.purchaseReceiptId, {
-      inspectionId: String(selectedInspect.value.id),
+    await execute((key) => decideQualityDisposition(inspection.purchaseReceiptId, {
+      inspectionId: String(inspection.id),
       dispositionType: decideForm.dispositionType,
       dispositionQty: decideForm.dispositionQty,
       reason: decideForm.reason,
-    });
+    }, key), { onConflict: loadData });
     isDecideOpen.value = false;
     await loadData();
   } catch (err: any) {
@@ -434,19 +531,40 @@ function openExecuteConfirm(row: PurchaseQualityDisposition) {
 
 async function executeDisposition() {
   if (!selectedDisp.value) return;
-  if (selectedDisp.value.dispositionType === "Release" && !receivingStagingLocationId.value) {
-    alert("请选择真实的 ReceivingStaging 库位");
-    return;
+  const disposition = selectedDisp.value;
+  if (disposition.dispositionType === "Release") {
+    if (!inspectionWarehouseId.value || filteredReceivingStagingLocations.value.length === 0) {
+      alert("未取得处置收货的目标仓库或同仓 ReceivingStaging 库位，已阻止执行。");
+      return;
+    }
+    if (!receivingStagingLocationId.value || !filteredReceivingStagingLocations.value.some(
+      (location) => String(location.id) === String(receivingStagingLocationId.value),
+    )) {
+      alert("请选择当前收货目标仓库下真实、启用的 ReceivingStaging 库位。");
+      return;
+    }
+    if (putawayTargetLocationId.value && !filteredStorageLocations.value.some(
+      (location) => String(location.id) === String(putawayTargetLocationId.value),
+    )) {
+      alert("上架目标必须是当前收货目标仓库下真实、启用的 Storage 库位。");
+      return;
+    }
   }
   submitting.value = true;
   try {
-    await confirmQualityDisposition(String(selectedDisp.value.id), {
-      dispositionId: String(selectedDisp.value.id),
-      toLocationId: selectedDisp.value.dispositionType === "Release" ? receivingStagingLocationId.value : undefined,
+    await execute((key) => confirmQualityDisposition(String(disposition.id), {
+      dispositionId: String(disposition.id),
+      toLocationId: disposition.dispositionType === "Release" ? receivingStagingLocationId.value : undefined,
       putawayTargetLocationId: putawayTargetLocationId.value || undefined,
-    });
+    }, key), { onConflict: loadData });
+    const isRelease = disposition.dispositionType === "Release";
     isExecuteOpen.value = false;
     await loadData();
+    if (isRelease) {
+      if (confirm("合格品已成功转移至收货暂存位，并已生成上架任务。是否立即前往【上架任务】页面执行入库？")) {
+        router.push("/purchasing/putaway");
+      }
+    }
   } catch (err: any) {
     alert(err?.message || "执行失败");
   } finally {
@@ -454,9 +572,32 @@ async function executeDisposition() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 修改用途：先读取收货成功后携带的真实仓库上下文，再加载同仓处置库位。
+  inspectionWarehouseId.value = String(route.query.warehouseId || "");
+  const qReceiptId = String(route.query.receiptId || "");
+  const qReceiptLineId = String(route.query.receiptLineId || "");
+  const qProductId = String(route.query.productId || "");
   loadData();
-  loadReferenceOptions().catch((error) => console.error("[QualityDispositionView] 加载质检选项失败", error));
+  await loadReferenceOptions().catch((error) => console.error("[QualityDispositionView] 加载质检选项失败", error));
+  // 处理从采购收货一键跳转过来的 query 参数 (修复 F04)
+  const qOrderId = route.query.orderId as string;
+  const qPoNo = route.query.poNo as string;
+  if (qReceiptId) {
+    inspectForm.purchaseReceiptId = qReceiptId;
+    inspectForm.purchaseReceiptLineId = qReceiptLineId;
+    inspectForm.productId = qProductId;
+    if (qOrderId) {
+      inspectForm.purchaseOrderId = qOrderId;
+      queryPoNo.value = qPoNo || qOrderId;
+      await onOrderChange(qOrderId);
+      // onOrderChange 只加载订单行，不覆盖真实 receipt line ID。
+      inspectForm.purchaseReceiptId = qReceiptId;
+      inspectForm.purchaseReceiptLineId = qReceiptLineId;
+      inspectForm.productId = qProductId;
+    }
+    isInspectOpen.value = true;
+  }
 });
 </script>
 
@@ -465,6 +606,16 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.contract-alert {
+  padding: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  border-radius: 6px;
+  background: rgba(127, 29, 29, 0.2);
+  color: #fecaca;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .tab-nav {

@@ -10,6 +10,12 @@
       </div>
 
       <div class="dialog-body">
+        <div class="contract-alert" role="status">
+          <strong>收货事实 ID由服务端分配：</strong>
+          本页面只提交采购订单、数量和真实库位；服务端按本次幂等键创建独立收货事实并在响应中返回
+          <code>receiptId</code>，页面不会用订单号、订单行 ID或随机 UUID代替。
+        </div>
+
         <!-- 业务规则提示框 -->
         <div class="rule-alert">
           <div class="alert-icon">ℹ️</div>
@@ -124,11 +130,11 @@
  * 职责：按行录入到货量、拒收量、实际接收量，校验数量恒等式与拒收原因
  * 数量恒等式：arrived_qty = rejected_qty + received_qty
  */
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import QuantityText from "@/components/common/QuantityText.vue";
 import { type PurchaseOrder } from "@/types/purchasing";
 import { type Location } from "@/types/inventory";
-import { stringSub, stringCompare } from "@/types/inventory";
+import { stringSub } from "@/types/inventory";
 import { getLocations } from "@/api/masterData";
 
 interface EditableReceiptLine {
@@ -150,37 +156,56 @@ const props = withDefaults(
   defineProps<{
     visible: boolean;
     order: PurchaseOrder | null;
+    /** 只能由真实收货接口或已存在收货事实上下文提供，禁止组件自行生成。 */
+    receiptId?: string;
     submitting?: boolean;
   }>(),
   {
     visible: false,
     order: null,
+    receiptId: "",
     submitting: false,
   }
 );
 
 const emit = defineEmits<{
   (e: "update:visible", val: boolean): void;
-  (e: "confirm", payload: any): void;
+  (e: "confirm", payload: {
+    receiptId?: string;
+    purchaseOrderId: string;
+    receiptNo?: string;
+    receiptTime: string;
+    qualityHoldLocationId: string;
+    lines: Array<{
+      purchaseOrderLineId: string;
+      productId: string;
+      uom: string;
+      arrivedQty: string;
+      rejectedQty: string;
+      receivedQty: string;
+      rejectionReason?: string;
+      lotNo?: string;
+    }>;
+  }): void;
   (e: "close"): void;
 }>();
 
 const receiptTime = ref(new Date().toISOString().slice(0, 16));
 const receiptLines = ref<EditableReceiptLine[]>([]);
-const receiptId = ref("");
 const receiptNo = ref("");
 const qualityHoldLocationId = ref("");
 const qualityHoldLocations = ref<Location[]>([]);
+
+const receiptId = computed(() => props.receiptId?.trim() || "");
 
 watch(
   () => props.order,
   (val) => {
     if (val && val.lines) {
-      receiptId.value = crypto.randomUUID();
-      receiptNo.value = `RCV-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
+      // 修改用途：收货事实 ID/编号必须来自真实接口；此处只初始化可编辑输入，不伪造业务事实。
+      receiptNo.value = "";
       qualityHoldLocationId.value = val.qualityHoldLocationId || "";
       receiptLines.value = val.lines.map((l) => {
-        const pending = parseFloat(l.pendingQty || "0") > 0 ? l.pendingQty : l.orderedQty;
         return {
           poLineId: l.id,
           productId: l.productId,
@@ -188,11 +213,11 @@ watch(
           productName: l.productName || l.productId,
           uom: l.uom,
           orderedQty: l.orderedQty,
-          pendingQty: l.pendingQty,
-          arrivedQty: pending,
+          pendingQty: l.pendingQty || "",
+          arrivedQty: "",
           rejectedQty: "0",
-          receivedQty: pending,
-          lotNo: `LOT-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-01`,
+          receivedQty: "",
+          lotNo: "",
           rejectionReason: "",
         };
       });
@@ -206,7 +231,7 @@ watch(
  */
 async function loadQualityHoldLocations() {
   try {
-    const response = await getLocations({ page: 1, size: 200, type: "QualityHold", status: "ACTIVE" });
+    const response = await getLocations({ page: 1, size: 20, type: "QualityHold", status: "ACTIVE" });
     qualityHoldLocations.value = response.data.records;
   } catch (error) {
     console.error("[ReceiptConfirmView] 加载质量隔离库位失败", error);
@@ -237,18 +262,23 @@ function handleClose() {
 
 function handleSubmit() {
   if (!props.order) return;
+  if (!qualityHoldLocationId.value) {
+    alert("请选择真实的 QualityHold 库位。");
+    return;
+  }
 
   for (const l of receiptLines.value) {
     const arrived = parseFloat(l.arrivedQty || "0");
     const rejected = parseFloat(l.rejectedQty || "0");
     const received = parseFloat(l.receivedQty || "0");
 
-    if (arrived <= 0) {
+    if (!Number.isFinite(arrived) || arrived <= 0) {
       alert(`物料 ${l.sku} 的到货数量必须大于0`);
       return;
     }
 
-    if (stringCompare(l.arrivedQty, stringSub(l.arrivedQty, "0")) !== 0 && arrived !== rejected + received) {
+    if (!Number.isFinite(rejected) || !Number.isFinite(received) || rejected < 0 || received < 0
+      || Math.abs(arrived - rejected - received) > 0.000001) {
       alert(`行项数量不守恒：到货数量必须等于拒收数量 + 实际接收数量`);
       return;
     }
@@ -260,14 +290,14 @@ function handleSubmit() {
   }
 
   const payload = {
-    receiptId: receiptId.value,
-    purchaseOrderId: props.order.id,
-    receiptNo: receiptNo.value,
+    receiptId: receiptId.value || undefined,
+    purchaseOrderId: String(props.order.id),
+    receiptNo: receiptNo.value || undefined,
     receiptTime: new Date(receiptTime.value).toISOString(),
     qualityHoldLocationId: qualityHoldLocationId.value,
     lines: receiptLines.value.map((l) => ({
-      purchaseOrderLineId: l.poLineId,
-      productId: l.productId,
+      purchaseOrderLineId: String(l.poLineId),
+      productId: String(l.productId),
       uom: l.uom,
       arrivedQty: l.arrivedQty,
       rejectedQty: l.rejectedQty,
@@ -357,6 +387,16 @@ function handleSubmit() {
   border: 1px solid rgba(56, 189, 248, 0.25);
   border-radius: 6px;
   padding: 12px;
+}
+
+.contract-alert {
+  padding: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  border-radius: 6px;
+  background: rgba(127, 29, 29, 0.2);
+  color: #fecaca;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .alert-icon {

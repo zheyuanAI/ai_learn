@@ -19,11 +19,11 @@
           </button>
         </div>
 
-        <button type="button" class="btn-back-list" @click="$emit('back-list')">
+        <button type="button" class="btn-back-list" @click="handleBackList">
           <span>☰ 地图列表</span>
         </button>
 
-        <button type="button" class="btn-go-editor" @click="$emit('edit-map', currentMapId)">
+        <button type="button" class="btn-go-editor" @click="handleGoEditor">
           <span>✏️ 编辑点位</span>
         </button>
       </template>
@@ -69,22 +69,13 @@
         </div>
       </div>
 
-      <!-- 状态指示图例与模拟查看角色 -->
+      <!-- 状态指示图例 -->
       <div class="right-controls">
         <div class="status-legend">
           <span class="legend-item text-alarm">● 告警 (最高级)</span>
           <span class="legend-item text-offline">● 离线</span>
           <span class="legend-item text-warning">● 预警</span>
           <span class="legend-item text-normal">● 正常</span>
-        </div>
-
-        <div class="role-selector-box">
-          <label class="role-label">模拟查看角色:</label>
-          <select v-model="simulatedRole" class="control-select" @change="handleRoleChange">
-            <option value="admin">租户管理员 (全域权限)</option>
-            <option value="iot">IoT 工程师 (仅设备与告警)</option>
-            <option value="warehouse">仓储操作员 (仅库区)</option>
-          </select>
         </div>
       </div>
     </div>
@@ -105,8 +96,8 @@
       <div class="map-panel">
         <div class="panel-header">
           <div class="header-title-box">
-            <span class="map-tag">CANVAS: {{ mapProjection?.mapCode || 'MAP_PLANT_TOTAL' }}</span>
-            <strong class="map-title">{{ mapProjection?.mapName || '智能制造与立体仓储总平面图' }}</strong>
+            <span class="map-tag">CANVAS: {{ mapProjection?.mapCode || '未返回地图编码' }}</span>
+            <strong class="map-title">{{ mapProjection?.mapName || '未返回地图名称' }}</strong>
           </div>
           <span class="anti-drift-tag">📐 相对百分比坐标防偏移系统生效中</span>
         </div>
@@ -129,58 +120,9 @@
             <!-- 网格背景 -->
             <rect width="100%" height="100%" fill="url(#grid-pattern)" />
 
-            <!-- 成品立库区 (WH-FG-01) -->
-            <rect
-              x="5%"
-              y="10%"
-              width="30%"
-              height="38%"
-              rx="8"
-              fill="rgba(56, 189, 248, 0.05)"
-              stroke="rgba(56, 189, 248, 0.25)"
-              stroke-dasharray="4 4"
-            />
-            <text x="7%" y="16%" fill="#38bdf8" font-size="13" font-weight="700">
-              成品立体库区 (WH-FG-01)
-            </text>
-            <text x="7%" y="22%" fill="#94a3b8" font-size="11">
-              含 SHP-01 发货暂存位 · 高架自动化堆垛
-            </text>
-
-            <!-- 原料立体仓 (WH-RM-01) -->
-            <rect
-              x="5%"
-              y="52%"
-              width="30%"
-              height="40%"
-              rx="8"
-              fill="rgba(56, 189, 248, 0.05)"
-              stroke="rgba(56, 189, 248, 0.25)"
-              stroke-dasharray="4 4"
-            />
-            <text x="7%" y="58%" fill="#38bdf8" font-size="13" font-weight="700">
-              原料立体仓 (WH-RM-01)
-            </text>
-            <text x="7%" y="64%" fill="#94a3b8" font-size="11">
-              含 RS-01 收货暂存位 · QH-01 质量隔离位
-            </text>
-
-            <!-- 智能制造核心车间 (AREA-PROD) -->
-            <rect
-              x="40%"
-              y="10%"
-              width="55%"
-              height="82%"
-              rx="8"
-              fill="rgba(45, 212, 191, 0.04)"
-              stroke="rgba(45, 212, 191, 0.22)"
-              stroke-dasharray="4 4"
-            />
-            <text x="42%" y="16%" fill="#2dd4bf" font-size="13" font-weight="700">
-              智能制造核心装配车间 (AREA-PROD)
-            </text>
-            <text x="42%" y="22%" fill="#94a3b8" font-size="11">
-              冲压机床、数控加工、总装检测与包装线
+            <!-- 修改用途：只保留无业务含义的网格背景，业务区域与标签必须来自服务端投影。 -->
+            <text x="50%" y="50%" text-anchor="middle" fill="#64748b" font-size="13">
+              地图业务区域由服务端投影返回
             </text>
           </svg>
 
@@ -295,6 +237,15 @@
 
           <div class="detail-footer">
             <button
+              v-if="selectedPoint.entityType === 'DEVICE' || selectedPoint.alarmMarker"
+              type="button"
+              class="btn-trace"
+              title="穿透至全链路全闭环追溯中心"
+              @click="handleGoTrace(selectedPoint)"
+            >
+              <span>🔍 全链路追溯</span>
+            </button>
+            <button
               v-if="selectedPoint.linkedPage"
               type="button"
               class="btn-penetrate"
@@ -361,9 +312,47 @@ const currentMapId = ref<string | number>(props.mapId || "");
 const mapProjection = ref<SiteMapProjection | null>(null);
 const selectedPoint = ref<MapPoint | null>(null);
 
-// 交互过滤
+// 交互图层过滤
 const activeFilter = ref<"all" | "alarm" | "device" | "warehouse">("all");
-const simulatedRole = ref<"admin" | "iot" | "warehouse">("admin");
+
+/** 导航返回站点地图列表 */
+const handleBackList = () => {
+  emit("back-list");
+  router.push("/gis/site-maps");
+};
+
+/** 导航前往点位配置编辑器 */
+const handleGoEditor = () => {
+  emit("edit-map", currentMapId.value);
+  if (currentMapId.value) {
+    router.push(`/gis/site-maps/${currentMapId.value}/edit`);
+  } else {
+    router.push("/gis/site-maps");
+  }
+};
+
+/** 从点位抽屉穿透前往全闭环全链路追溯中心 */
+const handleGoTrace = (pt: MapPoint | null) => {
+  if (!pt) return;
+  const alarmId = pt.alarmMarker?.alarmId;
+  if (alarmId) {
+    router.push({
+      path: "/traceability",
+      query: {
+        entry_type: "DEVICE_ALARM",
+        entity_id: alarmId,
+      },
+    });
+  } else {
+    router.push({
+      path: "/traceability",
+      query: {
+        entry_type: pt.entityType === "DEVICE" ? "DEVICE_ALARM" : "INVENTORY_BATCH",
+        entity_id: pt.entityId,
+      },
+    });
+  }
+};
 
 /**
  * 装载地图点位投影
@@ -392,20 +381,11 @@ async function loadMapProjection() {
 }
 
 /**
- * 依据角色权限与图层过滤后的点位列表
+ * 依据真实服务端数据与图层过滤后的点位列表（杜绝客户端模拟角色越权）
  */
 const filteredPoints = computed(() => {
   if (!mapProjection.value?.points) return [];
   let list = mapProjection.value.points;
-
-  // 角色权限模拟过滤
-  if (simulatedRole.value === "iot") {
-    // IoT 工程师仅看设备
-    list = list.filter((p) => p.entityType === "DEVICE");
-  } else if (simulatedRole.value === "warehouse") {
-    // 仓库操作员仅看库区
-    list = list.filter((p) => p.entityType === "WAREHOUSE");
-  }
 
   // 图层过滤
   if (activeFilter.value === "alarm") {
@@ -426,13 +406,6 @@ const alarmPointsCount = computed(() => {
 
 function setFilter(filter: "all" | "alarm" | "device" | "warehouse") {
   activeFilter.value = filter;
-}
-
-function handleRoleChange() {
-  // 切换角色时若当前选中点位已不可见，重新定位
-  if (selectedPoint.value && !filteredPoints.value.some((p) => p.id === selectedPoint.value?.id)) {
-    selectedPoint.value = filteredPoints.value[0] || null;
-  }
 }
 
 function selectPoint(pt: MapPoint) {
@@ -992,6 +965,27 @@ onMounted(() => {
 
 .btn-penetrate:hover {
   background: #0369a1;
+}
+
+.btn-trace {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(14, 165, 233, 0.15);
+  border: 1px solid rgba(14, 165, 233, 0.4);
+  color: #38bdf8;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-trace:hover {
+  background: rgba(14, 165, 233, 0.3);
+  color: #ffffff;
 }
 
 .text-muted-tip {

@@ -48,6 +48,16 @@ public class SalesFulfillmentController {
     }
 
     /** 确认直接拣货。 */
+    /**
+     * 确认直接拣货并由服务端分配 operationId；客户端不能自行生成履约事实 ID。
+     */
+    @PostMapping("/pick-tasks/confirm")
+    public ApiResponse<SalesFulfillmentResult> confirmPickWithServerId(
+            @RequestBody PickTaskConfirmRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        return ApiResponse.success(applicationService.confirmPick(request, idempotencyKey));
+    }
+
     @PostMapping("/pick-tasks/{id}/confirm")
     public ApiResponse<SalesFulfillmentResult> confirmPick(
             @PathVariable("id") UUID id, @RequestBody PickTaskConfirmRequest request,
@@ -56,6 +66,16 @@ public class SalesFulfillmentController {
     }
 
     /** 退回未发货拣货。 */
+    /**
+     * 退回未发货拣货并由服务端分配 operationId。
+     */
+    @PostMapping("/pick-tasks/return")
+    public ApiResponse<SalesFulfillmentResult> returnPickWithServerId(
+            @RequestBody PickTaskReturnRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        return ApiResponse.success(applicationService.returnPick(request, idempotencyKey));
+    }
+
     @PostMapping("/pick-tasks/{id}/return")
     public ApiResponse<SalesFulfillmentResult> returnPick(
             @PathVariable("id") UUID id, @RequestBody PickTaskReturnRequest request,
@@ -72,6 +92,16 @@ public class SalesFulfillmentController {
     }
 
     /** 确认销售发货。 */
+    /**
+     * 确认销售发货并由服务端分配 operationId。
+     */
+    @PostMapping("/sales-shipments/confirm")
+    public ApiResponse<SalesFulfillmentResult> confirmShipmentWithServerId(
+            @RequestBody ShipmentConfirmRequest request,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
+        return ApiResponse.success(applicationService.confirmShipment(request, idempotencyKey));
+    }
+
     @PostMapping("/sales-shipments/{id}/confirm")
     public ApiResponse<SalesFulfillmentResult> confirmShipment(
             @PathVariable("id") UUID id, @RequestBody ShipmentConfirmRequest request,

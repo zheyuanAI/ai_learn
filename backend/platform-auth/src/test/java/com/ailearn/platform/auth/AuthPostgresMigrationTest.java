@@ -81,7 +81,7 @@ class AuthPostgresMigrationTest {
     }
 
     @Test
-    void freshDatabaseMigratesV1ThroughV6AndKeepsTenantIntegrity() throws Exception {
+    void freshDatabaseMigratesAllAuthVersionsAndKeepsTenantIntegrity() throws Exception {
         String databaseName = createDatabase();
         try {
             String jdbcUrl = databaseJdbcUrl(databaseName);
@@ -95,9 +95,10 @@ class AuthPostgresMigrationTest {
 
             try (Connection connection = DriverManager.getConnection(jdbcUrl, adminUsername, adminPassword)) {
                 assertConnectedDatabase(connection, databaseName);
-                assertMigrationHistory(connection, "auth_flyway_schema_history", 6, "6");
+                assertMigrationHistory(connection, "auth_flyway_schema_history", 9, "9");
                 assertMenuSchemaAndTenantData(connection);
                 assertDefaultAdminStillHasMenus(connection);
+                assertTenantAdminCanManageProductAndWarehouse(connection);
             }
         } finally {
             dropDatabase(databaseName);
@@ -105,7 +106,7 @@ class AuthPostgresMigrationTest {
     }
 
     @Test
-    void v1ThroughV4DatabaseCanBeHandedOffWithoutTouchingSharedHistoryAndThenRunV5AndV6() throws Exception {
+    void v1ThroughV4DatabaseCanBeHandedOffWithoutTouchingSharedHistoryAndThenRunRemainingAuthMigrations() throws Exception {
         String databaseName = createDatabase();
         try {
             String jdbcUrl = databaseJdbcUrl(databaseName);
@@ -140,7 +141,7 @@ class AuthPostgresMigrationTest {
             try (Connection connection = DriverManager.getConnection(jdbcUrl, adminUsername, adminPassword)) {
                 assertConnectedDatabase(connection, databaseName);
                 assertHistoryRowsEqual(sharedHistoryBefore, readHistoryRows(connection, "flyway_schema_history"));
-                assertMigrationHistory(connection, "auth_flyway_schema_history", 6, "6");
+                assertMigrationHistory(connection, "auth_flyway_schema_history", 9, "9");
                 assertEquals(1, scalarInt(connection,
                         "SELECT COUNT(*) FROM auth_flyway_schema_history "
                                 + "WHERE version = '5' AND script = 'V5__menu_tenant_isolation_and_visible_status.sql' "
@@ -148,6 +149,10 @@ class AuthPostgresMigrationTest {
                 assertEquals(1, scalarInt(connection,
                         "SELECT COUNT(*) FROM auth_flyway_schema_history "
                                 + "WHERE version = '6' AND script = 'V6__complete_stage_2_7_permissions.sql' "
+                                + "AND success = TRUE"));
+                assertEquals(1, scalarInt(connection,
+                        "SELECT COUNT(*) FROM auth_flyway_schema_history "
+                                + "WHERE version = '9' AND script = 'V9__grant_tenant_admin_masterdata_manage_permissions.sql' "
                                 + "AND success = TRUE"));
                 assertEquals(0, scalarInt(connection,
                         "SELECT COUNT(*) FROM flyway_schema_history "
@@ -157,6 +162,7 @@ class AuthPostgresMigrationTest {
                                 + "WHERE script = 'V6__complete_stage_2_7_permissions.sql'"));
                 assertMenuSchemaAndTenantData(connection);
                 assertDefaultAdminStillHasMenus(connection);
+                assertTenantAdminCanManageProductAndWarehouse(connection);
             }
         } finally {
             dropDatabase(databaseName);
@@ -304,6 +310,27 @@ class AuthPostgresMigrationTest {
         assertEquals(1, scalarInt(connection,
                 "SELECT COUNT(*) FROM auth_role WHERE id = '" + DEFAULT_ADMIN_ROLE_ID + "'::uuid "
                         + "AND tenant_id = '" + DEFAULT_TENANT_ID + "'::uuid"));
+    }
+
+    /**
+     * 断言 V9 已为所有有效租户管理员补齐商品与仓库主数据维护权限。
+     *
+     * @param connection 随机测试数据库连接
+     * @throws SQLException 查询权限关系失败时抛出
+     */
+    private static void assertTenantAdminCanManageProductAndWarehouse(Connection connection) throws SQLException {
+        // V5 会准备多个租户管理员；每个有效管理员都应各自拥有两项主数据维护权限。
+        int activeTenantAdminCount = scalarInt(connection,
+                "SELECT COUNT(*) FROM auth_role "
+                        + "WHERE role_code = 'tenant.admin' AND status = 'ACTIVE' AND isdel = 0");
+        assertTrue(activeTenantAdminCount > 0, "迁移后至少应存在一个有效租户管理员");
+        assertEquals(activeTenantAdminCount * 2, scalarInt(connection,
+                "SELECT COUNT(*) FROM auth_role r "
+                        + "JOIN auth_role_permission rp ON rp.role_id = r.id AND rp.isdel = 0 "
+                        + "JOIN auth_permission p ON p.id = rp.permission_id AND p.isdel = 0 "
+                        + "WHERE r.role_code = 'tenant.admin' AND r.status = 'ACTIVE' AND r.isdel = 0 "
+                        + "AND p.permission_code IN ('inv:product:manage', 'inv:warehouse:manage')"),
+                "每个有效租户管理员都应拥有商品和仓库维护权限");
     }
 
     /**

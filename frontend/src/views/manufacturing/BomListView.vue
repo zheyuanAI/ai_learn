@@ -283,6 +283,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
+import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
+import type { AllowedAction } from "../../types/common";
 import {
   PageHeader,
   FilterBar,
@@ -365,18 +367,14 @@ const deleteConfirm = reactive({
  * @param item 当前 BOM 数据
  * @param action 操作指令标识
  */
-function isActionAllowed(item: BomItem, action: string): boolean {
-  if (!item.allowedActions || item.allowedActions.length === 0) return true;
-  const match = item.allowedActions.find((a) => a.action === action);
-  return match ? match.enabled : true;
+// 使用 actionGuard 统一权限判断逻辑
+function isActionAllowed(item: { allowedActions?: AllowedAction[] | null }, action: string): boolean {
+  return checkAction(item.allowedActions, action);
 }
 
-/**
- * 获取操作禁用原因
- */
-function getActionDisabledReason(item: BomItem, action: string): string | undefined {
-  const match = item.allowedActions?.find((a) => a.action === action);
-  return match && !match.enabled ? match.reason : undefined;
+// 使用 actionGuard 统一获取禁用原因逻辑
+function getActionDisabledReason(item: { allowedActions?: AllowedAction[] | null }, action: string): string | undefined {
+  return getDisabledReason(item.allowedActions, action);
 }
 
 /**

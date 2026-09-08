@@ -1,5 +1,6 @@
 <template>
   <div class="manufacturing-view-container">
+    <CommandFeedback :error="lastError" :can-retry="canRetry" :executing="isExecuting" @retry="retry" />
     <!-- 统一页面头部 -->
     <PageHeader
       title="工序实际执行 (Operation Execution)"
@@ -179,14 +180,16 @@
         </div>
         <form class="modal-body" @submit.prevent="submitCreateExecution">
           <div class="form-item">
-            <label>关联派工单 ID <span class="req">*</span></label>
-            <input
-              v-model="createForm.dispatchOrderId"
-              type="text"
-              class="form-input font-mono"
-              placeholder="输入真实派工 UUID"
-              required
-            />
+            <label>关联已下达派工单 (Released) <span class="req">*</span></label>
+            <select v-model="createForm.dispatchOrderId" class="form-select font-mono" required>
+              <option value="">请选择已下达派工单</option>
+              <option v-for="d in releasedDispatches" :key="d.id" :value="d.id">
+                {{ d.dispatchNo }} - {{ d.operationName }} (工单: {{ d.workOrderNo || d.workOrderId }})
+              </option>
+              <option v-if="createForm.dispatchOrderId && !releasedDispatches.some(d => String(d.id) === String(createForm.dispatchOrderId))" :value="createForm.dispatchOrderId">
+                当前派工单: {{ createForm.dispatchOrderId }}
+              </option>
+            </select>
           </div>
           <div class="form-item">
             <label>机台设备 ID (可选)</label>
@@ -305,6 +308,14 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
+import { useCommand } from "@/composables/useCommand";
+import CommandFeedback from "@/components/common/CommandFeedback.vue";
+import { useRoute, useRouter } from "vue-router";
+import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
+import type { AllowedAction } from "../../types/common";
+
+const route = useRoute();
+const router = useRouter();
 import {
   PageHeader,
   FilterBar,
@@ -323,6 +334,7 @@ import type {
 } from "../../types/manufacturing";
 import {
   getOperationExecutions,
+  getDispatchOrders,
   createOperationExecution,
   startOperationExecution,
   pauseOperationExecution,
@@ -336,6 +348,7 @@ const errorMessage = ref("");
 
 const executionList = ref<OperationExecutionItem[]>([]);
 const total = ref(0);
+const releasedDispatches = ref<any[]>([]);
 const queryParams = reactive({
   page: 1,
   size: 10,
@@ -355,7 +368,8 @@ const columns: TableColumn[] = [
 ];
 
 const createModalVisible = ref(false);
-const isSubmitting = ref(false);
+const { execute, retry, isExecuting, canRetry, lastError } = useCommand();
+const isSubmitting = isExecuting;
 const createForm = reactive<OperationExecutionCreateRequest>({
   dispatchOrderId: "",
   deviceId: "",
@@ -382,15 +396,14 @@ const confirmState = reactive({
   targetItem: null as OperationExecutionItem | null,
 });
 
-function isActionAllowed(item: OperationExecutionItem, action: string): boolean {
-  if (!item.allowedActions || item.allowedActions.length === 0) return true;
-  const match = item.allowedActions.find((a) => a.action === action);
-  return match ? match.enabled : true;
+// 使用 actionGuard 统一权限判断逻辑
+function isActionAllowed(item: { allowedActions?: AllowedAction[] | null }, action: string): boolean {
+  return checkAction(item.allowedActions, action);
 }
 
-function getActionDisabledReason(item: OperationExecutionItem, action: string): string | undefined {
-  const match = item.allowedActions?.find((a) => a.action === action);
-  return match && !match.enabled ? match.reason : undefined;
+// 使用 actionGuard 统一获取禁用原因逻辑
+function getActionDisabledReason(item: { allowedActions?: AllowedAction[] | null }, action: string): string | undefined {
+  return getDisabledReason(item.allowedActions, action);
 }
 
 async function fetchExecutionList() {
@@ -440,24 +453,39 @@ function handlePageChange(page: number) {
   fetchExecutionList();
 }
 
-function openCreateModal() {
+async function loadReleasedDispatches() {
+  try {
+    // 执行建单只读取服务端小页；不可把第一页当成完整派工目录。
+    const res = await getDispatchOrders({ page: 1, size: 20, status: "Released" });
+    if (res.data) {
+      releasedDispatches.value = res.data.records || [];
+    }
+  } catch (err) {
+    console.warn("[OperationExecutionView] 加载已下达派工单失败", err);
+  }
+}
+
+async function openCreateModal() {
   createForm.dispatchOrderId = "";
   createForm.deviceId = "";
+  await loadReleasedDispatches();
   createModalVisible.value = true;
 }
 
 async function submitCreateExecution() {
   if (!createForm.dispatchOrderId) return;
-  isSubmitting.value = true;
   try {
-    await createOperationExecution(createForm);
-    createModalVisible.value = false;
-    await fetchExecutionList();
+    await execute(async (key) => {
+      const created = await createOperationExecution(createForm, key);
+      if (!created?.data?.id) {
+        throw new Error("服务端未返回 operationExecutionId，已阻止继续报工");
+      }
+      createModalVisible.value = false;
+      await fetchExecutionList();
+    }, { onConflict: fetchExecutionList });
   } catch (err: any) {
     alert(`创建执行失败：${err.message}`);
-  } finally {
-    isSubmitting.value = false;
-  }
+  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
 function handleStart(item: OperationExecutionItem) {
@@ -476,16 +504,15 @@ function openPauseModal(item: OperationExecutionItem) {
 
 async function submitPause() {
   if (!activeExec.value) return;
-  isSubmitting.value = true;
   try {
-    await pauseOperationExecution(activeExec.value.id as string, pauseReason.value);
-    pauseModalVisible.value = false;
-    await fetchExecutionList();
+    await execute(async (key) => {
+      await pauseOperationExecution(activeExec.value!.id as string, pauseReason.value, key);
+      pauseModalVisible.value = false;
+      await fetchExecutionList();
+    }, { onConflict: fetchExecutionList });
   } catch (err: any) {
     alert(`暂停失败：${err.message}`);
-  } finally {
-    isSubmitting.value = false;
-  }
+  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
 function handleResume(item: OperationExecutionItem) {
@@ -510,11 +537,11 @@ async function executeConfirmAction() {
   try {
     const id = confirmState.targetItem.id as string;
     if (confirmState.type === "start") {
-      await startOperationExecution(id);
+      await execute((key) => startOperationExecution(id, key), { onConflict: fetchExecutionList });
     } else if (confirmState.type === "resume") {
-      await resumeOperationExecution(id);
+      await execute((key) => resumeOperationExecution(id, key), { onConflict: fetchExecutionList });
     } else if (confirmState.type === "complete") {
-      await completeOperationExecution(id);
+      await execute((key) => completeOperationExecution(id, key), { onConflict: fetchExecutionList });
     }
     confirmState.visible = false;
     await fetchExecutionList();
@@ -536,28 +563,42 @@ function openReportModal(item: OperationExecutionItem) {
 
 async function submitWorkReport() {
   if (!activeExec.value) return;
-  isSubmitting.value = true;
+  const execution = activeExec.value;
+  const woId = execution.workOrderId;
   try {
-    await createWorkReport({
-      operationExecutionId: activeExec.value.id as string,
-      workOrderId: activeExec.value.workOrderId,
-      operationId: activeExec.value.operationId,
+    const created = await execute((key) => createWorkReport({
+      operationExecutionId: execution.id as string,
+      workOrderId: woId,
+      operationId: execution.operationId,
       qualifiedQty: reportForm.qualifiedQty,
       defectQty: reportForm.defectQty,
       reportTime: new Date(reportForm.reportTime).toISOString(),
       remark: reportForm.remark,
-    });
+    }, key), { onConflict: fetchExecutionList });
+    if (!created?.data?.id) {
+      throw new Error("服务端未返回 workReportId，已阻止继续发起质检");
+    }
     reportModalVisible.value = false;
     await fetchExecutionList();
+    if (confirm("工序报工已提交成功！是否前往生产工单详情办理【生产质检】与成品入库？")) {
+      router.push({
+        // 报工完成后直接进入真实工单详情，避免列表页丢失 openQuality 导航意图。
+        path: `/mes/work-orders/${encodeURIComponent(String(woId))}`,
+        query: { openQuality: "true" },
+      });
+    }
   } catch (err: any) {
     alert(`报工提交失败：${err.message}`);
-  } finally {
-    isSubmitting.value = false;
-  }
+  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
-onMounted(() => {
+onMounted(async () => {
   fetchExecutionList();
+  await loadReleasedDispatches();
+  if (route.query.dispatchOrderId) {
+    createForm.dispatchOrderId = String(route.query.dispatchOrderId);
+    createModalVisible.value = true;
+  }
 });
 </script>
 

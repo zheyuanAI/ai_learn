@@ -41,10 +41,11 @@
     </div>
 
     <!-- 单卡片异常态隔离 -->
-    <div v-if="card.error" class="card-error-body">
-      <span class="err-icon">⚠️</span>
-      <p class="err-msg">{{ card.error }}</p>
-      <button
+      <div v-if="card.error" class="card-error-body">
+        <span class="err-icon">⚠️</span>
+        <p class="err-msg">{{ card.error }}</p>
+        <p v-if="card.requestId" class="err-request-id">请求号：{{ card.requestId }}</p>
+        <button
         type="button"
         class="btn-card-retry"
         @click="$emit('refresh', card.summaryType)"
@@ -268,6 +269,13 @@ defineEmits<{
   font-size: 12px;
   color: #fca5a5;
   margin: 0;
+}
+
+.err-request-id {
+  margin: 0;
+  color: #94a3b8;
+  font: 11px/1.4 var(--font-mono, monospace);
+  word-break: break-all;
 }
 
 .btn-card-retry {

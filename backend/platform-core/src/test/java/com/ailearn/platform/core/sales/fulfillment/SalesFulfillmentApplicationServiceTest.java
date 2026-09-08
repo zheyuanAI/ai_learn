@@ -1,6 +1,7 @@
 package com.ailearn.platform.core.sales.fulfillment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -124,10 +125,12 @@ class SalesFulfillmentApplicationServiceTest {
         request.setSalesOrderId(ORDER_ID);
         request.setLines(List.of(lineRequest));
 
-        SalesFulfillmentResult result = service.confirmPick(TASK_ID, request, "pick-test-1");
+        SalesFulfillmentResult result = service.confirmPick(request, "pick-test-1");
 
         assertEquals("4.000000", result.order().getLines().getFirst().reservedQty());
         assertEquals("4.000000", result.order().getLines().getFirst().pickedQty());
+        assertNotEquals(ORDER_ID, result.operationId());
+        assertNotEquals(LINE_ID, result.operationId());
         verify(inventoryCommandService).reserve(any());
         verify(inventoryCommandService).move(any());
         ArgumentCaptor<List<SalesFulfillmentFact>> facts = ArgumentCaptor.forClass(List.class);
@@ -162,10 +165,12 @@ class SalesFulfillmentApplicationServiceTest {
         request.setShipTime(TIME);
         request.setShipmentLines(List.of(lineRequest));
 
-        SalesFulfillmentResult result = service.confirmShipment(SHIPMENT_ID, request, "ship-test-1");
+        SalesFulfillmentResult result = service.confirmShipment(request, "ship-test-1");
 
         assertEquals("Completed", result.order().getStatus());
         assertEquals("5.000000", result.order().getLines().getFirst().shippedQty());
+        assertNotEquals(ORDER_ID, result.operationId());
+        assertNotEquals(LINE_ID, result.operationId());
         verify(inventoryCommandService).release(any());
         verify(inventoryCommandService).decrease(any());
     }

@@ -115,7 +115,7 @@
  * 流程：通过 activeTab 切换不同主数据模型，调用 masterData.ts API 并自动回退
  */
 import { ref, computed, onMounted, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import PageHeader from "@/components/common/PageHeader.vue";
 import FilterBar from "@/components/common/FilterBar.vue";
 import EmptyState from "@/components/common/EmptyState.vue";
@@ -126,21 +126,28 @@ import type { TableColumn } from "@/components/common/DataTable.vue";
 import type { ViewState } from "@/types/common";
 import {
   getProducts,
+  getWarehouses,
   getLocations,
+  getUoms,
   getCustomers,
   getSuppliers,
   createProduct,
   updateProduct,
+  createWarehouse,
+  updateWarehouse,
   createLocation,
   updateLocation,
+  createUom,
+  updateUom,
   createCustomer,
   updateCustomer,
   createSupplier,
   updateSupplier,
 } from "@/api/masterData";
 
-type TabKey = "products" | "locations" | "customers" | "suppliers";
+type TabKey = "products" | "warehouses" | "locations" | "uoms" | "customers" | "suppliers";
 
+const router = useRouter();
 const route = useRoute();
 const activeTab = ref<TabKey>("products");
 const viewState = ref<ViewState>("loading");
@@ -154,15 +161,19 @@ const totalCount = ref(0);
 const tableData = ref<any[]>([]);
 
 const tabCounts = ref<Record<string, number>>({
-  products: 6,
-  locations: 8,
-  customers: 3,
-  suppliers: 3,
+  products: 0,
+  warehouses: 0,
+  locations: 0,
+  uoms: 0,
+  customers: 0,
+  suppliers: 0,
 });
 
 const tabOptions = [
   { key: "products" as TabKey, label: "商品物料主数据" },
-  { key: "locations" as TabKey, label: "仓库与6类标准库位" },
+  { key: "warehouses" as TabKey, label: "仓库主数据" },
+  { key: "locations" as TabKey, label: "6类标准库位" },
+  { key: "uoms" as TabKey, label: "计量单位" },
   { key: "customers" as TabKey, label: "往来客户档案" },
   { key: "suppliers" as TabKey, label: "往来供应商档案" },
 ];
@@ -174,7 +185,9 @@ const currentTabLabel = computed(() => {
 
 const currentEditorType = computed(() => {
   if (activeTab.value === "products") return "product";
+  if (activeTab.value === "warehouses") return "warehouse";
   if (activeTab.value === "locations") return "location";
+  if (activeTab.value === "uoms") return "uom";
   if (activeTab.value === "customers") return "customer";
   return "supplier";
 });
@@ -193,6 +206,17 @@ const productColumns: TableColumn[] = [
   { key: "actions", label: "操作", width: "80px", align: "center" },
 ];
 
+const warehouseColumns: TableColumn[] = [
+  { key: "code", label: "仓库编码", width: "130px" },
+  { key: "name", label: "仓库名称", minWidth: "150px" },
+  { key: "type", label: "仓库类型", width: "110px", align: "center" },
+  { key: "manager", label: "负责人", width: "110px" },
+  { key: "contact", label: "联系方式", width: "130px" },
+  { key: "address", label: "仓库地址", minWidth: "200px" },
+  { key: "status", label: "状态", width: "90px", align: "center" },
+  { key: "actions", label: "操作", width: "80px", align: "center" },
+];
+
 const locationColumns: TableColumn[] = [
   { key: "code", label: "库位编码", width: "110px" },
   { key: "name", label: "库位名称", minWidth: "150px" },
@@ -201,6 +225,16 @@ const locationColumns: TableColumn[] = [
   { key: "capacity", label: "容量", width: "90px", align: "right" },
   { key: "status", label: "当前状态", width: "100px", align: "center" },
   { key: "description", label: "用途说明", minWidth: "200px" },
+  { key: "actions", label: "操作", width: "80px", align: "center" },
+];
+
+const uomColumns: TableColumn[] = [
+  { key: "code", label: "单位编码", width: "130px" },
+  { key: "name", label: "单位名称", minWidth: "140px" },
+  { key: "symbol", label: "显示符号", width: "100px", align: "center" },
+  { key: "decimalScale", label: "小数位数", width: "100px", align: "center" },
+  { key: "status", label: "状态", width: "90px", align: "center" },
+  { key: "remark", label: "备注说明", minWidth: "180px" },
   { key: "actions", label: "操作", width: "80px", align: "center" },
 ];
 
@@ -226,7 +260,9 @@ const supplierColumns: TableColumn[] = [
 
 const currentColumns = computed(() => {
   if (activeTab.value === "products") return productColumns;
+  if (activeTab.value === "warehouses") return warehouseColumns;
   if (activeTab.value === "locations") return locationColumns;
+  if (activeTab.value === "uoms") return uomColumns;
   if (activeTab.value === "customers") return customerColumns;
   return supplierColumns;
 });
@@ -241,26 +277,26 @@ const isSaving = ref(false);
  * @param key 标签页键名
  */
 function switchTab(key: TabKey) {
-  // 修改：保持既有 tab 切换逻辑，直达路由的 query 只负责初始化当前 tab，不改变业务数据请求入口。
   activeTab.value = key;
   searchKeyword.value = "";
   selectedCategory.value = "";
   selectedLocationType.value = "";
   currentPage.value = 1;
+  // 同步更新 URL ?tab=，刷新和前进后退时保留所在页签（修复 F05）
+  router.replace({ query: { ...route.query, tab: key } });
   fetchCurrentTabData();
 }
 
 /**
  * 用途：把地址栏中的主数据 tab 转换为当前页面支持的内部 tab。
- * 入参：route.query.tab，兼容旧菜单使用的 warehouses 标识。
+ * 入参：route.query.tab，支持 6 类主数据独立页签标识。
  * 出参：现有 TabKey；未知或缺失值回退到商品主数据。
- * 流程：仓库菜单映射到当前统一的 locations 视图，其余合法 tab 原样使用。
  */
 function resolveRouteTab(tab: unknown): TabKey {
   const value = String(tab || "");
-  if (value === "warehouses") return "locations";
-  if (value === "products" || value === "locations" || value === "customers" || value === "suppliers") {
-    return value;
+  const validTabs: TabKey[] = ["products", "warehouses", "locations", "uoms", "customers", "suppliers"];
+  if (validTabs.includes(value as TabKey)) {
+    return value as TabKey;
   }
   return "products";
 }
@@ -279,9 +315,18 @@ async function fetchCurrentTabData() {
         keyword: searchKeyword.value,
         category: selectedCategory.value,
       });
-      tableData.value = res.data.records;
+      tableData.value = res.data.records || [];
       totalCount.value = res.data.total;
       tabCounts.value.products = res.data.total;
+    } else if (activeTab.value === "warehouses") {
+      const res = await getWarehouses({
+        page: currentPage.value,
+        size: pageSize.value,
+        keyword: searchKeyword.value,
+      });
+      tableData.value = res.data.records || [];
+      totalCount.value = res.data.total;
+      tabCounts.value.warehouses = res.data.total;
     } else if (activeTab.value === "locations") {
       const res = await getLocations({
         page: currentPage.value,
@@ -289,16 +334,25 @@ async function fetchCurrentTabData() {
         keyword: searchKeyword.value,
         type: (selectedLocationType.value as any) || undefined,
       });
-      tableData.value = res.data.records;
+      tableData.value = res.data.records || [];
       totalCount.value = res.data.total;
       tabCounts.value.locations = res.data.total;
+    } else if (activeTab.value === "uoms") {
+      const res = await getUoms({
+        page: currentPage.value,
+        size: pageSize.value,
+        keyword: searchKeyword.value,
+      });
+      tableData.value = res.data.records || [];
+      totalCount.value = res.data.total;
+      tabCounts.value.uoms = res.data.total;
     } else if (activeTab.value === "customers") {
       const res = await getCustomers({
         page: currentPage.value,
         size: pageSize.value,
         keyword: searchKeyword.value,
       });
-      tableData.value = res.data.records;
+      tableData.value = res.data.records || [];
       totalCount.value = res.data.total;
       tabCounts.value.customers = totalCount.value;
     } else {
@@ -307,7 +361,7 @@ async function fetchCurrentTabData() {
         size: pageSize.value,
         keyword: searchKeyword.value,
       });
-      tableData.value = res.data.records;
+      tableData.value = res.data.records || [];
       totalCount.value = res.data.total;
       tabCounts.value.suppliers = totalCount.value;
     }
@@ -357,11 +411,23 @@ async function handleSave(data: any) {
       } else {
         await createProduct(data);
       }
+    } else if (activeTab.value === "warehouses") {
+      if (data.id) {
+        await updateWarehouse(data.id, data);
+      } else {
+        await createWarehouse(data);
+      }
     } else if (activeTab.value === "locations") {
       if (data.id) {
         await updateLocation(data.id, data);
       } else {
         await createLocation(data);
+      }
+    } else if (activeTab.value === "uoms") {
+      if (data.id) {
+        await updateUom(data.id, data);
+      } else {
+        await createUom(data);
       }
     } else if (activeTab.value === "customers") {
       if (data.id) {
@@ -388,6 +454,10 @@ async function handleSave(data: any) {
 onMounted(() => {
   // 修改：首次加载按直达路由 query 选择业务 tab，避免旧菜单进入后仍停留在默认商品页。
   activeTab.value = resolveRouteTab(route.query.tab);
+  if (!route.query.tab) {
+    // 修改：无 query 直达时补写规范 tab，刷新和复制链接都能稳定回到当前来源。
+    void router.replace({ query: { ...route.query, tab: activeTab.value } });
+  }
   fetchCurrentTabData();
 });
 

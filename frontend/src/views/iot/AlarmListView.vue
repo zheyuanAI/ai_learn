@@ -230,6 +230,8 @@
 </template>
 
 <script setup lang="ts">
+import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
+import type { AllowedAction } from "../../types/common";
 import { ref, reactive, onMounted } from "vue";
 import {
   PageHeader,
@@ -312,15 +314,14 @@ function getAlarmStatusText(status: AlarmLifecycleStatus): string {
   }
 }
 
-function isActionAllowed(item: DeviceAlarmItem, action: string): boolean {
-  if (!item.allowedActions || item.allowedActions.length === 0) return true;
-  const match = item.allowedActions.find((a) => a.action === action);
-  return match ? match.enabled : true;
+// 替换为调用 actionGuard 的版本
+function isActionAllowed(item: { allowedActions?: AllowedAction[] | null }, action: string): boolean {
+  return checkAction(item.allowedActions, action);
 }
 
-function getActionDisabledReason(item: DeviceAlarmItem, action: string): string | undefined {
-  const match = item.allowedActions?.find((a) => a.action === action);
-  return match && !match.enabled ? match.reason : undefined;
+// 替换为调用 actionGuard 的版本
+function getActionDisabledReason(item: { allowedActions?: AllowedAction[] | null }, action: string): string | undefined {
+  return getDisabledReason(item.allowedActions, action);
 }
 
 async function fetchAlarmList() {

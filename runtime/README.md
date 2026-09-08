@@ -100,3 +100,31 @@ IOT_MQTT_ACL_FILE=<external-acl-file>
 ```powershell
 & 'D:\AI\ai_learn_wms_ai\ai_learn_developProject\runtime\jdk\bin\java.exe' -version
 ```
+
+## Core / IoT dev 与 S7 Facts 联调
+
+`.run/CoreApplication.run.xml` 与 `.run/IotApplication.run.xml` 已显式选择 `dev` profile；Gateway 入口固定为 20001。`dev` profile 不保存 HMAC，S7 联调前必须在启动进程的运行环境同时设置以下变量，两个服务的 `S7` 密钥值必须一致：
+
+```text
+Core: CORE_FACTS_IOT_ENABLED=true
+Core: CORE_FACTS_IOT_BASE_URL=http://127.0.0.1:10004
+Core: CORE_FACTS_IOT_HMAC_SECRET=<runtime-only-s7-secret>
+IoT:  IOT_INTERNAL_S7_HMAC_SECRET=<runtime-only-s7-secret>
+```
+
+IDEA 使用共享运行配置时，在 Core 与 IoT 各自的 Environment variables 中配置上述变量；不要把实际密钥写回 `.run`、`application-dev.yml` 或 README。缺少开关或密钥时，Core 不装配 S7 查询 Controller，IoT 内部 Facts 接口也会拒绝未签名调用，这是预期的 fail-closed 行为。
+
+PowerShell 手工启动示例（占位符必须替换，变量只存在于当前终端及其子进程）：
+
+```powershell
+$env:JAVA_HOME = 'D:\AI\ai_learn_wms_ai\ai_learn_developProject\runtime\jdk'
+$env:CORE_FACTS_IOT_ENABLED = 'true'
+$env:CORE_FACTS_IOT_BASE_URL = 'http://127.0.0.1:10004'
+$env:CORE_FACTS_IOT_HMAC_SECRET = '<runtime-only-s7-secret>'
+$env:IOT_INTERNAL_S7_HMAC_SECRET = '<runtime-only-s7-secret>'
+
+Set-Location 'D:\AI\ai_learn_wms_ai\ai_learn_developProject\backend'
+& 'D:\ruanjian\apache-maven-3.9.1\bin\mvn.cmd' -pl platform-iot -Dspring-boot.run.profiles=dev spring-boot:run
+# 在第二个同样注入变量的终端启动 Core：
+& 'D:\ruanjian\apache-maven-3.9.1\bin\mvn.cmd' -pl platform-core -Dspring-boot.run.profiles=dev spring-boot:run
+```

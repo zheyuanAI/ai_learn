@@ -61,7 +61,7 @@
         <div class="dev-info-cell">
           <span class="dev-title">{{ row.deviceName }}</span>
           <span class="dev-location text-muted">
-            {{ row.workCenterName || "通用车间" }} · {{ row.areaName || "加工区" }}
+            {{ row.workCenterName || "未返回" }} · {{ row.areaName || "未返回" }}
           </span>
         </div>
       </template>
@@ -240,6 +240,8 @@
 </template>
 
 <script setup lang="ts">
+import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
+import type { AllowedAction } from "../../types/common";
 import { ref, reactive, onMounted } from "vue";
 import {
   PageHeader,
@@ -321,15 +323,14 @@ const toggleConfirm = reactive({
   targetDevice: null as DeviceItem | null,
 });
 
-function isActionAllowed(item: DeviceItem, action: string): boolean {
-  if (!item.allowedActions || item.allowedActions.length === 0) return true;
-  const match = item.allowedActions.find((a) => a.action === action);
-  return match ? match.enabled : true;
+// 替换为调用 actionGuard 的版本
+function isActionAllowed(item: { allowedActions?: AllowedAction[] | null }, action: string): boolean {
+  return checkAction(item.allowedActions, action);
 }
 
-function getActionDisabledReason(item: DeviceItem, action: string): string | undefined {
-  const match = item.allowedActions?.find((a) => a.action === action);
-  return match && !match.enabled ? match.reason : undefined;
+// 替换为调用 actionGuard 的版本
+function getActionDisabledReason(item: { allowedActions?: AllowedAction[] | null }, action: string): string | undefined {
+  return getDisabledReason(item.allowedActions, action);
 }
 
 async function fetchDeviceList() {

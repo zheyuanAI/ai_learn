@@ -409,9 +409,9 @@ onMounted(() => {
 async function loadMasterData() {
   try {
     const [customerRes, productRes, warehouseRes] = await Promise.all([
-      getCustomers({ page: 1, size: 200, status: "ACTIVE" }),
-      getProducts({ page: 1, size: 200, status: "ENABLE" }),
-      getWarehouses({ page: 1, size: 200, status: "ACTIVE" }),
+      getCustomers({ page: 1, size: 20, status: "ACTIVE" }),
+      getProducts({ page: 1, size: 20, status: "ENABLE" }),
+      getWarehouses({ page: 1, size: 20, status: "ACTIVE" }),
     ]);
     customers.value = customerRes.data.records || [];
     products.value = productRes.data.records || [];

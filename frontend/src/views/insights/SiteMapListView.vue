@@ -125,7 +125,8 @@
 
           <!-- 点位数量 -->
           <template #pointCount="{ value }">
-            <QuantityText :value="value" unit="个点位" />
+            <QuantityText v-if="value !== undefined && value !== null" :value="value" unit="个点位" />
+            <span v-else class="text-muted">未返回</span>
           </template>
 
           <!-- 操作列 -->

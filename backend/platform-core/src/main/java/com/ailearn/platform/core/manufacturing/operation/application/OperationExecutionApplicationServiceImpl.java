@@ -115,11 +115,13 @@ public class OperationExecutionApplicationServiceImpl implements OperationExecut
                     DispatchOrder dispatch = dispatchReferencePort.find(actor.tenantId(), request.dispatchId())
                             .orElseThrow(() -> new OperationExecutionException(
                                     OperationExecutionErrorCode.MES_OPERATION_005, "派工单不存在"));
+                    // 修改：派工进入 Processing 后仍允许补建尚未开始的执行实例；真正开工仍由下方工单 Released 门禁控制。
                     if (dispatch.status() != DispatchStatus.Released
+                            && dispatch.status() != DispatchStatus.Processing
                             || (request.workOrderId() != null && !request.workOrderId().equals(dispatch.workOrderId()))
                             || (request.operationId() != null && !request.operationId().equals(dispatch.operationId()))) {
                         throw new OperationExecutionException(OperationExecutionErrorCode.MES_OPERATION_005,
-                                "派工单必须为 Released 且与工单/工序一致");
+                                "派工单必须为 Released 或 Processing 且与工单/工序一致");
                     }
                     requireReleased(actor.tenantId(), dispatch.workOrderId());
                     return repository.saveIfAbsent(OperationExecution.notStarted(UUID.randomUUID(),

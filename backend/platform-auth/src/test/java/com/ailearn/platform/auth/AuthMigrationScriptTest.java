@@ -137,8 +137,8 @@ class AuthMigrationScriptTest {
     }
 
     /**
-     * 校验 V8 将演示菜单统一迁移到当前前端正式业务路由。
-     * 入参：无；出参：无；流程：读取 V8 资源，逐项确认菜单编码、正式路由、组件路径和幂等判断均存在。
+     * 校验 V8 只将默认租户中仍保留旧值的系统种子菜单迁移到正式前端路由。
+     * 入参：无；出参：无；流程：读取 V8 资源，逐项确认菜单编码、正式路由、组件路径以及租户和旧值限定均存在。
      *
      * @throws IOException 读取迁移资源失败时抛出
      */
@@ -150,25 +150,62 @@ class AuthMigrationScriptTest {
             assertNotNull(input, "V8 迁移脚本必须存在");
             String sql = new String(input.readAllBytes(), StandardCharsets.UTF_8);
             List<String[]> mappings = List.of(
-                    new String[]{"master_product", "/master-data?tab=products", "views/masterdata/MasterDataView.vue"},
-                    new String[]{"master_warehouse", "/master-data?tab=warehouses", "views/masterdata/MasterDataView.vue"},
-                    new String[]{"master_inventory", "/inventory/balances", "views/inventory/InventoryBalanceView.vue"},
-                    new String[]{"purchase_order", "/purchasing/orders", "views/purchasing/PurchaseOrderListView.vue"},
-                    new String[]{"purchase_inbound", "/purchasing/receipts", "views/purchasing/PurchaseOrderListView.vue"},
-                    new String[]{"purchase_putaway", "/purchasing/putaway", "views/purchasing/PutawayTaskView.vue"},
-                    new String[]{"sales_outbound", "/sales/picks", "views/sales/PickTaskView.vue"},
-                    new String[]{"mes_execution", "/mes/dispatch", "views/manufacturing/DispatchView.vue"},
-                    new String[]{"gis", "/gis/site-maps", "views/insights/SiteMapListView.vue"});
+                    new String[]{"master_product", "/master-data/products", "views/master/ProductList.vue", "/master-data?tab=products", "views/masterdata/MasterDataView.vue"},
+                    new String[]{"master_warehouse", "/master-data/warehouses", "views/master/WarehouseList.vue", "/master-data?tab=warehouses", "views/masterdata/MasterDataView.vue"},
+                    new String[]{"master_inventory", "/master-data/inventory", "views/master/InventoryBalance.vue", "/inventory/balances", "views/inventory/InventoryBalanceView.vue"},
+                    new String[]{"purchase_order", "/purchase/orders", "views/purchase/PurchaseOrderList.vue", "/purchasing/orders", "views/purchasing/PurchaseOrderListView.vue"},
+                    new String[]{"purchase_inbound", "/purchase/inbound", "views/purchase/PurchaseInbound.vue", "/purchasing/receipts", "views/purchasing/PurchaseOrderListView.vue"},
+                    new String[]{"purchase_putaway", "/purchase/putaway", "views/purchase/PutawayTaskList.vue", "/purchasing/putaway", "views/purchasing/PutawayTaskView.vue"},
+                    new String[]{"sales_outbound", "/sales/outbound", "views/sales/SalesOutbound.vue", "/sales/picks", "views/sales/PickTaskView.vue"},
+                    new String[]{"mes_execution", "/mes/execution", "views/mes/OperationExecution.vue", "/mes/dispatch", "views/manufacturing/DispatchView.vue"},
+                    new String[]{"gis", "/gis/map", "views/gis/SiteMap.vue", "/gis/site-maps", "views/insights/SiteMapListView.vue"});
 
             for (String[] mapping : mappings) {
-                assertTrue(sql.contains("WHERE menu_code = '" + mapping[0] + "'"),
+                assertTrue(sql.contains("menu_code = '" + mapping[0] + "'"),
                         "V8 缺少菜单编码更新: " + mapping[0]);
-                assertTrue(sql.contains("SET route_path = '" + mapping[1] + "'"),
-                        "V8 缺少正式路由: " + mapping[1]);
+                assertTrue(sql.contains("route_path = '" + mapping[1] + "'"),
+                        "V8 缺少已知旧路由限定: " + mapping[1]);
                 assertTrue(sql.contains("component_path = '" + mapping[2] + "'"),
-                        "V8 缺少正式组件路径: " + mapping[2]);
+                        "V8 缺少已知旧组件限定: " + mapping[2]);
+                assertTrue(sql.contains("SET route_path = '" + mapping[3] + "'"),
+                        "V8 缺少正式路由: " + mapping[3]);
+                assertTrue(sql.contains("component_path = '" + mapping[4] + "'"),
+                        "V8 缺少正式组件路径: " + mapping[4]);
             }
-            assertTrue(sql.contains("IS DISTINCT FROM"), "V8 应避免无变化更新并保持重复执行安全");
+            assertTrue(sql.contains("tenant_id = 'a0000000-0000-0000-0000-000000000001'::uuid"),
+                    "V8 必须只限定默认租户的系统种子菜单");
+            assertTrue(!sql.contains("a0000000-0000-0000-0000-000000000002'::uuid"),
+                    "V8 不得更新第二租户的同编码菜单");
+        }
+    }
+
+    /**
+     * 校验 V9 为租户管理员补齐商品与仓库主数据维护权限，且不绑定单一角色 UUID。
+     * 入参：无；出参：无；流程：读取 V9 资源，确认角色/权限过滤、有效数据条件和幂等插入均存在。
+     *
+     * @throws IOException 读取 V9 迁移资源失败时抛出
+     */
+    @Test
+    @DisplayName("V9 必须补齐租户管理员商品与仓库维护权限并保持幂等")
+    void shouldGrantTenantAdminMasterdataManagePermissionsInV9() throws IOException {
+        try (InputStream input = getClass().getResourceAsStream(
+                "/db/migration/auth/V9__grant_tenant_admin_masterdata_manage_permissions.sql")) {
+            assertNotNull(input, "V9 迁移脚本必须存在");
+            String sql = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+
+            assertEquals(1, sql.split(Pattern.quote("'inv:product:manage'"), -1).length - 1,
+                    "V9 商品维护权限码必须恰好出现一次");
+            assertEquals(1, sql.split(Pattern.quote("'inv:warehouse:manage'"), -1).length - 1,
+                    "V9 仓库维护权限码必须恰好出现一次");
+            assertTrue(sql.contains("r.role_code = 'tenant.admin'"),
+                    "V9 必须按租户管理员角色编码授权");
+            assertTrue(sql.contains("r.status = 'ACTIVE'") && sql.contains("r.isdel = 0")
+                            && sql.contains("p.isdel = 0"),
+                    "V9 必须只为有效角色和权限补授权");
+            assertTrue(sql.contains("ON CONFLICT DO NOTHING"),
+                    "V9 必须保持重复执行幂等");
+            assertTrue(!sql.contains("b0000000-0000-0000-0000-000000000001"),
+                    "V9 不得绑定单一租户管理员角色 UUID");
         }
     }
 

@@ -84,6 +84,9 @@ class Task15DispatchOperationContextTest {
         assertEquals(releasedOrder, dispatchService.release(draft.id(), "dispatch-release"));
         DispatchOrder processing = dispatchService.startProcessing(draft.id(), "dispatch-start");
         assertEquals(DispatchStatus.Processing, processing.status());
+        OperationExecution execution = operationService.create(new OperationExecutionCreateRequest(
+                processing.id(), WORK_ORDER, OPERATION, DEVICE), "execution-after-dispatch-start");
+        assertEquals(OperationExecutionStatus.NotStarted, execution.status());
         assertEquals(DispatchStatus.Completed,
                 dispatchService.complete(draft.id(), "dispatch-complete").status());
     }

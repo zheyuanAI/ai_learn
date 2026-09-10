@@ -1,5 +1,6 @@
 package com.ailearn.platform.core.masterdata.dto;
 
+import com.ailearn.platform.core.masterdata.domain.enumtype.MasterDataStatus;
 import java.util.UUID;
 
 /**
@@ -32,9 +33,12 @@ public class MasterDataPageQuery {
     public MasterDataPageQuery normalized() {
         MasterDataPageQuery result = new MasterDataPageQuery();
         result.page = page < 1 ? 1 : page;
-        result.size = size < 1 ? 20 : Math.min(size, 200);
+        // 修改：下拉目录需要一次读取当前租户完整候选集，单页上限统一提升到 1000。
+        result.size = size < 1 ? 20 : Math.min(size, 1000);
         result.keyword = trimToNull(keyword);
-        result.status = trimToNull(status);
+        // 修改：分页筛选与写入/状态变更统一规范化 ACTIVE/ENABLE 等兼容状态别名。
+        String normalizedStatus = trimToNull(status);
+        result.status = normalizedStatus == null ? null : MasterDataStatus.normalize(normalizedStatus);
         result.sortField = trimToNull(sortField);
         result.sortOrder = trimToNull(sortOrder);
         result.warehouseId = warehouseId;

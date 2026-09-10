@@ -262,7 +262,7 @@ function generateNewMessageId() {
 
 async function loadDevices() {
   try {
-    const res = await getDevices();
+    const res = await getDevices({ page: 1, size: 1000 });
     if (res.data) {
       deviceOptions.value = res.data.records || [];
       if (deviceOptions.value.length > 0 && !selectedDeviceId.value) {

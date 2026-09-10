@@ -9,6 +9,7 @@ import com.ailearn.platform.core.manufacturing.operation.domain.OperationExecuti
 import com.ailearn.platform.core.manufacturing.operation.domain.OperationExecutionRepository;
 import com.ailearn.platform.core.manufacturing.operation.domain.OperationExecutionStatus;
 import com.ailearn.platform.core.manufacturing.operation.dto.OperationExecutionCreateRequest;
+import com.ailearn.platform.core.manufacturing.operation.dto.OperationExecutionView;
 import com.ailearn.platform.core.manufacturing.operation.dto.OperationExecutionPageQuery;
 import com.ailearn.platform.core.manufacturing.operation.domain.OperationExecutionPage;
 import com.ailearn.platform.core.manufacturing.operation.exception.OperationExecutionErrorCode;
@@ -212,7 +213,11 @@ public class OperationExecutionApplicationServiceImpl implements OperationExecut
                 .toList();
         int from = (int) Math.min((long) (normalized.getPage() - 1) * normalized.getSize(), filtered.size());
         int to = Math.min(from + normalized.getSize(), filtered.size());
-        return new OperationExecutionPage(filtered.subList(from, to), filtered.size(),
+        // 修改用途：列表返回页面查询视图和服务端动作能力，不再直接暴露执行聚合内部事件结构。
+        List<OperationExecutionView> views = filtered.subList(from, to).stream()
+                .map(OperationExecutionView::from)
+                .toList();
+        return new OperationExecutionPage(views, filtered.size(),
                 normalized.getPage(), normalized.getSize());
     }
 

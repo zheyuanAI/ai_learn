@@ -32,6 +32,7 @@
             />
             <select v-model="formData.uom" class="form-select" required>
               <option value="">请选择计量单位</option>
+              <option v-if="uomList.length === 0" value="" disabled>暂无可用计量单位</option>
               <option v-for="u in uomList" :key="u.code" :value="u.code">
                 {{ u.code }} ({{ u.name }})
               </option>
@@ -97,6 +98,7 @@
             />
             <select v-model="formData.warehouseId" class="form-select" required>
               <option value="">请选择仓库</option>
+              <option v-if="warehouses.length === 0" value="" disabled>暂无可用仓库</option>
               <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">
                 {{ warehouse.code }} - {{ warehouse.name }}
               </option>
@@ -409,7 +411,7 @@ async function loadWarehouses() {
   try {
     const response = await getWarehouses({
       page: 1,
-      size: 20,
+      size: 1000,
       keyword: warehouseKeyword.value.trim() || undefined,
       status: "ACTIVE",
     });
@@ -430,7 +432,7 @@ async function loadUoms() {
   try {
     const response = await getUoms({
       page: 1,
-      size: 20,
+      size: 1000,
       keyword: uomKeyword.value.trim() || undefined,
       status: "ACTIVE",
     });

@@ -13,7 +13,8 @@ public class StocktakePageQuery {
     public StocktakePageQuery normalized() {
         StocktakePageQuery result = new StocktakePageQuery();
         result.page = page < 1 ? 1 : page;
-        result.size = size < 1 ? 20 : Math.min(size, 200);
+        // 修改：盘点物料与库位选择器统一支持最多 1000 条候选。
+        result.size = size < 1 ? 20 : Math.min(size, 1000);
         result.keyword = keyword == null || keyword.isBlank() ? null : keyword.trim();
         result.status = status;
         return result;

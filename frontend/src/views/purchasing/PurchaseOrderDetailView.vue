@@ -73,8 +73,9 @@
             </button>
 
             <!-- 到货验收与实际接收 -->
+            <!-- 修改用途：后端动作名为 confirmReceipt，且只有仓库收货权限可见。 -->
             <button
-              v-if="isActionEnabled('receive')"
+              v-if="isActionEnabled('confirmReceipt') && hasPermission('pur:receipt:confirm')"
               type="button"
               class="btn-act btn-warning"
               :disabled="actionLoading"
@@ -271,6 +272,7 @@ import { ApiError } from "@/utils/request";
 import { useCommand } from "@/composables/useCommand";
 import CommandFeedback from "@/components/common/CommandFeedback.vue";
 import { useRouter } from "vue-router";
+import { usePermission } from "@/composables/usePermission";
 import StatusBadge from "@/components/common/StatusBadge.vue";
 import QuantityText from "@/components/common/QuantityText.vue";
 import ErrorState from "@/components/common/ErrorState.vue";
@@ -287,6 +289,7 @@ import {
 } from "@/api/purchasing";
 
 const router = useRouter();
+const { hasPermission } = usePermission();
 
 const props = withDefaults(
   defineProps<{

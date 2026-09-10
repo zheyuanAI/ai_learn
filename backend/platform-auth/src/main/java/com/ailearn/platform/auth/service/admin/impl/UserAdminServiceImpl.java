@@ -11,6 +11,7 @@ import com.ailearn.platform.auth.domain.entity.User;
 import com.ailearn.platform.auth.domain.entity.UserRole;
 import com.ailearn.platform.auth.domain.vo.admin.PageResult;
 import com.ailearn.platform.auth.domain.vo.admin.UserAdminVo;
+import com.ailearn.platform.auth.domain.vo.OperatorDirectoryVo;
 import com.ailearn.platform.auth.mapper.RoleMapper;
 import com.ailearn.platform.auth.mapper.PermissionMapper;
 import com.ailearn.platform.auth.mapper.UserMapper;
@@ -99,6 +100,28 @@ public class UserAdminServiceImpl implements UserAdminService {
         }
 
         return PageResult.of(userPage.getCurrent(), userPage.getSize(), userPage.getTotal(), voList);
+    }
+
+    /**
+     * 查询同租户启用用户的最小操作员目录。
+     * 入参：关键词、页码和页大小；出参：仅含身份标识的目录分页；流程：可信租户过滤 -> 分页读取 -> 脱敏组装。
+     */
+    @Override
+    @PreAuthorize("hasAuthority('mes:dispatch:manage')")
+    public PageResult<OperatorDirectoryVo> pageOperatorDirectory(String keyword, int page, int size) {
+        UUID tenantId = TenantContextHolder.requireTenantId();
+        int normalizedPage = Math.max(page, 1);
+        int normalizedSize = Math.min(Math.max(size, 1), 1000);
+        String normalizedKeyword = keyword == null || keyword.isBlank() ? null : keyword.trim();
+        int offset = (normalizedPage - 1) * normalizedSize;
+        List<OperatorDirectoryVo> records = userMapper
+                .selectActiveOperatorDirectory(tenantId, normalizedKeyword, offset, normalizedSize)
+                .stream()
+                .map(user -> new OperatorDirectoryVo(user.getId(), user.getUserNo(), user.getUsername(),
+                        user.getRealName(), user.getStatus()))
+                .toList();
+        long total = userMapper.countActiveOperatorDirectory(tenantId, normalizedKeyword);
+        return PageResult.of(normalizedPage, normalizedSize, total, records);
     }
 
     /**

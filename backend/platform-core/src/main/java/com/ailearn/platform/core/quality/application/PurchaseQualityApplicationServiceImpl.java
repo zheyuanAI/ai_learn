@@ -17,6 +17,7 @@ import com.ailearn.platform.core.quality.dto.QualityDispositionRequest;
 import com.ailearn.platform.core.quality.dto.QualityDispositionView;
 import com.ailearn.platform.core.quality.dto.QualityInspectionRequest;
 import com.ailearn.platform.core.quality.dto.QualityInspectionView;
+import com.ailearn.platform.core.quality.dto.QualityReceiptCandidateView;
 import com.ailearn.platform.core.purchasing.domain.PurchasingLocationFact;
 import com.ailearn.platform.core.purchasing.domain.port.PurchasingReferencePort;
 import com.ailearn.platform.core.purchasing.exception.PurchasingErrorCode;
@@ -182,6 +183,20 @@ public class PurchaseQualityApplicationServiceImpl implements PurchaseQualityApp
     }
 
     /**
+     * 查询质检人员可手动选择的真实收货事实。
+     * 入参：无，租户来自可信会话；出参：当前租户已确认且仍有待检数量的收货明细；
+     * 流程：按租户读取候选事实并转换为接口视图，前端提交时仍需通过收货单和收货行校验。
+     */
+    @Override
+    @PreAuthorize("hasAuthority('pur:quality:inspect')")
+    public List<QualityReceiptCandidateView> listReceiptCandidates() {
+        UUID tenantId = TenantContextHolder.requireTenantId();
+        return repository.listReceiptCandidates(tenantId).stream()
+                .map(QualityReceiptCandidateView::of)
+                .toList();
+    }
+
+    /**
      * 查询当前租户质量处置事实。
      */
     @Override
@@ -193,9 +208,15 @@ public class PurchaseQualityApplicationServiceImpl implements PurchaseQualityApp
 
     private QualityInspectionView inspectInternal(UUID receiptId, QualityInspectionRequest request, Actor actor) {
         QualityReceiptFact receipt = requiredReceipt(actor.tenantId(), receiptId, true);
-        if (!"Confirmed".equals(receipt.status()) || !receiptId.equals(request.getPurchaseReceiptId())
-                || !receipt.purchaseOrderId().equals(request.getPurchaseOrderId())) {
+        // 修改用途：拆分质检前置条件校验，避免把已确认收货单误报成未确认，便于前后端定位真实标识不一致。
+        if (!"Confirmed".equals(receipt.status())) {
             throw new PurchasingException(PurchasingErrorCode.PO_001, "只有已确认收货单允许质检");
+        }
+        if (!receiptId.equals(request.getPurchaseReceiptId())) {
+            throw new PurchasingException(PurchasingErrorCode.PO_001, "质检请求的收货单标识与地址不一致");
+        }
+        if (!receipt.purchaseOrderId().equals(request.getPurchaseOrderId())) {
+            throw new PurchasingException(PurchasingErrorCode.PO_001, "质检请求的采购订单标识与收货单不一致");
         }
         QualityReceiptLineFact line = requiredLine(receipt, request.getPurchaseReceiptLineId(), request.getProductId());
         BigDecimal inspected = decimal(request.getInspectedQty(), "inspectedQty", true);

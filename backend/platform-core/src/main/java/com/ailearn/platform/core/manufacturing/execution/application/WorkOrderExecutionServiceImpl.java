@@ -24,6 +24,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.UnaryOperator;
@@ -263,6 +264,16 @@ public class WorkOrderExecutionServiceImpl implements WorkOrderExecutionService 
     @PreAuthorize("hasAuthority('mes:workorder:view')")
     public java.util.Optional<WorkOrderLifecycle> find(UUID workOrderId) {
         return repository.find(trustedTenant(), workOrderId);
+    }
+
+    /**
+     * 批量查询当前租户工单生命周期，供列表页一次性显示执行进度与服务端动作能力。
+     * 入参：当前页面工单 ID 集合；出参：同租户生命周期集合；流程：使用可信租户上下文委托持久化端口，跨租户 ID 不可见。
+     */
+    @Override
+    @PreAuthorize("hasAuthority('mes:workorder:view')")
+    public List<WorkOrderLifecycle> findAll(Set<UUID> workOrderIds) {
+        return repository.findAll(trustedTenant(), workOrderIds);
     }
 
     /** 读取基础工单对应的有效 BOM。 */

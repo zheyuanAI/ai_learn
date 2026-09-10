@@ -4,6 +4,7 @@ import com.ailearn.platform.core.config.CoreIdempotencyExecutor;
 import com.ailearn.platform.core.manufacturing.dispatch.domain.DispatchOrder;
 import com.ailearn.platform.core.manufacturing.dispatch.domain.DispatchRepository;
 import com.ailearn.platform.core.manufacturing.dispatch.dto.DispatchCreateRequest;
+import com.ailearn.platform.core.manufacturing.dispatch.dto.DispatchOrderView;
 import com.ailearn.platform.core.manufacturing.dispatch.dto.DispatchPageQuery;
 import com.ailearn.platform.core.manufacturing.dispatch.domain.DispatchPage;
 import com.ailearn.platform.core.manufacturing.dispatch.exception.DispatchErrorCode;
@@ -132,7 +133,11 @@ public class DispatchApplicationServiceImpl implements DispatchApplicationServic
                 .toList();
         int from = Math.min((normalized.getPage() - 1) * normalized.getSize(), filtered.size());
         int to = Math.min(from + normalized.getSize(), filtered.size());
-        return new DispatchPage(filtered.subList(from, to), filtered.size(), normalized.getPage(), normalized.getSize());
+        // 修改用途：列表不再直接暴露内部派工聚合，统一返回页面字段和服务端动作能力。
+        List<DispatchOrderView> views = filtered.subList(from, to).stream()
+                .map(DispatchOrderView::from)
+                .toList();
+        return new DispatchPage(views, filtered.size(), normalized.getPage(), normalized.getSize());
     }
 
     private DispatchOrder transition(UUID id, String key, String operation,

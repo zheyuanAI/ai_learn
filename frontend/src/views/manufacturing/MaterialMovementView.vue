@@ -429,8 +429,10 @@ import type {
 import {
   createMaterialIssue,
   confirmMaterialIssue,
+  getMaterialIssues,
   createMaterialReturn,
   confirmMaterialReturn,
+  getMaterialReturns,
   getWorkOrders,
 } from "../../api/manufacturing";
 import { getProducts, getWarehouses, getLocations } from "../../api/masterData";
@@ -558,10 +560,36 @@ function getActionDisabledReason(item: { allowedActions?: AllowedAction[] | null
 }
 
 async function loadData() {
-  // 后端只有领退料写命令，没有列表读取接口；禁止前端拼装或臆造单据事实。
-  issueList.value = [];
-  returnList.value = [];
-  viewState.value = "ready";
+  viewState.value = "loading";
+  errorMessage.value = "";
+  if (availableWorkOrders.value.length === 0) {
+    issueList.value = [];
+    returnList.value = [];
+    viewState.value = "ready";
+    return;
+  }
+  try {
+    // 修改用途：按真实工单集合读取领退料事实，避免保存成功后页面仍固定显示空列表。
+    const results = await Promise.all(availableWorkOrders.value.map(async (workOrder) => {
+      const workOrderId = String(workOrder.id);
+      const [issues, returns] = await Promise.all([
+        getMaterialIssues(workOrderId),
+        getMaterialReturns(workOrderId),
+      ]);
+      return {
+        issues: issues.data || [],
+        returns: returns.data || [],
+      };
+    }));
+    issueList.value = results.flatMap((result) => result.issues);
+    returnList.value = results.flatMap((result) => result.returns);
+    viewState.value = "ready";
+  } catch (err: any) {
+    errorMessage.value = err?.message || "请求领退料单列表失败";
+    issueList.value = [];
+    returnList.value = [];
+    viewState.value = "error";
+  }
 }
 
 async function loadMovementOptions() {
@@ -571,11 +599,11 @@ async function loadMovementOptions() {
     const keyword = movementOptionsKeyword.value.trim() || undefined;
     const selectedWarehouseId = activeTab.value === "issue" ? issueForm.warehouseId : returnForm.warehouseId;
     const [woRes, prodRes, whRes, locRes] = await Promise.allSettled([
-      getWorkOrders({ page: 1, size: 20, workOrderNo: keyword }),
-      getProducts({ page: 1, size: 20, keyword, status: "ACTIVE" }),
-      getWarehouses({ page: 1, size: 20, keyword, status: "ACTIVE" }),
+      getWorkOrders({ page: 1, size: 1000, workOrderNo: keyword }),
+      getProducts({ page: 1, size: 1000, keyword, status: "ACTIVE" }),
+      getWarehouses({ page: 1, size: 1000, keyword, status: "ACTIVE" }),
       selectedWarehouseId
-        ? getLocations({ page: 1, size: 20, keyword, warehouseId: selectedWarehouseId, status: "ACTIVE" })
+        ? getLocations({ page: 1, size: 1000, keyword, warehouseId: selectedWarehouseId, status: "ACTIVE" })
         : Promise.resolve(null),
     ]);
     if (woRes.status === "fulfilled") {
@@ -755,8 +783,8 @@ async function handleExecuteConfirm() {
 }
 
 onMounted(async () => {
-  loadData();
   await loadMovementOptions();
+  await loadData();
   if (route.query.workOrderId) {
     const qWoId = String(route.query.workOrderId);
     issueForm.workOrderId = qWoId;

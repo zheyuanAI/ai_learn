@@ -18,6 +18,7 @@ import com.ailearn.platform.core.quality.domain.QualityDispositionType;
 import com.ailearn.platform.core.quality.domain.QualityInspectionFact;
 import com.ailearn.platform.core.quality.domain.QualityReceiptFact;
 import com.ailearn.platform.core.quality.domain.QualityReceiptLineFact;
+import com.ailearn.platform.core.quality.domain.QualityReceiptCandidate;
 import com.ailearn.platform.core.quality.dto.QualityDispositionConfirmRequest;
 import com.ailearn.platform.core.quality.dto.QualityDispositionRequest;
 import com.ailearn.platform.core.quality.dto.QualityInspectionRequest;
@@ -278,6 +279,7 @@ class PurchaseQualityApplicationServiceTest {
         }
 
         @Override public List<QualityInspectionFact> listInspections(UUID tenant) { return new ArrayList<>(inspections.values()); }
+        @Override public List<QualityReceiptCandidate> listReceiptCandidates(UUID tenant) { return List.of(); }
         @Override public List<QualityDispositionFact> listDispositions(UUID tenant) { return new ArrayList<>(dispositions.values()); }
 
         private QualityReceiptFact receipt() {

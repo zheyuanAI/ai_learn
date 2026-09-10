@@ -231,7 +231,7 @@ watch(
  */
 async function loadQualityHoldLocations() {
   try {
-    const response = await getLocations({ page: 1, size: 20, type: "QualityHold", status: "ACTIVE" });
+    const response = await getLocations({ page: 1, size: 1000, type: "QualityHold", status: "ACTIVE" });
     qualityHoldLocations.value = response.data.records;
   } catch (error) {
     console.error("[ReceiptConfirmView] 加载质量隔离库位失败", error);

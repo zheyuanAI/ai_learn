@@ -8,7 +8,12 @@
       description="将车间已检验合格且尚未入库的产成品办理成品入库。入库确认后通过库存应用服务真实增加成品库位实物库存。"
     >
       <template #actions>
-        <button type="button" class="btn btn-primary" @click="openCreateModal">
+        <button
+          v-if="hasPermission('mes:finished:receipt')"
+          type="button"
+          class="btn btn-primary"
+          @click="openCreateModal"
+        >
           <span class="btn-icon">＋</span>
           <span>新建成品入库单</span>
         </button>
@@ -185,10 +190,14 @@
               <select v-model="createForm.locationId" class="form-input" required :disabled="!createForm.warehouseId">
                 <option value="">{{ !createForm.warehouseId ? '请先选择仓库' : '请选择库位' }}</option>
                 <option v-for="location in locations" :key="location.id" :value="String(location.id)">
-                  {{ location.code }} ({{ location.name }})
+                  {{ location.code }} ({{ location.name }}) - {{ location.type }}
                 </option>
               </select>
             </div>
+          </div>
+
+          <div v-if="createForm.warehouseId && !masterDataLoading && !masterDataError && locations.length === 0" class="options-hint text-warning">
+            当前仓库没有启用的 Storage 类型库位，请先在库位管理中创建或启用 Storage 库位。
           </div>
 
           <p class="modal-hint">
@@ -200,7 +209,7 @@
             <button
               type="submit"
               class="btn btn-primary"
-              :disabled="isSubmitting || !receiptQuantityValid"
+              :disabled="isSubmitting || !receiptQuantityValid || !createForm.locationId || locations.length === 0"
               :title="receiptQuantityValid ? '保存入库单 (草稿)' : '入库数量必须在已检验合格且未入库余额内'"
             >
               保存入库单 (草稿)
@@ -228,6 +237,7 @@ import { ref, reactive, computed, onMounted } from "vue";
 import { useCommand } from "@/composables/useCommand";
 import CommandFeedback from "@/components/common/CommandFeedback.vue";
 import { useRoute, useRouter } from "vue-router";
+import { usePermission } from "../../composables/usePermission";
 import {
   PageHeader,
   FilterBar,
@@ -255,6 +265,7 @@ import type { WorkOrderItem } from "../../types/manufacturing";
 
 const route = useRoute();
 const router = useRouter();
+const { hasPermission } = usePermission();
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
@@ -418,8 +429,10 @@ function onModalWorkOrderChange() {
 
 async function submitCreateReceipt() {
   if (!createForm.workOrderId || !receiptQuantityValid.value || !createForm.warehouseId || !createForm.locationId) return;
+  // 修改用途：成品入库单号是服务端事实的必填标识，由页面一次生成并在幂等执行期间复用。
+  const receiptNo = `FGR-${crypto.randomUUID()}`;
   try {
-    const created = await execute((key) => createFinishedGoodsReceipt(createForm, key), { onConflict: fetchReceiptList });
+    const created = await execute((key) => createFinishedGoodsReceipt({ ...createForm, receiptNo }, key), { onConflict: fetchReceiptList });
     if (!created?.data?.id) {
       throw new Error("服务端未返回成品入库单 ID，已阻止继续确认");
     }
@@ -470,8 +483,8 @@ async function loadMasterData() {
   try {
     const keyword = masterDataKeyword.value.trim() || undefined;
     const [workOrderRes, warehouseRes] = await Promise.all([
-      getWorkOrders({ page: 1, size: 20, workOrderNo: keyword }),
-      getWarehouses({ page: 1, size: 20, keyword, status: "ACTIVE" }),
+      getWorkOrders({ page: 1, size: 1000, workOrderNo: keyword }),
+      getWarehouses({ page: 1, size: 1000, keyword, status: "ACTIVE" }),
     ]);
     workOrders.value = workOrderRes.data.records || [];
     warehouses.value = warehouseRes.data.records || [];
@@ -502,11 +515,15 @@ async function loadLocations() {
   const response = await getLocations({
     warehouseId: createForm.warehouseId,
     page: 1,
-    size: 20,
+    size: 1000,
     keyword: masterDataKeyword.value.trim() || undefined,
+    type: "Storage",
     status: "ACTIVE",
   });
-  locations.value = response.data.records || [];
+  // 修改用途：后端按类型查询，前端再次收敛结果，避免非 Storage 库位进入成品入库选择框。
+  locations.value = (response.data.records || []).filter(
+    (location) => location.status === "ACTIVE" && location.type === "Storage"
+  );
 }
 </script>
 

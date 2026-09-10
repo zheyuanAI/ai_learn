@@ -100,19 +100,39 @@ test.describe("销售订单驱动拣货、分批发货和退回", () => {
 
   test("直接拣货使用真实操作 ID、同仓来源和发货暂存位", async ({ page }) => {
     let pickPayload: any = null;
+    const partialOrder = {
+      ...order,
+      lines: [{ ...order.lines[0], orderedQty: "3.000000", unreservedQty: "3.000000", unshippedQty: "3.000000" }],
+    };
     await page.route("**/api/pick-tasks*", async (route) => {
-      await route.fulfill({ json: pageResponse([order]) });
+      await route.fulfill({ json: pageResponse([partialOrder]) });
     });
     await page.route("**/api/sales-orders/sales-order-from-api", async (route) => {
-      await route.fulfill({ json: apiResponse(order) });
+      await route.fulfill({ json: apiResponse(partialOrder) });
     });
     await page.route("**/api/locations*", async (route) => {
       const url = new URL(route.request().url());
       const type = url.searchParams.get("type");
       const records = type === "ShippingStaging"
         ? [{ id: "shipping-1", warehouseId: "warehouse-1", code: "SHP-REAL", name: "真实发货暂存位", type: "ShippingStaging", status: "ACTIVE" }]
-        : [{ id: "storage-1", warehouseId: "warehouse-1", code: "ST-REAL", name: "真实存储位", type: "Storage", status: "ACTIVE" }];
+        : type === "Picking"
+          ? [{ id: "picking-1", warehouseId: "warehouse-1", code: "PK-REAL", name: "真实拣货位", type: "Picking", status: "ACTIVE" }]
+          : [{ id: "storage-1", warehouseId: "warehouse-1", code: "ST-REAL", name: "真实存储位", type: "Storage", status: "ACTIVE" }];
       await route.fulfill({ json: pageResponse(records) });
+    });
+    await page.route("**/api/inventory/balances*", async (route) => {
+      await route.fulfill({ json: pageResponse([{
+        dimension: {
+          productId: "product-from-api",
+          warehouseId: "warehouse-1",
+          locationId: "storage-1",
+          lotNo: "",
+        },
+        onHandQty: "2.000000",
+        reservedQty: "0.000000",
+        availableQty: "2.000000",
+        version: 1,
+      }]) });
     });
     await page.route("**/api/pick-tasks/confirm", async (route) => {
       pickPayload = JSON.parse(route.request().postData() || "{}");
@@ -125,15 +145,18 @@ test.describe("销售订单驱动拣货、分批发货和退回", () => {
     await expect(page.getByRole("heading", { name: /销售订单行项数量与进度明细/ })).toBeVisible();
     await page.getByRole("button", { name: "直接拣货 (自动补齐预留)" }).click();
 
-    await page.locator("select.form-select").filter({ has: page.locator("option[value='storage-1']") }).first().selectOption("storage-1");
-    await page.locator("input.text-cyan").fill("2");
+    const sourceSelect = page.locator("select.form-select").filter({ has: page.locator("option[value='storage-1']") }).first();
+    await expect(sourceSelect.locator("option[value='picking-1']")).toBeDisabled();
+    await expect(page.locator("input.text-cyan")).toHaveValue("3.000000");
+    await sourceSelect.selectOption("storage-1");
+    await expect(page.locator("input.text-cyan")).toHaveValue("2.000000");
     await page.getByRole("button", { name: "确认拣货" }).click();
 
     await expect.poll(() => pickPayload).toEqual({
       salesOrderId: "sales-order-from-api",
       lines: [{
         salesOrderLineId: "sales-line-from-api",
-        pickedQty: "2",
+        pickedQty: "2.000000",
         sourceLocationId: "storage-1",
         shippingLocationId: "shipping-1",
       }],

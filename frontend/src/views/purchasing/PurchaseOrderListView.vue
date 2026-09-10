@@ -8,7 +8,8 @@
       :description="isReceiptMode ? '仓库人员执行采购到货外观验收：核对实到数量与外观拒收数量（到货=拒收+实收），实际接收货物统一送入 QualityHold 隔离位，放行前严禁上架。' : '采购全链路状态流转：未提交 ➔ 已提交 ➔ 已审核 ➔ 部分收货 ➔ 已完成。仓库到货外观验收数量恒等（到货=拒收+实收），拒收数量不入库并保留为待收；实际接收货物全部进入质量隔离位（QualityHold），放行后入暂存位（ReceivingStaging）再上架存储位（Storage）。'"
     >
       <template #actions>
-        <button v-if="!isReceiptMode" type="button" class="btn-primary" @click="isCreateModalOpen = true">
+        <!-- 修改用途：只有具备采购订单创建权限的角色才显示新建入口。 -->
+        <button v-if="!isReceiptMode && hasPermission('pur:order:create')" type="button" class="btn-primary" @click="isCreateModalOpen = true">
           <span>＋ 新建采购订单</span>
         </button>
       </template>
@@ -59,7 +60,8 @@
       description="当前筛选条件下未发现采购订单，您可以点击右上角新建采购订单。"
     >
       <template #action>
-        <button type="button" class="btn-create-sm" @click="isCreateModalOpen = true">
+        <!-- 修改用途：避免仓库/质检角色看到无权执行的采购订单创建入口。 -->
+        <button v-if="hasPermission('pur:order:create')" type="button" class="btn-create-sm" @click="isCreateModalOpen = true">
           立即新建采购单
         </button>
       </template>
@@ -116,7 +118,7 @@
             详情
           </button>
           <button
-            v-if="row.status === 'Approved' || row.status === 'PartiallyReceived'"
+            v-if="hasPermission('pur:receipt:confirm') && (row.status === 'Approved' || row.status === 'PartiallyReceived')"
             type="button"
             class="btn-link act-receive"
             @click="openReceiptConfirm(row)"
@@ -252,6 +254,7 @@ import type { PurchaseOrder } from "@/types/purchasing";
 import type { Product, Supplier, Warehouse } from "@/types/inventory";
 import { getProducts, getSuppliers, getWarehouses } from "@/api/masterData";
 import { getWorkOrders } from "@/api/manufacturing";
+import { usePermission } from "@/composables/usePermission";
 import {
   getPurchaseOrders,
   createPurchaseOrder,
@@ -260,6 +263,7 @@ import {
 
 const route = useRoute();
 const router = useRouter();
+const { hasPermission } = usePermission();
 
 /** 是否处于仓库到货验收工作台模式 (/purchasing/receipts) */
 const isReceiptMode = computed(() => {
@@ -412,7 +416,8 @@ async function handleConfirmReceipt(payload: any) {
 
     // 成功提示并引导进入质检（修复 F04）
     const poNo = selectedOrderForReceipt.value?.poNo || "";
-    const orderId = String(selectedOrderForReceipt.value?.id || "");
+    // 修改用途：质检上下文的采购订单 ID 必须以服务端返回的收货事实为准，避免列表行缓存或旧数据把错误订单 ID 带入后续流程。
+    const orderId = String(persistedReceipt?.purchaseOrderId || selectedOrderForReceipt.value?.id || "");
     if (confirm(`采购到货验收成功！实收货物已送入 QualityHold 质量隔离位。\n\n订单号: ${poNo}\n收货凭证号: ${payload.receiptNo || returnedReceiptId}\n\n是否立即前往【采购到货质检】录入检验事实？`)) {
       router.push({
         path: "/purchasing/quality",
@@ -477,10 +482,10 @@ async function loadCreateOptions() {
   try {
     const keyword = createOptionKeyword.value.trim() || undefined;
     const [supplierSettled, warehouseSettled, productSettled, workOrderSettled] = await Promise.allSettled([
-      getSuppliers({ page: 1, size: 20, keyword, status: "ACTIVE" }),
-      getWarehouses({ page: 1, size: 20, keyword, status: "ACTIVE" }),
-      getProducts({ page: 1, size: 20, keyword, status: "ACTIVE" }),
-      getWorkOrders({ page: 1, size: 20, workOrderNo: keyword }),
+      getSuppliers({ page: 1, size: 1000, keyword, status: "ACTIVE" }),
+      getWarehouses({ page: 1, size: 1000, keyword, status: "ACTIVE" }),
+      getProducts({ page: 1, size: 1000, keyword, status: "ACTIVE" }),
+      getWorkOrders({ page: 1, size: 1000, workOrderNo: keyword }),
     ]);
 
     if (supplierSettled.status === "fulfilled") {

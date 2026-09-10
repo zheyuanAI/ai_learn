@@ -14,8 +14,10 @@ import static org.mockito.Mockito.when;
 
 import com.ailearn.platform.core.masterdata.application.LocationApplicationServiceImpl;
 import com.ailearn.platform.core.masterdata.application.ProductApplicationServiceImpl;
+import com.ailearn.platform.core.masterdata.application.UomApplicationServiceImpl;
 import com.ailearn.platform.core.masterdata.domain.entity.Location;
 import com.ailearn.platform.core.masterdata.domain.entity.Product;
+import com.ailearn.platform.core.masterdata.domain.entity.Uom;
 import com.ailearn.platform.core.masterdata.domain.enumtype.LocationType;
 import com.ailearn.platform.core.masterdata.domain.model.LocationUsageSnapshot;
 import com.ailearn.platform.core.masterdata.domain.model.MasterDataPage;
@@ -30,6 +32,8 @@ import com.ailearn.platform.core.masterdata.dto.MasterDataPageResult;
 import com.ailearn.platform.core.masterdata.dto.ProductSaveRequest;
 import com.ailearn.platform.core.masterdata.dto.ProductView;
 import com.ailearn.platform.core.masterdata.dto.StatusChangeRequest;
+import com.ailearn.platform.core.masterdata.dto.UomSaveRequest;
+import com.ailearn.platform.core.masterdata.dto.UomView;
 import com.ailearn.platform.shared.context.RequestContextHolder;
 import com.ailearn.platform.shared.context.TenantContextHolder;
 import com.ailearn.platform.shared.context.UserContextHolder;
@@ -70,6 +74,9 @@ class MasterDataApplicationServiceTest {
     private MasterDataRepository<Location> locationRepository;
 
     @Mock
+    private MasterDataRepository<Uom> uomRepository;
+
+    @Mock
     private LocationUsagePort locationUsagePort;
 
     @Mock
@@ -77,6 +84,7 @@ class MasterDataApplicationServiceTest {
 
     private ProductApplicationServiceImpl productService;
     private LocationApplicationServiceImpl locationService;
+    private UomApplicationServiceImpl uomService;
 
     /**
      * 为每个测试设置可信租户和用户上下文。
@@ -88,6 +96,7 @@ class MasterDataApplicationServiceTest {
         productService = new ProductApplicationServiceImpl(productRepository);
         locationService = new LocationApplicationServiceImpl(
                 locationRepository, locationUsagePort, warehouseReferencePort);
+        uomService = new UomApplicationServiceImpl(uomRepository);
     }
 
     /**
@@ -180,9 +189,10 @@ class MasterDataApplicationServiceTest {
         Product product = product("SKU-001", "启用商品", "ACTIVE");
         MasterDataPageQuery query = new MasterDataPageQuery();
         query.setPage(0);
-        query.setSize(500);
+        query.setSize(1500);
+        query.setStatus("ENABLE");
         when(productRepository.findPage(eq(TENANT_A), any(MasterDataPageQuery.class)))
-                .thenReturn(new MasterDataPage<>(List.of(product), 1, 1, 200));
+                .thenReturn(new MasterDataPage<>(List.of(product), 1, 1, 1000));
 
         MasterDataPageResult<ProductView> result = productService.page(query);
 
@@ -194,6 +204,31 @@ class MasterDataApplicationServiceTest {
                 .findFirst()
                 .orElseThrow();
         assertTrue(disable.isEnabled());
+
+        ArgumentCaptor<MasterDataPageQuery> queryCaptor = ArgumentCaptor.forClass(MasterDataPageQuery.class);
+        verify(productRepository).findPage(eq(TENANT_A), queryCaptor.capture());
+        assertEquals(1000, queryCaptor.getValue().getSize());
+        assertEquals("ACTIVE", queryCaptor.getValue().getStatus());
+    }
+
+    /**
+     * 创建计量单位时备注必须写入实体并通过响应返回，覆盖页面新建后立即显示和刷新查询两个事实。
+     */
+    @Test
+    void createUomPreservesRemark() {
+        UomSaveRequest request = new UomSaveRequest();
+        request.setCode("BOX");
+        request.setName("箱");
+        request.setSymbol("箱");
+        request.setRemark("  包装单位  ");
+        when(uomRepository.existsByCode(TENANT_A, "BOX", null)).thenReturn(false);
+
+        UomView result = uomService.create(request);
+
+        ArgumentCaptor<Uom> captor = ArgumentCaptor.forClass(Uom.class);
+        verify(uomRepository).insert(captor.capture());
+        assertEquals("包装单位", captor.getValue().getRemark());
+        assertEquals("包装单位", result.getRemark());
     }
 
     /**

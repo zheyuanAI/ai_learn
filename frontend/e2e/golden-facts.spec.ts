@@ -255,7 +255,7 @@ test.describe.serial("阶段 0–9 真实黄金闭环事实验收", () => {
     await call(request, ROLE.warehouse, `/api/purchase-quality-dispositions/${disposition.id}/confirm`, "POST", {
       dispositionId: disposition.id, toLocationId: locations.receiving.id, putawayTargetLocationId: locations.storage.id,
     });
-    const putawayPage = await call(request, ROLE.warehouse, "/api/putaway-tasks?page=1&size=200");
+    const putawayPage = await call(request, ROLE.warehouse, "/api/putaway-tasks?page=1&size=1000");
     const putaway = (putawayPage.records || []).find((item: Json) => item.purchaseReceiptId === receipt.id);
     expect(putaway?.id, "质量放行后未生成对应上架任务").toBeTruthy();
     await call(request, ROLE.warehouse, `/api/putaway-tasks/${putaway.id}/confirm`, "POST", {

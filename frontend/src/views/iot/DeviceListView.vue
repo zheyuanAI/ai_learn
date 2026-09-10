@@ -356,7 +356,8 @@ async function fetchDeviceList() {
 
 async function fetchProfileOptions() {
   try {
-    const res = await getDeviceProfiles();
+    // 修改：设备档案下拉框一次读取当前租户完整候选目录，避免默认分页只返回前 20 条。
+    const res = await getDeviceProfiles({ page: 1, size: 1000 });
     if (res.data) {
       profileOptions.value = res.data.records || [];
       if (profileOptions.value.length > 0 && !createForm.deviceProfileId) {

@@ -184,9 +184,15 @@
           <div class="form-grid two-col">
             <div class="form-item">
               <label>责任操作工 <span class="req">*</span></label>
-              <div class="selector-unavailable" role="status">
-                受控同租户操作员目录未提供，派工创建已阻止。请先由平台管理员确认最小只读人员目录契约。
-              </div>
+              <select v-model="createForm.operatorId" class="form-select" required :disabled="!operatorDirectoryAvailable">
+                <option value="">{{ operatorDirectoryAvailable ? "请选择责任操作工" : "正在加载同租户操作员目录..." }}</option>
+                <option v-for="operator in operators" :key="operator.id" :value="operator.id">
+                  {{ operator.userNo || operator.username }} - {{ operator.realName }}
+                </option>
+              </select>
+              <small v-if="!operatorDirectoryAvailable" class="form-hint text-warning">
+                未读取到可用的同租户操作员目录，派工创建暂不可提交。
+              </small>
             </div>
             <div class="form-item">
               <label>派工指派数量 <span class="req">*</span></label>
@@ -214,7 +220,7 @@
 
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" @click="createModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting || !operatorDirectoryAvailable">
+            <button type="submit" class="btn btn-primary" :disabled="isSubmitting || !operatorDirectoryAvailable || !createForm.operatorId">
               {{ isSubmitting ? "创建中..." : "保存派工单 (Draft)" }}
             </button>
           </div>
@@ -269,6 +275,7 @@ import {
   getRoutingById,
 } from "../../api/manufacturing";
 import { getDevices } from "../../api/iot";
+import { getOperatorDirectory, type OperatorDirectoryItem } from "../../api/auth";
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
@@ -302,10 +309,10 @@ const isLoadingOperations = ref(false);
 const releasedWorkOrders = ref<any[]>([]);
 const availableOperations = ref<any[]>([]);
 const availableDevices = ref<any[]>([]);
+const operators = ref<OperatorDirectoryItem[]>([]);
 
-// 当前 Auth 仅确认存在 auth:user:manage 管理接口，未确认面向生产角色的同租户只读目录。
-// 在用户确认最小目录契约前保持阻塞，禁止用固定 UUID 或管理员接口伪造操作工选项。
-const operatorDirectoryAvailable = false;
+// 修改用途：派工只消费 Auth 返回的同租户最小操作员目录，不使用固定 UUID 或管理员详情接口伪造人员。
+const operatorDirectoryAvailable = ref(false);
 
 const createForm = reactive<DispatchOrderCreateRequest>({
   workOrderId: "",
@@ -381,7 +388,7 @@ function handlePageChange(page: number) {
 async function openCreateModal() {
   createForm.workOrderId = "";
   createForm.operationId = "";
-  // 操作员目录尚未具备受控只读契约，保持空值并阻止提交。
+  // 修改用途：重新打开表单时清理旧的人员选择，避免跨工单误带责任操作工。
   createForm.operatorId = "";
   createForm.dispatchQty = "";
   createForm.deviceId = "";
@@ -396,9 +403,10 @@ async function openCreateModal() {
 async function loadDispatchModalOptions() {
   isLoadingOptions.value = true;
   try {
-    const [woRes, devRes] = await Promise.allSettled([
-      getWorkOrders({ page: 1, size: 20, status: "Released" }),
-      getDevices({ page: 1, size: 20 }),
+    const [woRes, devRes, operatorRes] = await Promise.allSettled([
+      getWorkOrders({ page: 1, size: 1000, status: "Released" }),
+      getDevices({ page: 1, size: 1000 }),
+      getOperatorDirectory({ page: 1, size: 1000 }),
     ]);
 
     if (woRes.status === "fulfilled") {
@@ -409,6 +417,14 @@ async function loadDispatchModalOptions() {
 
     if (devRes.status === "fulfilled") {
       availableDevices.value = devRes.value.data?.records || [];
+    }
+
+    if (operatorRes.status === "fulfilled") {
+      operators.value = operatorRes.value.data?.records || [];
+      operatorDirectoryAvailable.value = operators.value.length > 0;
+    } else {
+      operators.value = [];
+      operatorDirectoryAvailable.value = false;
     }
   } catch (err) {
     console.error("[DispatchView] 加载派工建单选项失败:", err);
@@ -455,8 +471,8 @@ async function onWorkOrderChange() {
 }
 
 async function submitCreateDispatch() {
-  if (!operatorDirectoryAvailable) {
-    alert("当前没有受控的同租户操作员目录，派工创建已阻止；请先确认最小只读人员目录契约。");
+  if (!operatorDirectoryAvailable.value) {
+    alert("当前没有可用的同租户操作员目录，派工创建已阻止。");
     return;
   }
   if (!createForm.workOrderId || !createForm.operationId || !createForm.operatorId || !createForm.dispatchQty) return;

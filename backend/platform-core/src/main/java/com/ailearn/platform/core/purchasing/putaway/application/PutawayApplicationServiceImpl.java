@@ -112,7 +112,8 @@ public class PutawayApplicationServiceImpl implements PutawayApplicationService 
     @Override
     @PreAuthorize("hasAuthority('pur:receipt:view')")
     public PutawayTaskPageView page(String status, int page, int size) {
-        if (page < 1 || size < 1 || size > 200) throw new ValidationException("分页参数不合法");
+        // 修改：上架任务下拉/关联查询统一允许最多 1000 条候选。
+        if (page < 1 || size < 1 || size > 1000) throw new ValidationException("分页参数不合法");
         UUID tenantId = TenantContextHolder.requireTenantId();
         List<PutawayTaskView> records = repository.findPage(tenantId, status, page, size).stream()
                 .map(PutawayTaskView::of).toList();

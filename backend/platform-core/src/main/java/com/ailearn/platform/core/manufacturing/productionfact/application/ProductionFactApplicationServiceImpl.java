@@ -214,6 +214,18 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
     }
 
     @Override
+    // 修改用途：领料申请人和仓库确认人都需要读取同一批待处理单据，查询权限与确认权限解耦。
+    @PreAuthorize("hasAuthority('mes:material:requisition') or hasAuthority('mes:material:confirm')")
+    public List<MaterialIssue> findMaterialIssues(UUID workOrderId) {
+        Actor actor = actor();
+        requireId(workOrderId, "workOrderId");
+        if (!visibleWorkOrder(actor.tenantId(), workOrderId)) {
+            return List.of();
+        }
+        return repository.findIssues(actor.tenantId(), workOrderId);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     @PreAuthorize("hasAuthority('mes:material:requisition')")
     public MaterialReturn createMaterialReturn(MaterialReturnCreateRequest request, String idempotencyKey) {
@@ -286,6 +298,18 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
                             value.lines().stream().map(MaterialReturnLine::returnQty)
                                     .reduce(BigDecimal.ZERO, BigDecimal::add), transactionIds);
                 });
+    }
+
+    @Override
+    // 修改用途：退料申请人和仓库确认人都需要读取同一批待处理单据，查询权限与确认权限解耦。
+    @PreAuthorize("hasAuthority('mes:material:requisition') or hasAuthority('mes:material:confirm')")
+    public List<MaterialReturn> findMaterialReturns(UUID workOrderId) {
+        Actor actor = actor();
+        requireId(workOrderId, "workOrderId");
+        if (!visibleWorkOrder(actor.tenantId(), workOrderId)) {
+            return List.of();
+        }
+        return repository.findReturns(actor.tenantId(), workOrderId);
     }
 
     @Override
@@ -524,7 +548,8 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
     }
 
     @Override
-    @PreAuthorize("hasAuthority('mes:finished:receipt')")
+    // 修改用途：成品入库创建人和仓库确认人都需要查看待确认单据，查询权限与写入权限解耦。
+    @PreAuthorize("hasAuthority('mes:finished:receipt') or hasAuthority('mes:finished:confirm')")
     public List<FinishedGoodsReceipt> findFinishedGoodsReceipts(UUID workOrderId) {
         Actor actor = actor();
         requireId(workOrderId, "workOrderId");

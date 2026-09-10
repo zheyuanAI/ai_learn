@@ -209,4 +209,60 @@ class AuthMigrationScriptTest {
         }
     }
 
+    /**
+     * 校验 V10 为销售、采购、仓库和生产角色补齐页面下拉框所需的主数据只读权限。
+     * 入参：无；出参：无；流程：读取迁移资源，确认角色-权限矩阵、有效数据过滤和幂等插入均存在。
+     *
+     * @throws IOException 读取迁移资源失败时抛出
+     */
+    @Test
+    @DisplayName("V10 必须补齐业务角色主数据只读权限并保持幂等")
+    void shouldGrantOperationalMasterdataReadPermissionsInV10() throws IOException {
+        try (InputStream input = getClass().getResourceAsStream(
+                "/db/migration/auth/V10__grant_operational_masterdata_read_permissions.sql")) {
+            assertNotNull(input, "V10 迁移脚本必须存在");
+            String sql = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+
+            for (String permission : List.of(
+                    "inv:customer:view", "inv:supplier:view", "inv:location:view", "inv:uom:view",
+                    "mes:workorder:view")) {
+                assertTrue(sql.contains("'" + permission + "'"), "V10 缺少只读权限: " + permission);
+            }
+            for (String roleCode : List.of(
+                    "sales.rep", "purchase.agent", "warehouse.operator", "mes.inspector")) {
+                assertTrue(sql.contains("r.role_code = '" + roleCode + "'"), "V10 缺少角色授权: " + roleCode);
+            }
+            assertTrue(sql.contains("r.status = 'ACTIVE'") && sql.contains("r.isdel = 0")
+                            && sql.contains("p.isdel = 0"),
+                    "V10 必须只为有效角色和权限补授权");
+            assertTrue(sql.contains("ON CONFLICT DO NOTHING"), "V10 必须保持重复执行幂等");
+        }
+    }
+
+    /**
+     * 校验 V11 为质检/收货与 MES 派工页面补齐采购订单、设备目录只读权限。
+     * 入参：无；出参：无；流程：读取迁移资源，确认最小角色-权限矩阵、有效数据过滤和幂等插入均存在。
+     *
+     * @throws IOException 读取迁移资源失败时抛出
+     */
+    @Test
+    @DisplayName("V11 必须补齐质检和派工下拉目录只读权限并保持幂等")
+    void shouldGrantQualityAndMesOptionReadPermissionsInV11() throws IOException {
+        try (InputStream input = getClass().getResourceAsStream(
+                "/db/migration/auth/V11__grant_quality_and_mes_option_read_permissions.sql")) {
+            assertNotNull(input, "V11 迁移脚本必须存在");
+            String sql = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+
+            assertTrue(sql.contains("pur:order:view"), "V11 缺少采购订单只读权限");
+            assertTrue(sql.contains("iot:device:view"), "V11 缺少设备目录只读权限");
+            assertTrue(sql.contains("r.role_code IN ('warehouse.operator', 'mes.inspector')"),
+                    "V11 缺少仓库/生产角色采购订单目录授权");
+            assertTrue(sql.contains("r.role_code = 'mes.inspector'"),
+                    "V11 缺少生产角色设备目录授权");
+            assertTrue(sql.contains("r.status = 'ACTIVE'") && sql.contains("r.isdel = 0")
+                            && sql.contains("p.isdel = 0") && sql.contains("ON CONFLICT DO NOTHING"),
+                    "V11 必须限制有效角色/权限并保持幂等");
+        }
+    }
+
 }

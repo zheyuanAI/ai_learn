@@ -8,8 +8,11 @@ import com.ailearn.platform.core.manufacturing.productionfact.domain.ProductionF
 import com.ailearn.platform.core.manufacturing.productionfact.domain.QualityInspection;
 import com.ailearn.platform.core.manufacturing.productionfact.domain.WorkReport;
 import com.ailearn.platform.core.manufacturing.productionfact.dto.FinishedGoodsReceiptCreateRequest;
+import com.ailearn.platform.core.manufacturing.productionfact.dto.FinishedGoodsReceiptView;
 import com.ailearn.platform.core.manufacturing.productionfact.dto.MaterialIssueCreateRequest;
+import com.ailearn.platform.core.manufacturing.productionfact.dto.MaterialIssueView;
 import com.ailearn.platform.core.manufacturing.productionfact.dto.MaterialReturnCreateRequest;
+import com.ailearn.platform.core.manufacturing.productionfact.dto.MaterialReturnView;
 import com.ailearn.platform.core.manufacturing.productionfact.dto.QualityInspectionCreateRequest;
 import com.ailearn.platform.core.manufacturing.productionfact.dto.QualityInspectionSubmitRequest;
 import com.ailearn.platform.core.manufacturing.productionfact.dto.QualityInspectionCloseRequest;
@@ -47,6 +50,15 @@ public class ProductionFactController {
         return ApiResponse.success(service.createMaterialIssue(request, key));
     }
 
+    /** 查询当前租户指定工单的领料单，供申请角色和仓库确认角色共同查看。 */
+    @GetMapping("/material-issues")
+    @PreAuthorize("hasAuthority('mes:material:requisition') or hasAuthority('mes:material:confirm')")
+    public ApiResponse<List<MaterialIssueView>> issueCollection(
+            @RequestParam(name = "work_order_id") UUID workOrderId) {
+        return ApiResponse.success(service.findMaterialIssues(workOrderId).stream()
+                .map(MaterialIssueView::from).toList());
+    }
+
     /** 确认生产领料。 */
     @PostMapping("/material-issues/{id}/confirm")
     @PreAuthorize("hasAuthority('mes:material:confirm')")
@@ -61,6 +73,15 @@ public class ProductionFactController {
     public ApiResponse<MaterialReturn> createReturn(@RequestBody MaterialReturnCreateRequest request,
                                                     @RequestHeader("Idempotency-Key") String key) {
         return ApiResponse.success(service.createMaterialReturn(request, key));
+    }
+
+    /** 查询当前租户指定工单的退料单，供申请角色和仓库确认角色共同查看。 */
+    @GetMapping("/material-returns")
+    @PreAuthorize("hasAuthority('mes:material:requisition') or hasAuthority('mes:material:confirm')")
+    public ApiResponse<List<MaterialReturnView>> returnCollection(
+            @RequestParam(name = "work_order_id") UUID workOrderId) {
+        return ApiResponse.success(service.findMaterialReturns(workOrderId).stream()
+                .map(MaterialReturnView::from).toList());
     }
 
     /** 确认生产退料。 */
@@ -156,16 +177,22 @@ public class ProductionFactController {
 
     /** 查询当前租户工单成品入库。 */
     @GetMapping("/finished-goods-receipts/{workOrderId}")
-    @PreAuthorize("hasAuthority('mes:finished:receipt')")
-    public ApiResponse<List<FinishedGoodsReceipt>> receipts(@PathVariable("workOrderId") UUID workOrderId) {
-        return ApiResponse.success(service.findFinishedGoodsReceipts(workOrderId));
+    // 修改用途：创建人和实物确认人都需要查看入库单列表，查询权限与写入权限解耦。
+    @PreAuthorize("hasAuthority('mes:finished:receipt') or hasAuthority('mes:finished:confirm')")
+    public ApiResponse<List<FinishedGoodsReceiptView>> receipts(@PathVariable("workOrderId") UUID workOrderId) {
+        // 修改用途：列表返回页面视图和服务端确认能力，避免前端把内部事实当作可执行模型。
+        return ApiResponse.success(service.findFinishedGoodsReceipts(workOrderId).stream()
+                .map(FinishedGoodsReceiptView::from).toList());
     }
 
     /** 查询当前租户指定工单的成品入库集合；work_order_id 是正式查询条件。 */
     @GetMapping("/finished-goods-receipts")
-    @PreAuthorize("hasAuthority('mes:finished:receipt')")
-    public ApiResponse<List<FinishedGoodsReceipt>> receiptCollection(
+    // 修改用途：集合查询同样允许仓库确认角色读取待确认单据。
+    @PreAuthorize("hasAuthority('mes:finished:receipt') or hasAuthority('mes:finished:confirm')")
+    public ApiResponse<List<FinishedGoodsReceiptView>> receiptCollection(
             @RequestParam(name = "work_order_id") UUID workOrderId) {
-        return ApiResponse.success(service.findFinishedGoodsReceipts(workOrderId));
+        // 修改用途：集合查询与路径查询保持一致，返回确认动作能力。
+        return ApiResponse.success(service.findFinishedGoodsReceipts(workOrderId).stream()
+                .map(FinishedGoodsReceiptView::from).toList());
     }
 }

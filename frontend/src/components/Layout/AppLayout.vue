@@ -205,11 +205,14 @@ function isParentActive(item: DisplayMenuItem): boolean {
  * 切换子菜单展开/折叠
  */
 function toggleGroup(id: string) {
-  if (openGroupIds.value.has(id)) {
-    openGroupIds.value.delete(id);
+  // 修改用途：使用新 Set 替换旧引用，确保 Vue 能侦测导航分组展开/收起并刷新子菜单。
+  const nextOpenGroupIds = new Set(openGroupIds.value);
+  if (nextOpenGroupIds.has(id)) {
+    nextOpenGroupIds.delete(id);
   } else {
-    openGroupIds.value.add(id);
+    nextOpenGroupIds.add(id);
   }
+  openGroupIds.value = nextOpenGroupIds;
 }
 
 /**

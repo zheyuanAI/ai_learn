@@ -153,8 +153,8 @@
           </div>
           <div class="meta-card">
             <span class="lbl">出库仓库</span>
-            <strong>{{ order.warehouseName || '未返回仓库事实' }}</strong>
-            <span class="sub">发货暂存库位: {{ order.shippingLocationCode || '未返回真实库位' }}</span>
+            <strong>{{ order.warehouseName || '拣货时按真实库位确定' }}</strong>
+            <span class="sub">发货暂存库位: {{ order.shippingLocationCode || '由仓库人员选择真实库位' }}</span>
           </div>
         </div>
 
@@ -192,8 +192,8 @@
                 <tr v-for="line in order.lines" :key="line.id">
                   <td>
                     <div class="sku-cell">
-                      <span class="sku">{{ line.sku }}</span>
-                      <span class="name">{{ line.productName }}</span>
+                      <span class="sku">{{ displayLineSku(line) }}</span>
+                      <span class="name">{{ displayLineName(line) }}</span>
                     </div>
                   </td>
                   <td style="text-align: right;">
@@ -293,16 +293,35 @@
           </div>
           <div class="form-item">
             <label>物料信息</label>
-            <input :value="`${selectedLineForPick.productName} (${selectedLineForPick.sku})`" type="text" class="form-input" disabled />
+            <input :value="`${displayLineName(selectedLineForPick)} (${displayLineSku(selectedLineForPick)})`" type="text" class="form-input" disabled />
           </div>
           <div class="form-item">
             <label>来源库位 <span class="req">*</span></label>
-            <select v-model="pickSourceLocationId" class="form-select" required>
+            <select
+              v-model="pickSourceLocationId"
+              class="form-select"
+              required
+              :disabled="pickSourcesLoading || !!pickSourceError || pickSelectableSourceOptions.length === 0"
+              @change="handlePickSourceChange"
+            >
               <option value="">请选择真实来源库位</option>
-              <option v-for="location in sourceLocations" :key="location.id" :value="String(location.id)">
-                {{ location.code }} ({{ location.name }})
+              <option v-if="!pickSourcesLoading && !pickSourceError && pickSelectableSourceOptions.length === 0" value="" disabled>
+                当前物料没有可用来源库位
+              </option>
+              <option
+                v-for="location in pickSourceOptions"
+                :key="location.id"
+                :value="String(location.id)"
+                :disabled="!location.selectable"
+              >
+                {{ location.code }} ({{ location.name }}) ·
+                {{ location.selectable ? `单批次可用 ${location.availableQty} ${selectedLineForPick.uom}` : '当前物料无可用库存' }}
               </option>
             </select>
+            <span v-if="pickSourcesLoading" class="form-hint">正在查询该物料的可用库存...</span>
+            <span v-else-if="pickSourceError" class="form-error">{{ pickSourceError }}</span>
+            <span v-else-if="pickSelectableSourceOptions.length === 0" class="form-error">当前物料没有可用来源库位，请先确认上架和库存可用量。</span>
+            <span v-else class="form-hint">来源库位按当前物料的单批次可用量显示；库存不足本次剩余量时，选择库位后会自动按该库位可拣量分批处理。</span>
           </div>
           <div class="form-item">
             <label>本次拣货数量 <span class="req">*</span></label>
@@ -365,6 +384,7 @@
     <ReservationDetailView
       v-model:visible="isReservationDetailOpen"
       :order="order"
+      :can-release="isActionEnabled('releaseReservation')"
       :releasing="actionLoading"
       @release="handleReleaseReservation"
       @close="isReservationDetailOpen = false"
@@ -398,9 +418,10 @@ import type { AllowedAction } from "../../types/common";
  * 销售订单详情抽屉组件 (SalesOrderDetailView)
  * 职责：并列展示生命周期、履约进度与完成方式；按行展示 5 个派生数量；严格依据 allowedActions 控制按钮
  */
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { ApiError } from "@/utils/request";
 import { useCommand } from "@/composables/useCommand";
+import { useAuthStore } from "@/stores/auth";
 import CommandFeedback from "@/components/common/CommandFeedback.vue";
 import { useRouter } from "vue-router";
 import StatusBadge from "@/components/common/StatusBadge.vue";
@@ -411,10 +432,23 @@ import ReservationDetailView from "./ReservationDetailView.vue";
 import ShipmentConfirmView from "./ShipmentConfirmView.vue";
 import type { ViewState } from "@/types/common";
 import type { SalesOrder, SalesOrderLine } from "@/types/sales";
-import { stringSub, type Location } from "@/types/inventory";
+import { stringCompare, stringSub, type InventoryBalance, type Location } from "@/types/inventory";
+import { getInventoryBalances } from "@/api/inventory";
 import { getLocations } from "@/api/masterData";
 
 const router = useRouter();
+const authStore = useAuthStore();
+
+// 业务状态动作与角色权限点的映射；后端 allowedActions 只表示状态机允许，不能替代当前用户的权限判定。
+const ACTION_PERMISSION_MAP: Record<string, string> = {
+  submit: "sales:order:submit",
+  approve: "sales:order:approve",
+  directPick: "sales:pick:confirm",
+  ship: "sales:shipment:confirm",
+  returnPick: "sales:pick:return",
+  releaseReservation: "sales:reservation:release",
+  manualComplete: "sales:order:complete",
+};
 
 import {
   getSalesOrderById,
@@ -451,7 +485,13 @@ const order = ref<SalesOrder | null>(null);
 const { execute, retry, isExecuting, canRetry, lastError } = useCommand();
 const actionLoading = ref(false);
 const sourceLocations = ref<Location[]>([]);
+const shippingLocations = ref<Location[]>([]);
 const shippingLocationId = ref("");
+
+type PickLocationOption = Location & { availableQty: string; selectable: boolean };
+const pickBalances = ref<InventoryBalance[]>([]);
+const pickSourcesLoading = ref(false);
+const pickSourceError = ref("");
 
 function handleGoTrace() {
   if (!order.value) return;
@@ -469,6 +509,27 @@ const isPickModalOpen = ref(false);
 const selectedLineForPick = ref<SalesOrderLine | null>(null);
 const pickSourceLocationId = ref("");
 const pickQtyInput = ref("");
+
+/**
+ * 展示当前租户全部启用的合法来源库位，并标记当前物料的单批次可用量。
+ * 入参：启用的 Storage/Picking 库位与库存余额；出参：带可选状态和最大单批次可用量的库位列表。
+ * 流程：有正可用量的库位允许选择，无库存的已命名库位仍展示但禁用；后端继续做最终库存锁定校验。
+ */
+const pickSourceOptions = computed<PickLocationOption[]>(() => {
+  return sourceLocations.value
+    .map((location) => ({
+      ...location,
+      availableQty: maxSingleLotAvailable(location.id),
+      selectable: stringCompare(maxSingleLotAvailable(location.id), "0") > 0,
+    }))
+    .sort((left, right) => {
+      if (left.selectable !== right.selectable) return left.selectable ? -1 : 1;
+      const quantityOrder = stringCompare(right.availableQty, left.availableQty);
+      return quantityOrder !== 0 ? quantityOrder : left.code.localeCompare(right.code);
+    });
+});
+
+const pickSelectableSourceOptions = computed(() => pickSourceOptions.value.filter((location) => location.selectable));
 
 const isReturnModalOpen = ref(false);
 const selectedLineForReturn = ref<SalesOrderLine | null>(null);
@@ -511,7 +572,14 @@ async function fetchDetail() {
   try {
     const res = await getSalesOrderById(props.orderId);
     order.value = res.data;
-    await loadLocations();
+    // 修改：仅在当前角色确实拥有拣货/退回动作时加载库位，销售只查看订单时不再因库位 403 阻断详情。
+    if (isActionEnabled("directPick") || isActionEnabled("returnPick")) {
+      await loadLocations();
+    } else {
+      sourceLocations.value = [];
+      shippingLocations.value = [];
+      shippingLocationId.value = "";
+    }
     viewState.value = "ready";
   } catch (err: any) {
     console.error("[SalesOrderDetailView] 获取失败:", err);
@@ -520,10 +588,12 @@ async function fetchDetail() {
   }
 }
 
-// 替换为调用 actionGuard 的版本
+// 修改用途：同时校验订单状态机动作和当前角色权限，避免销售角色因未授权的拣货动作触发库位 403。
 function isActionEnabled(actionKey: string): boolean {
   if (!order.value) return false;
-  return checkAction(order.value.allowedActions, actionKey);
+  if (!checkAction(order.value.allowedActions, actionKey)) return false;
+  const requiredPermission = ACTION_PERMISSION_MAP[actionKey];
+  return !requiredPermission || authStore.permissions.includes(requiredPermission);
 }
 
 function lifecycleBadgeType(status: string): any {
@@ -597,21 +667,44 @@ async function handleApprove() {
   }
 }
 
-function openDirectPick(line?: SalesOrderLine) {
+async function openDirectPick(line?: SalesOrderLine) {
   if (!line && order.value && order.value.lines.length > 0) {
     line = order.value.lines[0];
   }
   if (!line) return;
   selectedLineForPick.value = line;
   pickQtyInput.value = stringSub(line.orderedQty, line.pickedQty);
-  pickSourceLocationId.value = line.sourceLocationId ? String(line.sourceLocationId) : "";
+  pickSourceLocationId.value = "";
+  pickBalances.value = [];
+  pickSourceError.value = "";
   isPickModalOpen.value = true;
+  await loadPickBalances(line);
 }
 
 async function submitPick() {
-  if (!order.value || !selectedLineForPick.value || !pickSourceLocationId.value || !shippingLocationId.value) return;
+  if (!order.value || !selectedLineForPick.value) return;
   const currentOrder = order.value;
   const line = selectedLineForPick.value;
+  const source = sourceLocations.value.find((location) => String(location.id) === String(pickSourceLocationId.value));
+  if (!source) {
+    alert("请选择有可用库存的真实来源库位");
+    return;
+  }
+  const availableQty = maxSingleLotAvailable(source.id);
+  if (stringCompare(availableQty, pickQtyInput.value) < 0) {
+    alert(`来源库位 ${source.code} 的单批次可用库存不足，当前最多可拣 ${availableQty} ${line.uom}`);
+    return;
+  }
+  const shipping = shippingLocations.value.find((location) =>
+    String(location.warehouseId) === String(source.warehouseId)
+    && location.type === "ShippingStaging"
+    && location.status === "ACTIVE",
+  );
+  if (!shipping) {
+    alert("来源库位所在仓库没有启用的发货暂存位");
+    return;
+  }
+  shippingLocationId.value = String(shipping.id);
   actionLoading.value = true;
   try {
     await execute(async (key) => {
@@ -620,7 +713,7 @@ async function submitPick() {
       lines: [{
         salesOrderLineId: String(line.id),
         pickedQty: pickQtyInput.value,
-        sourceLocationId: pickSourceLocationId.value,
+        sourceLocationId: String(source.id),
         shippingLocationId: shippingLocationId.value,
       }],
       }, key);
@@ -698,26 +791,96 @@ async function handleConfirmShipment(payload: any) {
   }
 }
 
-/** 加载当前订单仓库下的真实库位 UUID，供拣货与退回命令引用。 */
+/**
+ * 查询当前订单行物料的库存余额，供拣货库位选择器按真实可用量过滤。
+ * 入参：当前销售订单行；出参：当前租户该物料的库存余额集合；流程：仅查询，不修改库存事实。
+ */
+async function loadPickBalances(line: SalesOrderLine) {
+  pickSourcesLoading.value = true;
+  try {
+    const response = await getInventoryBalances({
+      productId: String(line.productId),
+      page: 1,
+      size: 1000,
+    });
+    pickBalances.value = response.data.records || [];
+    const preferredLocationId = line.sourceLocationId ? String(line.sourceLocationId) : "";
+    if (preferredLocationId && pickSelectableSourceOptions.value.some((location) => String(location.id) === preferredLocationId)) {
+      pickSourceLocationId.value = preferredLocationId;
+    }
+  } catch (err: any) {
+    pickBalances.value = [];
+    pickSourceError.value = err?.message || "查询物料可用库存失败，请检查库存查询权限";
+  } finally {
+    pickSourcesLoading.value = false;
+  }
+}
+
+/**
+ * 返回指定库位的最大单批次可用量，匹配后端直接拣货的单批次预留规则。
+ * 入参：库位 ID；出参：该库位可满足单批次拣货的最大 availableQty。
+ */
+function maxSingleLotAvailable(locationId: string | number): string {
+  let maxAvailable = "0";
+  for (const balance of pickBalances.value) {
+    const balanceLocationId = balance.dimension?.locationId || balance.locationId;
+    if (String(balanceLocationId || "") !== String(locationId)) continue;
+    const available = String(balance.availableQty ?? "0");
+    if (stringCompare(available, maxAvailable) > 0) {
+      maxAvailable = available;
+    }
+  }
+  return maxAvailable;
+}
+
+/**
+ * 根据用户选中的来源库位调整本次数量，支持同一销售订单从多个库位分批拣货。
+ * 入参：当前来源库位选择；出参：无；流程：仅在输入数量超过该库位单批次可用量时向下调整，不擅自增加用户已填写的数量。
+ */
+function handlePickSourceChange() {
+  const selected = pickSelectableSourceOptions.value.find((location) => String(location.id) === String(pickSourceLocationId.value));
+  if (!selected) return;
+  if (stringCompare(pickQtyInput.value, selected.availableQty) > 0) {
+    pickQtyInput.value = selected.availableQty;
+  }
+}
+
+/** 统一提供订单行的物料编码展示，后端缺少主数据时也不显示 undefined。 */
+function displayLineSku(line: SalesOrderLine): string {
+  return line.sku || String(line.productId || "-");
+}
+
+/** 统一提供订单行的物料名称展示，后端缺少主数据时回退到编码。 */
+function displayLineName(line: SalesOrderLine): string {
+  return line.productName || displayLineSku(line);
+}
+
+/** 加载当前租户启用的真实库位，供拣货与退回命令引用。 */
 async function loadLocations() {
-  if (!order.value?.warehouseId) {
+  if (!order.value) {
     sourceLocations.value = [];
+    shippingLocations.value = [];
     return;
   }
-  const [sourceResponse, shippingResponse] = await Promise.all([
-    getLocations({ warehouseId: order.value.warehouseId, type: "Storage", status: "ACTIVE", page: 1, size: 20 }),
-    getLocations({ warehouseId: order.value.warehouseId, type: "ShippingStaging", status: "ACTIVE", page: 1, size: 20 }),
+  const warehouseId = order.value.warehouseId;
+  const [storageResponse, pickingResponse, shippingResponse] = await Promise.all([
+    getLocations({ warehouseId, type: "Storage", status: "ACTIVE", page: 1, size: 1000 }),
+    getLocations({ warehouseId, type: "Picking", status: "ACTIVE", page: 1, size: 1000 }),
+    getLocations({ warehouseId, type: "ShippingStaging", status: "ACTIVE", page: 1, size: 1000 }),
   ]);
-  sourceLocations.value = (sourceResponse.data.records || []).filter((location) =>
-    String(location.warehouseId) === String(order.value?.warehouseId)
-    && location.type === "Storage"
+  const sourceRecords = [...(storageResponse.data.records || []), ...(pickingResponse.data.records || [])];
+  sourceLocations.value = Array.from(new Map(sourceRecords.map((location) => [String(location.id), location])).values())
+    .filter((location) =>
+    (!warehouseId || String(location.warehouseId) === String(warehouseId))
+    && (location.type === "Storage" || location.type === "Picking")
     && location.status === "ACTIVE",
-  );
-  shippingLocationId.value = String((shippingResponse.data.records || []).find((location) =>
-    String(location.warehouseId) === String(order.value?.warehouseId)
+    );
+  shippingLocations.value = (shippingResponse.data.records || []).filter((location) =>
+    (!warehouseId || String(location.warehouseId) === String(warehouseId))
     && location.type === "ShippingStaging"
     && location.status === "ACTIVE",
-  )?.id || "");
+  );
+  shippingLocationId.value = String(shippingLocations.value[0]?.id || "");
 }
 
 async function handleReleaseReservation(payload: any) {

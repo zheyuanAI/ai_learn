@@ -144,6 +144,8 @@ public class UomApplicationServiceImpl
         entity.setSymbol(MasterDataValidator.optionalText("symbol", request.getSymbol(), 32));
         entity.setDecimalScale(request.getDecimalScale() == null ? 0
                 : MasterDataValidator.optionalInteger("decimalScale", request.getDecimalScale(), 0, 6));
+        // 修改：创建计量单位时同步保存备注，确保新建返回值和后续查询都能显示页面提交的说明。
+        entity.setRemark(request.getRemark() == null ? null : request.getRemark().trim());
         return entity;
     }
 

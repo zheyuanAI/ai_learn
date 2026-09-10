@@ -7,7 +7,7 @@
       description="维护产成品及其标准物料清单构成与损耗率。已生效工单绑定的 BOM 版本不允许物理删除。"
     >
       <template #actions>
-        <button type="button" class="btn btn-primary" @click="openCreateModal">
+        <button v-if="hasPermission('mes:bom:manage')" type="button" class="btn btn-primary" @click="openCreateModal">
           <span class="btn-icon">＋</span>
           <span>新建物料清单</span>
         </button>
@@ -199,6 +199,14 @@
             </select>
           </div>
 
+          <div class="form-item">
+            <label>状态 <span class="req">*</span></label>
+            <select v-model="createForm.status" class="form-input" required>
+              <option value="ACTIVE">生效中 (ACTIVE，可供工单选择)</option>
+              <option value="DRAFT">草稿 (DRAFT，暂不可供工单选择)</option>
+            </select>
+          </div>
+
           <!-- 动态组件清单编辑 -->
           <div class="form-section">
             <div class="section-head">
@@ -300,12 +308,14 @@ import type { BomItem, BomCreateRequest } from "../../types/manufacturing";
 import { getBoms, createBom, deleteBom } from "../../api/manufacturing";
 import { getProducts } from "../../api/masterData";
 import type { Product } from "../../types/inventory";
+import { usePermission } from "../../composables/usePermission";
 
 /**
  * 界面四态与错误信息
  */
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
+const { hasPermission } = usePermission();
 
 /**
  * 列表与分页状态
@@ -348,6 +358,7 @@ const createForm = reactive<BomCreateRequest>({
   bomCode: "",
   productId: "",
   version: "V1.0",
+  status: "ACTIVE",
   components: [
     { componentProductId: "", componentQty: "1.00", uom: "PCS", scrapRate: "0.00" },
   ],
@@ -391,7 +402,7 @@ async function fetchBomList() {
       status: queryParams.status || undefined,
     });
     if (res.data) {
-      bomList.value = res.data.records || [];
+      bomList.value = (res.data.records || []).map(normalizeBom);
       total.value = res.data.total || 0;
       viewState.value = bomList.value.length === 0 ? "empty" : "ready";
     }
@@ -427,6 +438,7 @@ function openCreateModal() {
   createForm.bomCode = "";
   createForm.productId = "";
   createForm.version = "V1.0";
+  createForm.status = "ACTIVE";
   createForm.components = [
     { componentProductId: "", componentQty: "1.00", uom: "PCS", scrapRate: "0.00" },
   ];
@@ -487,15 +499,39 @@ async function handleConfirmDelete() {
   }
 }
 
-onMounted(() => {
-  fetchBomList();
-  loadProducts();
+onMounted(async () => {
+  await loadProducts();
+  await fetchBomList();
 });
 
 /** 加载 BOM 主项和组件选择器的真实产品 UUID。 */
 async function loadProducts() {
-  const response = await getProducts({ page: 1, size: 200, status: "ENABLE" });
+  const response = await getProducts({ page: 1, size: 1000, status: "ACTIVE" });
   products.value = response.data.records || [];
+}
+
+/**
+ * 将 foundation 接口返回的 UUID 与数量字段归一化为页面显示模型。
+ * 入参：后端 BOM 事实；出参：补齐产品名称、编码并兼容 quantity/componentQty 的页面记录。
+ */
+function normalizeBom(item: BomItem): BomItem {
+  const productMap = new Map(products.value.map((product) => [String(product.id), product]));
+  const product = productMap.get(String(item.productId));
+  return {
+    ...item,
+    productName: item.productName || product?.name,
+    productCode: item.productCode || product?.sku,
+    components: (item.components || []).map((component) => {
+      const rawComponent = component as typeof component & { quantity?: string | number };
+      const componentProduct = productMap.get(String(component.componentProductId));
+      return {
+        ...component,
+        componentQty: String(component.componentQty || rawComponent.quantity || "0"),
+        componentProductName: component.componentProductName || componentProduct?.name,
+        componentProductCode: component.componentProductCode || componentProduct?.sku,
+      };
+    }),
+  };
 }
 </script>
 

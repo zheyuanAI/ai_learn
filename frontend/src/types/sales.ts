@@ -132,7 +132,6 @@ export interface SalesOrderCreateLine {
 export interface SalesOrderCreatePayload {
   customerId: string | number;
   plannedShipDate: string;
-  warehouseId: string | number;
   priority?: string;
   remark?: string;
   lines: SalesOrderCreateLine[];

@@ -261,7 +261,7 @@ function resetFilter() {
  */
 async function loadWarehouses() {
   try {
-    const response = await getWarehouses({ page: 1, size: 200, status: "ACTIVE" });
+    const response = await getWarehouses({ page: 1, size: 1000, status: "ACTIVE" });
     warehouses.value = response.data.records;
   } catch (error) {
     console.error("[InventoryBalanceView] 加载仓库失败", error);

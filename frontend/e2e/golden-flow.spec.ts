@@ -205,7 +205,8 @@ test.describe("阶段 0–7 黄金闭环前置探测（不替代业务事实验�
     await createBtn.first().click();
     // 验证必填字段与商品选择器
     const customerSelect = page.locator("form.modal-body .form-select").nth(0);
-    const productSelect = page.locator("form.modal-body .form-select").nth(2);
+    // 修改用途：销售订单契约不持久化仓库，建单页只保留客户与物料两个真实主数据下拉框。
+    const productSelect = page.locator("form.modal-body .form-select").nth(1);
     await expect(customerSelect).toBeVisible();
     await expect(productSelect).toBeVisible();
     await page.keyboard.press("Escape");

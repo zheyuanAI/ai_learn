@@ -40,6 +40,14 @@ public class PurchaseQualityController {
     }
 
     /**
+     * 查询质检人员可手动关联的真实收货明细，避免跨角色页面跳转依赖临时 query 上下文。
+     */
+    @GetMapping("/api/purchase-receipts/quality-candidates")
+    public ApiResponse<List<com.ailearn.platform.core.quality.dto.QualityReceiptCandidateView>> receiptCandidates() {
+        return ApiResponse.success(applicationService.listReceiptCandidates());
+    }
+
+    /**
      * 记录一条采购到货质检事实。
      */
     @PostMapping("/api/purchase-receipts/{id}/quality/inspect")

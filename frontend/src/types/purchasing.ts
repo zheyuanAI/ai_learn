@@ -173,6 +173,26 @@ export interface PurchaseReceiptLine {
 }
 
 /**
+ * 采购到货质检手动关联候选项；每一项都是后端确认过的收货单明细。
+ */
+export interface PurchaseQualityReceiptCandidate {
+  receiptId: string;
+  receiptNo: string;
+  purchaseOrderId: string;
+  purchaseOrderNo: string;
+  receiptTime: string;
+  receiptLineId: string;
+  purchaseOrderLineId: string;
+  lineNo: number;
+  productId: string;
+  uom: string;
+  receivedQty: string;
+  inspectedQty: string;
+  remainingQty: string;
+  lotNo?: string;
+}
+
+/**
  * 采购到货验收提交载荷行
  */
 export interface PurchaseReceiptConfirmLine {

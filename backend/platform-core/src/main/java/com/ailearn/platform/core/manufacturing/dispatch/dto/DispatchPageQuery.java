@@ -3,7 +3,7 @@ package com.ailearn.platform.core.manufacturing.dispatch.dto;
 import java.util.UUID;
 
 /**
- * 派工列表查询参数；所有筛选均在当前可信租户范围内执行，页大小上限为 200。
+ * 派工列表查询参数；所有筛选均在当前可信租户范围内执行，页大小上限为 1000。
  */
 public class DispatchPageQuery {
     private int page = 1;
@@ -17,7 +17,8 @@ public class DispatchPageQuery {
     public DispatchPageQuery normalized() {
         DispatchPageQuery result = new DispatchPageQuery();
         result.page = page < 1 ? 1 : page;
-        result.size = size < 1 ? 20 : Math.min(size, 200);
+        // 修改：工序执行页的派工单选择器统一支持最多 1000 条候选。
+        result.size = size < 1 ? 20 : Math.min(size, 1000);
         result.workOrderId = workOrderId;
         result.operationId = operationId;
         result.operatorId = operatorId;

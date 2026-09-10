@@ -87,7 +87,8 @@ public class DeviceProfileApplicationServiceImpl implements DeviceProfileApplica
     public DeviceProfilePageResult page(String profileCode, int page, int size) {
         UUID tenantId = TenantContextHolder.requireTenantId();
         int normalizedPage = Math.max(page, 1);
-        int normalizedSize = Math.min(Math.max(size, 1), 200);
+        // 修改：设备模型选择器统一支持最多 1000 条候选，仍由服务端限制上界。
+        int normalizedSize = Math.min(Math.max(size, 1), 1000);
         String code = normalizeFilter(profileCode);
         List<DeviceProfileView> records = repository.findPage(tenantId, code,
                         (normalizedPage - 1) * normalizedSize, normalizedSize)
@@ -153,7 +154,8 @@ public class DeviceProfileApplicationServiceImpl implements DeviceProfileApplica
     public List<AlarmRuleView> rules(UUID profileId, int page, int size) {
         UUID tenantId = TenantContextHolder.requireTenantId();
         int normalizedPage = Math.max(page, 1);
-        int normalizedSize = Math.min(Math.max(size, 1), 200);
+        // 修改：告警规则关联查询统一支持最多 1000 条记录。
+        int normalizedSize = Math.min(Math.max(size, 1), 1000);
         return repository.findRules(tenantId, profileId, (normalizedPage - 1) * normalizedSize, normalizedSize)
                 .stream().map(this::toView).toList();
     }

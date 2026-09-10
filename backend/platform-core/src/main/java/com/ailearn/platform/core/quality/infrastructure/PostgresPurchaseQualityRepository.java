@@ -4,6 +4,7 @@ import com.ailearn.platform.core.quality.domain.PurchaseQualityRepository;
 import com.ailearn.platform.core.quality.domain.QualityDispositionFact;
 import com.ailearn.platform.core.quality.domain.QualityDispositionType;
 import com.ailearn.platform.core.quality.domain.QualityInspectionFact;
+import com.ailearn.platform.core.quality.domain.QualityReceiptCandidate;
 import com.ailearn.platform.core.quality.domain.QualityReceiptFact;
 import com.ailearn.platform.core.quality.domain.QualityReceiptLineFact;
 import com.ailearn.platform.core.purchasing.exception.PurchasingErrorCode;
@@ -65,6 +66,40 @@ public class PostgresPurchaseQualityRepository implements PurchaseQualityReposit
                     first.purchaseOrderNo(), first.receiptTime(), first.qualityHoldLocationId(), first.status(),
                     rows.stream().flatMap(row -> row.lines().stream()).toList()));
         });
+    }
+
+    /**
+     * 查询当前租户的已确认收货明细候选项，并扣除该明细已经录入的质检数量。
+     * 只返回 remaining_qty 大于零的行，保证质检人员手动选择的标识来自真实收货事实。
+     */
+    @Override
+    public List<QualityReceiptCandidate> listReceiptCandidates(UUID tenantId) {
+        return database(() -> jdbcTemplate.query("""
+                SELECT pr.id AS receipt_id, pr.receipt_no, pr.purchase_order_id, po.po_no,
+                       pr.receipt_time, prl.id AS receipt_line_id, prl.purchase_order_line_id,
+                       prl.line_no, prl.product_id, prl.uom, prl.received_qty,
+                       COALESCE(SUM(qi.inspected_qty), 0) AS inspected_qty,
+                       prl.received_qty - COALESCE(SUM(qi.inspected_qty), 0) AS remaining_qty,
+                       prl.lot_no
+                  FROM purchase_receipt pr
+                  JOIN purchase_order po ON po.tenant_id = pr.tenant_id
+                                         AND po.id = pr.purchase_order_id
+                                         AND po.isdel = 0
+                  JOIN purchase_receipt_line prl ON prl.tenant_id = pr.tenant_id
+                                                AND prl.purchase_receipt_id = pr.id
+                                                AND prl.isdel = 0
+                  LEFT JOIN purchase_quality_inspection qi ON qi.tenant_id = prl.tenant_id
+                                                          AND qi.purchase_receipt_line_id = prl.id
+                                                          AND qi.isdel = 0
+                 WHERE pr.tenant_id = ?
+                   AND pr.status = 'Confirmed'
+                   AND pr.isdel = 0
+                 GROUP BY pr.id, pr.receipt_no, pr.purchase_order_id, po.po_no, pr.receipt_time,
+                          prl.id, prl.purchase_order_line_id, prl.line_no, prl.product_id,
+                          prl.uom, prl.received_qty, prl.lot_no
+                HAVING prl.received_qty - COALESCE(SUM(qi.inspected_qty), 0) > 0
+                 ORDER BY pr.receipt_time DESC, pr.id DESC, prl.line_no, prl.id
+                """, this::readReceiptCandidate, tenantId));
     }
 
     @Override
@@ -220,6 +255,24 @@ public class PostgresPurchaseQualityRepository implements PurchaseQualityReposit
                 resultSet.getString("po_no"), resultSet.getObject("receipt_time", OffsetDateTime.class),
                 resultSet.getObject("quality_hold_location_id", UUID.class), resultSet.getString("status"),
                 List.of(line));
+    }
+
+    private QualityReceiptCandidate readReceiptCandidate(ResultSet resultSet, int rowNum) throws SQLException {
+        return new QualityReceiptCandidate(
+                resultSet.getObject("receipt_id", UUID.class),
+                resultSet.getString("receipt_no"),
+                resultSet.getObject("purchase_order_id", UUID.class),
+                resultSet.getString("po_no"),
+                resultSet.getObject("receipt_time", OffsetDateTime.class),
+                resultSet.getObject("receipt_line_id", UUID.class),
+                resultSet.getObject("purchase_order_line_id", UUID.class),
+                resultSet.getInt("line_no"),
+                resultSet.getObject("product_id", UUID.class),
+                resultSet.getString("uom"),
+                resultSet.getBigDecimal("received_qty"),
+                resultSet.getBigDecimal("inspected_qty"),
+                resultSet.getBigDecimal("remaining_qty"),
+                resultSet.getString("lot_no"));
     }
 
     private QualityInspectionFact readInspection(ResultSet resultSet, int rowNum) throws SQLException {

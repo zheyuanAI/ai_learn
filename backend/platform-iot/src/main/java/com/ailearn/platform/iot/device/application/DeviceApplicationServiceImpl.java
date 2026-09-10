@@ -104,7 +104,8 @@ public class DeviceApplicationServiceImpl implements DeviceApplicationService {
             throw new ValidationException("lifecycle_status 仅支持 Active 或 Disabled");
         }
         int normalizedPage = Math.max(page, 1);
-        int normalizedSize = Math.min(Math.max(size, 1), 200);
+        // 修改：设备选择器统一支持最多 1000 条候选，仍由服务端限制上界。
+        int normalizedSize = Math.min(Math.max(size, 1), 1000);
         String code = blank(deviceCode) ? null : deviceCode.trim();
         List<DeviceView> records = repository.findPage(tenantId, code, status,
                         (normalizedPage - 1) * normalizedSize, normalizedSize)

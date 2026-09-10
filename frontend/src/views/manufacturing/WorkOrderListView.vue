@@ -7,7 +7,7 @@
       description="生产工单承接销售与制造意图，锁定 BOM 与 Routing 版本，记录下达派工、领退料、报工质检与成品入库全流程。"
     >
       <template #actions>
-        <button type="button" class="btn btn-primary" @click="openCreateModal">
+        <button v-if="hasPermission('mes:workorder:create')" type="button" class="btn btn-primary" @click="openCreateModal">
           <span class="btn-icon">＋</span>
           <span>新建生产工单</span>
         </button>
@@ -170,8 +170,8 @@
             v-if="row.status === 'Released' || row.status === 'InProgress'"
             type="button"
             class="btn-text text-muted"
-            :disabled="!isActionAllowed(row, 'manual-complete')"
-            :title="getActionDisabledReason(row, 'manual-complete') || '强制人工结案'"
+            :disabled="!isActionAllowed(row, 'manualComplete')"
+            :title="getActionDisabledReason(row, 'manualComplete') || '强制人工结案'"
             @click="openManualCompleteModal(row)"
           >
             结案
@@ -228,21 +228,21 @@
               <label>计划开工时间 <span class="req">*</span></label>
               <input
                 v-model="createForm.plannedStartTime"
-                type="text"
-                class="form-input font-mono"
-                placeholder="2026-09-05 08:00:00"
+                type="datetime-local"
+                class="form-input"
                 required
               />
+              <small class="form-hint">页面选择日期和时间，提交时自动转换为服务端时间格式。</small>
             </div>
             <div class="form-item">
               <label>计划完工时间 <span class="req">*</span></label>
               <input
                 v-model="createForm.plannedFinishTime"
-                type="text"
-                class="form-input font-mono"
-                placeholder="2026-09-10 18:00:00"
+                type="datetime-local"
+                class="form-input"
                 required
               />
+              <small class="form-hint">页面选择日期和时间，提交时自动转换为服务端时间格式。</small>
             </div>
           </div>
 
@@ -393,12 +393,14 @@ import {
   getRoutings,
 } from "../../api/manufacturing";
 import { getProducts } from "../../api/masterData";
+import { usePermission } from "../../composables/usePermission";
 
 const emit = defineEmits<{
   (e: "select-detail", item: WorkOrderItem): void;
 }>();
 
 const router = useRouter();
+const { hasPermission } = usePermission();
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
@@ -502,7 +504,8 @@ async function fetchWorkOrders() {
       status: queryParams.status || undefined,
     });
     if (res.data) {
-      workOrderList.value = res.data.records || [];
+      // 修改用途：后端列表返回扁平生命周期视图；产品名称仍从已加载的真实产品目录补齐，避免页面显示 UUID。
+      workOrderList.value = (res.data.records || []).map(normalizeWorkOrder);
       total.value = res.data.total || 0;
       viewState.value = workOrderList.value.length === 0 ? "empty" : "ready";
     }
@@ -546,6 +549,19 @@ function openCreateModal() {
   createModalVisible.value = true;
 }
 
+/**
+ * 将 datetime-local 的本地日期时间转换为后端 OffsetDateTime 可解析的 ISO 字符串。
+ * 入参：页面控件返回的本地日期时间字符串；出参：带时区偏移的 ISO-8601 字符串。
+ * 流程：浏览器按当前本地时区解析，再统一序列化为 UTC，避免把普通文本直接交给 Jackson 解析。
+ */
+function toIsoDateTime(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("计划时间格式无效，请使用日期时间选择器重新选择");
+  }
+  return parsed.toISOString();
+}
+
 async function submitCreateWorkOrder() {
   if (!createForm.productId || !products.value.some((item) => String(item.id) === String(createForm.productId))
     || !createForm.plannedQty || !createForm.bomId
@@ -554,7 +570,16 @@ async function submitCreateWorkOrder() {
     || !routings.value.some((item) => String(item.id) === String(createForm.routingId))) return;
   isSubmitting.value = true;
   try {
-    await createWorkOrder(createForm);
+    // 修改用途：页面展示使用 datetime-local，接口提交使用 OffsetDateTime 能解析的 ISO-8601。
+    const payload: WorkOrderCreateRequest = {
+      ...createForm,
+      plannedStartTime: toIsoDateTime(createForm.plannedStartTime),
+      plannedFinishTime: toIsoDateTime(createForm.plannedFinishTime),
+    };
+    if (new Date(payload.plannedFinishTime).getTime() <= new Date(payload.plannedStartTime).getTime()) {
+      throw new Error("计划完工时间必须晚于计划开工时间");
+    }
+    await createWorkOrder(payload);
     createModalVisible.value = false;
     await fetchWorkOrders();
   } catch (err: any) {
@@ -651,9 +676,10 @@ async function handleConfirmManualComplete() {
   }
 }
 
-onMounted(() => {
-  fetchWorkOrders();
-  loadCreateOptions();
+onMounted(async () => {
+  // 修改用途：先加载真实产品目录，再渲染工单列表，保证产品列和新建工单下拉框使用同一份选项。
+  await loadCreateOptions();
+  await fetchWorkOrders();
 });
 
 /** 加载工单创建所需的真实产品、BOM 与工艺路线 UUID；每次只取服务端小页并支持关键词搜索。 */
@@ -663,9 +689,9 @@ async function loadCreateOptions() {
   try {
     const keyword = createOptionsKeyword.value.trim() || undefined;
     const [productRes, bomRes, routingRes] = await Promise.all([
-      getProducts({ page: 1, size: 20, keyword, status: "ACTIVE" }),
-      getBoms({ page: 1, size: 20, keyword, status: "ACTIVE" }),
-      getRoutings({ page: 1, size: 20, keyword, status: "ACTIVE" }),
+      getProducts({ page: 1, size: 1000, keyword, status: "ACTIVE" }),
+      getBoms({ page: 1, size: 1000, keyword, status: "ACTIVE" }),
+      getRoutings({ page: 1, size: 1000, keyword, status: "ACTIVE" }),
     ]);
     products.value = productRes.data.records || [];
     boms.value = bomRes.data.records || [];
@@ -679,6 +705,20 @@ async function loadCreateOptions() {
   } finally {
     createOptionsLoading.value = false;
   }
+}
+
+/**
+ * 将工单视图中的产品 UUID 补齐为当前租户产品目录中的名称、编码和规格。
+ * 入参：后端工单查询视图；出参：可直接展示的工单行；流程：只读匹配已授权加载的产品目录，不对后端状态和动作做前端推断。
+ */
+function normalizeWorkOrder(item: WorkOrderItem): WorkOrderItem {
+  const product = products.value.find((candidate) => String(candidate.id) === String(item.productId));
+  return {
+    ...item,
+    productName: item.productName || product?.name,
+    productCode: item.productCode || product?.sku,
+    productSpec: item.productSpec || product?.spec,
+  };
 }
 </script>
 

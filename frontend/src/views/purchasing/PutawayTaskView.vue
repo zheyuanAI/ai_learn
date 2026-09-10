@@ -254,7 +254,7 @@ async function loadStorageLocationsForTask(task: PutawayTask): Promise<boolean> 
   try {
     const response = await getLocations({
       page: 1,
-      size: 20,
+      size: 1000,
       warehouseId: source.warehouseId,
       type: "Storage",
       status: "ACTIVE",

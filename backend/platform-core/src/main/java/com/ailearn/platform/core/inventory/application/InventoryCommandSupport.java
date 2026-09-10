@@ -77,15 +77,16 @@ final class InventoryCommandSupport {
     }
 
     /**
-     * 规范化分页参数，避免负 offset 或超大单页查询。
+     * 规范化分页参数，避免负 offset 或超大单页查询；当前单页上限为 1000。
      *
      * @param page 请求页码
      * @param size 请求页大小
      * @return 规范化页码和页大小，数组下标 0 为 page、下标 1 为 size
      */
     static int[] page(int page, int size) {
-        if (page < 1 || size < 1 || size > 200) {
-            throw new ValidationException("分页参数必须满足 page >= 1 且 1 <= size <= 200");
+        // 修改：库存选择器统一支持最多 1000 条候选。
+        if (page < 1 || size < 1 || size > 1000) {
+            throw new ValidationException("分页参数必须满足 page >= 1 且 1 <= size <= 1000");
         }
         return new int[]{page, size};
     }

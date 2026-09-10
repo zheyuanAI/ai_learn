@@ -7,7 +7,7 @@
       description="定义产品加工工序流、作业工作中心与标准工时基准。工单审核通过时将锁定对应有效路线版本。"
     >
       <template #actions>
-        <button type="button" class="btn btn-primary" @click="openCreateModal">
+        <button v-if="hasPermission('mes:routing:manage')" type="button" class="btn btn-primary" @click="openCreateModal">
           <span class="btn-icon">＋</span>
           <span>新建工艺路线</span>
         </button>
@@ -190,6 +190,14 @@
             </select>
           </div>
 
+          <div class="form-item">
+            <label>状态 <span class="req">*</span></label>
+            <select v-model="createForm.status" class="form-input" required>
+              <option value="ACTIVE">生效中 (ACTIVE，可供工单选择)</option>
+              <option value="DRAFT">草稿 (DRAFT，暂不可供工单选择)</option>
+            </select>
+          </div>
+
           <!-- 动态工序行 -->
           <div class="form-section">
             <div class="section-head">
@@ -225,13 +233,14 @@
                   />
                 </div>
                 <div class="op-col-wc">
-                  <input
+                  <select
                     v-model="op.workCenterId"
-                    type="text"
                     class="form-input"
-                    placeholder="真实工作中心 UUID"
                     required
-                  />
+                  >
+                    <option :value="MANUAL_WORK_CENTER_ID">人工工位（无需专用设备）</option>
+                  </select>
+                  <small class="form-hint">一期人工工序使用系统内置人工工位，不要求绑定专用设备。</small>
                 </div>
                 <div class="op-col-time">
                   <input
@@ -295,9 +304,14 @@ import type { RoutingItem, RoutingCreateRequest } from "../../types/manufacturin
 import { getRoutings, createRouting, deleteRouting } from "../../api/manufacturing";
 import { getProducts } from "../../api/masterData";
 import type { Product } from "../../types/inventory";
+import { usePermission } from "../../composables/usePermission";
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
+const { hasPermission } = usePermission();
+
+// 一期允许人工工序不绑定专用设备；该稳定标识仅作为 Routing 的必填工作中心软引用。
+const MANUAL_WORK_CENTER_ID = "00000000-0000-0000-0000-000000000001";
 
 const routingList = ref<RoutingItem[]>([]);
 const total = ref(0);
@@ -328,8 +342,9 @@ const createForm = reactive<RoutingCreateRequest>({
   routingCode: "",
   productId: "",
   version: "V1.0",
+  status: "ACTIVE",
   operations: [
-    { operationNo: 10, operationName: "", workCenterId: "", standardTimeMinutes: "" },
+    { operationNo: 10, operationName: "", workCenterId: MANUAL_WORK_CENTER_ID, standardTimeMinutes: "" },
   ],
 });
 
@@ -360,7 +375,7 @@ async function fetchRoutingList() {
       status: queryParams.status || undefined,
     });
     if (res.data) {
-      routingList.value = res.data.records || [];
+      routingList.value = (res.data.records || []).map(normalizeRouting);
       total.value = res.data.total || 0;
       viewState.value = routingList.value.length === 0 ? "empty" : "ready";
     }
@@ -396,8 +411,9 @@ function openCreateModal() {
   createForm.routingCode = "";
   createForm.productId = "";
   createForm.version = "V1.0";
+  createForm.status = "ACTIVE";
   createForm.operations = [
-    { operationNo: 10, operationName: "", workCenterId: "", standardTimeMinutes: "" },
+    { operationNo: 10, operationName: "", workCenterId: MANUAL_WORK_CENTER_ID, standardTimeMinutes: "" },
   ];
   createModalVisible.value = true;
 }
@@ -407,7 +423,7 @@ function addOperationRow() {
   createForm.operations.push({
     operationNo: nextNo,
     operationName: "",
-    workCenterId: "",
+    workCenterId: MANUAL_WORK_CENTER_ID,
     standardTimeMinutes: "15.00",
   });
 }
@@ -451,15 +467,28 @@ async function handleConfirmDelete() {
   }
 }
 
-onMounted(() => {
-  fetchRoutingList();
-  loadProducts();
+onMounted(async () => {
+  await loadProducts();
+  await fetchRoutingList();
 });
 
 /** 加载工艺路线所关联的真实产品 UUID。 */
 async function loadProducts() {
-  const response = await getProducts({ page: 1, size: 200, status: "ENABLE" });
+  const response = await getProducts({ page: 1, size: 1000, status: "ACTIVE" });
   products.value = response.data.records || [];
+}
+
+/**
+ * 将 foundation 路线事实补齐为页面展示模型。
+ * 入参：后端 Routing 事实；出参：带产品名称和编码的页面记录。
+ */
+function normalizeRouting(item: RoutingItem): RoutingItem {
+  const product = products.value.find((candidate) => String(candidate.id) === String(item.productId));
+  return {
+    ...item,
+    productName: item.productName || product?.name,
+    productCode: item.productCode || product?.sku,
+  };
 }
 </script>
 

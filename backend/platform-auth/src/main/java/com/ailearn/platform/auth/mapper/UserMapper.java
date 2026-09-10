@@ -150,6 +150,19 @@ public interface UserMapper extends BaseMapper<User> {
     IPage<User> selectUserPage(Page<User> page, @Param("tenantId") UUID tenantId, @Param("req") UserPageQueryRequest req);
 
     /**
+     * 查询当前租户启用用户的最小操作员目录，不返回角色和敏感字段。
+     * 入参：租户、关键词、偏移量和上限；出参：可供派工选择的有效用户基础实体；流程：按租户与 ACTIVE 状态过滤后分页读取。
+     */
+    List<User> selectActiveOperatorDirectory(@Param("tenantId") UUID tenantId,
+                                              @Param("keyword") String keyword,
+                                              @Param("offset") int offset,
+                                              @Param("limit") int limit);
+
+    /** 统计当前租户启用操作员目录数量，供目录分页响应返回准确总数。 */
+    long countActiveOperatorDirectory(@Param("tenantId") UUID tenantId,
+                                      @Param("keyword") String keyword);
+
+    /**
      * 统计指定租户下处于 ACTIVE 状态的管理员用户总数（XML SQL 实现）。
      * <p>
      * 【新增方法】用于防停用/防删除最后一个管理员的安全保护机制。

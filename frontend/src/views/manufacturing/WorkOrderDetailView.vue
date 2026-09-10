@@ -66,12 +66,13 @@
             </button>
 
             <!-- 办理成品入库 (已开工或已下达状态) -->
+            <!-- 修改用途：统一使用当前系统已注册的“成品完工入库”路由，避免跳转到废弃的 fg-receipt 路径。 -->
             <button
               v-if="workOrder.status === 'InProgress' || workOrder.status === 'Released'"
               type="button"
               class="btn btn-secondary"
               title="前往产成品入库页面办理入库"
-              @click="router.push(`/mes/fg-receipt?workOrderId=${workOrder.id}`)"
+              @click="router.push(`/mes/receipts?workOrderId=${workOrder.id}`)"
             >
               办理成品入库
             </button>
@@ -127,8 +128,8 @@
               v-if="workOrder.status === 'Released' || workOrder.status === 'InProgress'"
               type="button"
               class="btn btn-secondary"
-              :disabled="!isActionAllowed('manual-complete')"
-              :title="getActionDisabledReason('manual-complete') || '手工强制结案'"
+              :disabled="!isActionAllowed('manualComplete')"
+              :title="getActionDisabledReason('manualComplete') || '手工强制结案'"
               @click="openManualCompleteModal"
             >
               手工结案

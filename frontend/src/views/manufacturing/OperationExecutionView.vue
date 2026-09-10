@@ -156,9 +156,9 @@
             完成
           </button>
 
-          <!-- 报工 (Running / Paused) -->
+          <!-- 报工 (仅 Completed，和后端 MES_FACT_001 规则一致) -->
           <button
-            v-if="row.status === 'Running' || row.status === 'Paused'"
+            v-if="row.status === 'Completed'"
             type="button"
             class="btn-text text-cyan"
             :disabled="!isActionAllowed(row, 'report')"
@@ -456,7 +456,7 @@ function handlePageChange(page: number) {
 async function loadReleasedDispatches() {
   try {
     // 执行建单只读取服务端小页；不可把第一页当成完整派工目录。
-    const res = await getDispatchOrders({ page: 1, size: 20, status: "Released" });
+    const res = await getDispatchOrders({ page: 1, size: 1000, status: "Released" });
     if (res.data) {
       releasedDispatches.value = res.data.records || [];
     }
@@ -565,8 +565,11 @@ async function submitWorkReport() {
   if (!activeExec.value) return;
   const execution = activeExec.value;
   const woId = execution.workOrderId;
+  // 修改用途：报工单号是服务端事实的必填标识，由页面一次生成并在幂等执行期间复用。
+  const reportNo = `RPT-${crypto.randomUUID()}`;
   try {
     const created = await execute((key) => createWorkReport({
+      reportNo,
       operationExecutionId: execution.id as string,
       workOrderId: woId,
       operationId: execution.operationId,

@@ -1,10 +1,13 @@
 package com.ailearn.platform.core.sales.dto;
 
+import com.ailearn.platform.core.masterdata.domain.entity.Customer;
+import com.ailearn.platform.core.masterdata.domain.entity.Product;
 import com.ailearn.platform.core.masterdata.dto.AllowedActionVo;
 import com.ailearn.platform.core.sales.domain.SalesOrder;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -14,6 +17,8 @@ public class SalesOrderView {
     private UUID id;
     private String soNo;
     private UUID customerId;
+    private String customerCode;
+    private String customerName;
     private LocalDate plannedShipDate;
     private String status;
     private String fulfillmentStatus;
@@ -37,9 +42,24 @@ public class SalesOrderView {
      * @param allowedActions 服务端按状态计算的动作
      */
     public SalesOrderView(SalesOrder order, List<AllowedActionVo> allowedActions) {
+        this(order, allowedActions, null, Map.of());
+    }
+
+    /**
+     * 按订单聚合计算详情，并补充当前租户内客户和物料主数据展示字段。
+     *
+     * @param order 销售订单聚合
+     * @param allowedActions 服务端按状态计算的动作
+     * @param customer 当前租户客户主数据，可为空
+     * @param products 按产品 ID 索引的当前租户物料主数据
+     */
+    public SalesOrderView(SalesOrder order, List<AllowedActionVo> allowedActions,
+                          Customer customer, Map<UUID, Product> products) {
         this.id = order.id();
         this.soNo = order.soNo();
         this.customerId = order.customerId();
+        this.customerCode = customer == null ? null : customer.getCustomerCode();
+        this.customerName = customer == null ? null : customer.getCustomerName();
         this.plannedShipDate = order.plannedShipDate();
         this.status = order.status().name();
         this.fulfillmentStatus = order.fulfillmentStatus().name();
@@ -50,13 +70,18 @@ public class SalesOrderView {
         this.completedAt = order.completedAt();
         this.remark = order.remark();
         this.version = order.version();
-        this.lines = order.lines().stream().map(SalesOrderLineView::from).toList();
+        Map<UUID, Product> productIndex = products == null ? Map.of() : products;
+        this.lines = order.lines().stream()
+                .map(line -> SalesOrderLineView.from(line, productIndex.get(line.productId())))
+                .toList();
         this.allowedActions = allowedActions == null ? List.of() : List.copyOf(allowedActions);
     }
 
     public UUID getId() { return id; }
     public String getSoNo() { return soNo; }
     public UUID getCustomerId() { return customerId; }
+    public String getCustomerCode() { return customerCode; }
+    public String getCustomerName() { return customerName; }
     public LocalDate getPlannedShipDate() { return plannedShipDate; }
     public String getStatus() { return status; }
     public String getFulfillmentStatus() { return fulfillmentStatus; }
@@ -73,6 +98,8 @@ public class SalesOrderView {
     public void setId(UUID id) { this.id = id; }
     public void setSoNo(String soNo) { this.soNo = soNo; }
     public void setCustomerId(UUID customerId) { this.customerId = customerId; }
+    public void setCustomerCode(String customerCode) { this.customerCode = customerCode; }
+    public void setCustomerName(String customerName) { this.customerName = customerName; }
     public void setPlannedShipDate(LocalDate plannedShipDate) { this.plannedShipDate = plannedShipDate; }
     public void setStatus(String status) { this.status = status; }
     public void setFulfillmentStatus(String fulfillmentStatus) { this.fulfillmentStatus = fulfillmentStatus; }

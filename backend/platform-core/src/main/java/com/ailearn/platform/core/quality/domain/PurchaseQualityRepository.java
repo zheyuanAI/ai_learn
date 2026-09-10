@@ -12,6 +12,11 @@ public interface PurchaseQualityRepository {
     /** 按可信租户读取已确认收货单。 */
     Optional<QualityReceiptFact> findReceipt(UUID tenantId, UUID receiptId, boolean forUpdate);
 
+    /**
+     * 查询当前租户可供质检人员手动关联的收货明细；只返回已确认且仍有待检数量的真实事实。
+     */
+    List<QualityReceiptCandidate> listReceiptCandidates(UUID tenantId);
+
     /** 按可信租户读取质检事实。 */
     Optional<QualityInspectionFact> findInspection(UUID tenantId, UUID inspectionId, boolean forUpdate);
 

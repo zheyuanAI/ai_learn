@@ -56,8 +56,9 @@ public class ExceptionCenterApplicationServiceImpl implements ExceptionCenterApp
     public ExceptionCenterPage query(FactsQueryContext context, String timeRange, String source,
                                      String severity, int page, int size) {
         requirePermission(context);
-        if (page < 1 || size < 1 || size > 200) {
-            throw new GisException(GisErrorCode.GIS_QUERY_001, "page 必须大于等于 1，size 必须在 1 到 200 之间");
+        // 修改：异常中心与页面目录查询统一允许最多 1000 条记录。
+        if (page < 1 || size < 1 || size > 1000) {
+            throw new GisException(GisErrorCode.GIS_QUERY_001, "page 必须大于等于 1，size 必须在 1 到 1000 之间");
         }
         String normalizedSource = normalize(source);
         String normalizedSeverity = normalize(severity);

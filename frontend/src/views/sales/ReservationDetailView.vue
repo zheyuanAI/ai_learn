@@ -56,7 +56,7 @@
             </div>
 
             <!-- 异常释放按钮 -->
-            <div v-if="parseFloat(line.unpickedQty) > 0" class="release-action-bar">
+            <div v-if="canRelease && parseFloat(line.unpickedQty) > 0" class="release-action-bar">
               <span class="hint">存在已预留但未拣货数量，若终止履约可在此异常释放：</span>
               <button
                 type="button"
@@ -107,11 +107,13 @@ const props = withDefaults(
   defineProps<{
     visible: boolean;
     order: SalesOrder | null;
+    canRelease?: boolean;
     releasing?: boolean;
   }>(),
   {
     visible: false,
     order: null,
+    canRelease: false,
     releasing: false,
   }
 );

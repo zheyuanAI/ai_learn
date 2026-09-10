@@ -1,4 +1,5 @@
 import { request, type ApiResponse } from "../utils/request";
+import type { PageResult } from "../types/common";
 
 /**
  * 用户登录入参模型
@@ -42,6 +43,15 @@ export interface LoginResponse {
   expiresIn?: number;
   jti?: string;
   user: UserInfo;
+}
+
+/** 派工下拉框使用的同租户最小操作员目录项。 */
+export interface OperatorDirectoryItem {
+  id: string;
+  userNo?: string;
+  username: string;
+  realName: string;
+  status: string;
 }
 
 /**
@@ -113,5 +123,17 @@ export function getMyMenus(): Promise<ApiResponse<MenuItem[]>> {
   return request<MenuItem[]>({
     url: "/api/me/menus",
     method: "GET",
+  });
+}
+
+/**
+ * 获取派工用同租户启用用户目录。
+ * 接口路径：GET /api/auth/admin/users/directory；只返回用户标识和展示姓名，不返回角色或敏感字段。
+ */
+export function getOperatorDirectory(params: { page?: number; size?: number; keyword?: string } = {}): Promise<ApiResponse<PageResult<OperatorDirectoryItem>>> {
+  return request<PageResult<OperatorDirectoryItem>>({
+    url: "/api/auth/admin/users/directory",
+    method: "GET",
+    params,
   });
 }

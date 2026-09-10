@@ -35,6 +35,14 @@ function commandHeaders(idempotencyKey?: string) {
   return idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined;
 }
 
+/** 为没有幂等键的旧调用方生成短唯一片段；页面命令调用通常会直接复用幂等键。 */
+function generateRequestFallbackId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /**
  * 分页查询 BOM 清单列表
  * 接口路径：GET /api/boms
@@ -201,7 +209,7 @@ export async function rejectWorkOrder(id: string | number, reason?: string, idem
 }
 
 /**
- * 人工关闭/完成工单
+ * 正常完成工单
  * 接口路径：POST /api/work-orders/{id}/complete
  */
 export async function completeWorkOrder(
@@ -216,7 +224,23 @@ export async function completeWorkOrder(
     headers: commandHeaders(idempotencyKey),
   });
 }
-export const manualCompleteWorkOrder = completeWorkOrder;
+
+/**
+ * 手工结案工单；只记录人工结案原因，不补造工序、报工、质检或库存事实。
+ * 接口路径：POST /api/work-orders/{id}/manual-complete
+ */
+export async function manualCompleteWorkOrder(
+  id: string | number,
+  completionReason: string,
+  idempotencyKey?: string,
+): Promise<ApiResponse<WorkOrder>> {
+  return await request<WorkOrder>({
+    url: `/api/work-orders/${id}/manual-complete`,
+    method: "POST",
+    data: { completionReason },
+    headers: commandHeaders(idempotencyKey),
+  });
+}
 
 /**
  * 分页查询派工单列表
@@ -305,6 +329,8 @@ export async function startOperationExecution(id: string | number, idempotencyKe
   return await request<OperationExecution>({
     url: `/api/operation-executions/${id}/start`,
     method: "POST",
+    // 修改用途：工序事件接口要求发生时间，页面动作统一提交当前客户端 ISO 时间。
+    data: { occurred_at: new Date().toISOString() },
     headers: commandHeaders(idempotencyKey),
   });
 }
@@ -317,7 +343,8 @@ export async function pauseOperationExecution(id: string | number, reason?: stri
   return await request<OperationExecution>({
     url: `/api/operation-executions/${id}/pause`,
     method: "POST",
-    data: { reason: reason || "" },
+    // 修改用途：暂停与其他执行事件使用同一时间字段，避免后端按缺失时间拒绝。
+    data: { reason: reason || "", occurred_at: new Date().toISOString() },
     headers: commandHeaders(idempotencyKey),
   });
 }
@@ -330,6 +357,8 @@ export async function resumeOperationExecution(id: string | number, idempotencyK
   return await request<OperationExecution>({
     url: `/api/operation-executions/${id}/resume`,
     method: "POST",
+    // 修改用途：恢复事件补齐后端必需的发生时间。
+    data: { occurred_at: new Date().toISOString() },
     headers: commandHeaders(idempotencyKey),
   });
 }
@@ -342,6 +371,8 @@ export async function completeOperationExecution(id: string | number, idempotenc
   return await request<OperationExecution>({
     url: `/api/operation-executions/${id}/complete`,
     method: "POST",
+    // 修改用途：完成事件补齐后端必需的发生时间。
+    data: { occurred_at: new Date().toISOString() },
     headers: commandHeaders(idempotencyKey),
   });
 }
@@ -395,8 +426,10 @@ export async function createMaterialIssue(payload: any, idempotencyKey?: string)
     locationId: item.locationId,
     quantity: String(item.quantity || item.issueQty || "0"),
   }));
+  // 修改用途：页面不要求用户手填内部单据号；优先用幂等键生成稳定编号，确保网络重试仍复用同一业务请求摘要。
+  const issueNo = payload.issueNo || `MI-${idempotencyKey || generateRequestFallbackId()}`;
   const requestBody = {
-    issueNo: payload.issueNo,
+    issueNo,
     workOrderId: payload.workOrderId,
     items,
     overageReason: payload.overageReason,
@@ -409,6 +442,18 @@ export async function createMaterialIssue(payload: any, idempotencyKey?: string)
   });
 }
 export const issueMaterials = createMaterialIssue;
+
+/**
+ * 查询当前租户指定工单的生产领料单集合。
+ * 接口路径：GET /api/material-issues?work_order_id={workOrderId}
+ */
+export async function getMaterialIssues(workOrderId: string | number): Promise<ApiResponse<MaterialMovement[]>> {
+  return await request<MaterialMovement[]>({
+    url: "/api/material-issues",
+    method: "GET",
+    params: { work_order_id: workOrderId },
+  });
+}
 
 /**
  * 确认生产领料出库
@@ -434,8 +479,10 @@ export async function createMaterialReturn(payload: any, idempotencyKey?: string
     locationId: item.locationId,
     quantity: String(item.quantity || item.returnQty || "0"),
   }));
+  // 修改用途：退料单号与领料单号保持同样的自动生成和幂等重试语义。
+  const returnNo = payload.returnNo || `MR-${idempotencyKey || generateRequestFallbackId()}`;
   const requestBody = {
-    returnNo: payload.returnNo,
+    returnNo,
     workOrderId: payload.workOrderId,
     items,
     reason: payload.reason,
@@ -448,6 +495,18 @@ export async function createMaterialReturn(payload: any, idempotencyKey?: string
   });
 }
 export const returnMaterials = createMaterialReturn;
+
+/**
+ * 查询当前租户指定工单的生产退料单集合。
+ * 接口路径：GET /api/material-returns?work_order_id={workOrderId}
+ */
+export async function getMaterialReturns(workOrderId: string | number): Promise<ApiResponse<MaterialReturnItem[]>> {
+  return await request<MaterialReturnItem[]>({
+    url: "/api/material-returns",
+    method: "GET",
+    params: { work_order_id: workOrderId },
+  });
+}
 
 /**
  * 确认生产退料入库

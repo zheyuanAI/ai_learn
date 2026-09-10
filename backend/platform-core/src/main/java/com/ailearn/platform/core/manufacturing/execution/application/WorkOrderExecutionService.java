@@ -3,7 +3,9 @@ package com.ailearn.platform.core.manufacturing.execution.application;
 import com.ailearn.platform.core.manufacturing.execution.domain.WorkOrderLifecycle;
 import com.ailearn.platform.core.manufacturing.execution.domain.WorkOrderProgress;
 import com.ailearn.platform.core.manufacturing.foundation.dto.WorkOrderCreateRequest;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /** WorkOrder 完整生命周期应用端口；不暴露库存写入能力。 */
@@ -39,4 +41,7 @@ public interface WorkOrderExecutionService {
 
     /** 查询当前租户内的工单生命周期，跨租户对象不可见。 */
     Optional<WorkOrderLifecycle> find(UUID workOrderId);
+
+    /** 批量查询当前租户内的工单生命周期，供列表读模型组装进度和动作能力。 */
+    List<WorkOrderLifecycle> findAll(Set<UUID> workOrderIds);
 }

@@ -299,8 +299,8 @@ async function handleCreateSubmit() {
 async function loadMasterData() {
   try {
     const [warehouseResponse, locationResponse] = await Promise.all([
-      getWarehouses({ page: 1, size: 200, status: "ACTIVE" }),
-      getLocations({ page: 1, size: 200, status: "ACTIVE" }),
+      getWarehouses({ page: 1, size: 1000, status: "ACTIVE" }),
+      getLocations({ page: 1, size: 1000, status: "ACTIVE" }),
     ]);
     warehouses.value = warehouseResponse.data.records;
     locations.value = locationResponse.data.records;

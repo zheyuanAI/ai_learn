@@ -192,7 +192,8 @@ function submitShipment() {
 
   const payload = {
     salesOrderId: props.order.id,
-    shipTime: shipTime.value.replace("T", " ") + ":00",
+    // 修改用途：后端 ShipmentConfirmRequest 使用 OffsetDateTime，必须提交 ISO-8601 时间而不是无时区文本。
+    shipTime: new Date(shipTime.value).toISOString(),
     carrierName: carrierName.value,
     trackingNo: trackingNo.value,
     lines: linesToShip.map((l) => ({

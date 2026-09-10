@@ -9,7 +9,10 @@ import static org.mockito.Mockito.when;
 
 import com.ailearn.platform.core.inventory.application.InventoryCommandService;
 import com.ailearn.platform.core.inventory.application.InventoryMutationResult;
+import com.ailearn.platform.core.inventory.domain.LocationSnapshot;
+import com.ailearn.platform.core.inventory.domain.LocationType;
 import com.ailearn.platform.core.inventory.domain.InventoryTransaction;
+import com.ailearn.platform.core.inventory.infrastructure.InventoryLocationPort;
 import com.ailearn.platform.core.manufacturing.execution.application.WorkOrderExecutionService;
 import com.ailearn.platform.core.manufacturing.execution.domain.WorkOrderLifecycle;
 import com.ailearn.platform.core.manufacturing.execution.domain.WorkOrderProgress;
@@ -32,6 +35,9 @@ import com.ailearn.platform.core.manufacturing.productionfact.infrastructure.InM
 import com.ailearn.platform.shared.context.RequestContextHolder;
 import com.ailearn.platform.shared.context.TenantContextHolder;
 import com.ailearn.platform.shared.context.UserContextHolder;
+import com.ailearn.platform.shared.idempotency.InMemoryIdempotencyStorage;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -70,6 +76,9 @@ class ProductionFactApplicationServiceTest {
 
     @Mock
     private WorkOrderExecutionService workOrderService;
+
+    @Mock
+    private InventoryLocationPort inventoryLocationPort;
 
     private ProductionFactApplicationServiceImpl service;
 
@@ -165,6 +174,25 @@ class ProductionFactApplicationServiceTest {
         assertEquals(QualityInspectionStatus.Passed.name(), submitted.result());
         assertEquals(1, result.inventoryTransactionIds().size());
         verify(inventoryCommandService, times(1)).increase(any());
+    }
+
+    /** 成品入库即使选择了启用库位，也必须拒绝非 Storage 类型库位。 */
+    @Test
+    void finishedGoodsReceiptRejectsActiveNonStorageLocation() {
+        when(inventoryLocationPort.findByTenantIdAndId(TENANT_ID, LOCATION_ID))
+                .thenReturn(new LocationSnapshot(LOCATION_ID, TENANT_ID, WAREHOUSE_ID,
+                        LocationType.ShippingStaging, "ACTIVE"));
+        ProductionFactApplicationServiceImpl locationAwareService = new ProductionFactApplicationServiceImpl(
+                new InMemoryProductionFactRepository(), inventoryCommandService, workOrderService,
+                null, null, inventoryLocationPort, new InMemoryIdempotencyStorage(),
+                new ObjectMapper().registerModule(new JavaTimeModule()));
+
+        ProductionFactException exception = assertThrows(ProductionFactException.class,
+                () -> locationAwareService.createFinishedGoodsReceipt(new FinishedGoodsReceiptCreateRequest(
+                        "FG-NON-STORAGE", WORK_ORDER_ID, new BigDecimal("1"), WAREHOUSE_ID, LOCATION_ID),
+                        "fg-non-storage"));
+
+        assertEquals("MES_FACT_002", exception.getBusinessCode());
     }
 
     /** 跨租户工单不可登记任何生产事实，且在库存端口之前失败。 */

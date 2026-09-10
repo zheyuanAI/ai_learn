@@ -17,8 +17,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -70,6 +73,51 @@ public class PostgresWorkOrderLifecycleRepository implements WorkOrderLifecycleR
             WorkOrderFact workOrder = foundationRepository.findWorkOrder(tenantId, workOrderId)
                     .orElse(null);
             return workOrder == null ? Optional.empty() : Optional.of(toDomain(stored, workOrder));
+        });
+    }
+
+    /**
+     * 批量恢复当前分页工单的生命周期快照，避免工单列表逐行读取生命周期造成 N+1 查询。
+     * 入参：可信租户与列表页工单 ID；出参：带基础事实和执行进度的生命周期集合；流程：一次读取生命周期快照，
+     * 再复用 foundation 批量工单事实构造聚合，并丢弃已被删除或缺失基础事实的快照。
+     */
+    @Override
+    public List<WorkOrderLifecycle> findAll(UUID tenantId, Set<UUID> workOrderIds) {
+        if (workOrderIds == null || workOrderIds.isEmpty()) {
+            return List.of();
+        }
+        return database(() -> {
+            Map<UUID, WorkOrderFact> workOrders = new HashMap<>();
+            for (WorkOrderFact workOrder : foundationRepository.findWorkOrders(tenantId)) {
+                if (workOrderIds.contains(workOrder.id())) {
+                    workOrders.put(workOrder.id(), workOrder);
+                }
+            }
+            List<WorkOrderLifecycle> result = new ArrayList<>();
+            try (Connection connection = dataSource.getConnection();
+                 PreparedStatement statement = connection.prepareStatement("""
+                         SELECT id, tenant_id, work_order_id, status, required_operation_ids,
+                                completed_operation_ids, reported_qty, qualified_qty, defect_qty, received_qty,
+                                quality_blocked, pending_inventory_commands, locked_bom_version,
+                                locked_routing_version, submitted_by, submitted_at, reviewed_by,
+                                reviewed_at, rejection_reason, completion_type, completion_reason,
+                                completed_by, completed_session_id, completed_at, version
+                           FROM mes_work_order_lifecycle
+                          WHERE tenant_id = ? AND isdel = 0
+                          ORDER BY created_at, id
+                         """)) {
+                statement.setObject(1, tenantId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) {
+                        StoredLifecycle stored = read(rows);
+                        WorkOrderFact workOrder = workOrders.get(stored.workOrderId());
+                        if (workOrder != null) {
+                            result.add(toDomain(stored, workOrder));
+                        }
+                    }
+                }
+            }
+            return result;
         });
     }
 

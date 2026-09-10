@@ -7,6 +7,7 @@ import com.ailearn.platform.auth.domain.dto.admin.UserRoleAssignRequest;
 import com.ailearn.platform.auth.domain.dto.admin.UserStatusUpdateRequest;
 import com.ailearn.platform.auth.domain.dto.admin.UserUpdateRequest;
 import com.ailearn.platform.auth.domain.vo.admin.PageResult;
+import com.ailearn.platform.auth.domain.vo.OperatorDirectoryVo;
 import com.ailearn.platform.auth.domain.vo.admin.UserAdminVo;
 import com.ailearn.platform.auth.service.admin.UserAdminService;
 import com.ailearn.platform.shared.api.ApiResponse;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -58,6 +60,19 @@ public class UserAdminController {
     public ApiResponse<PageResult<UserAdminVo>> pageUsers(@Valid UserPageQueryRequest request) {
         PageResult<UserAdminVo> pageResult = userAdminService.pageUsers(request);
         return ApiResponse.ok(pageResult);
+    }
+
+    /**
+     * 查询派工使用的同租户最小操作员目录。
+     * 入参：可选关键词、页码和页大小；出参：不含敏感字段的操作员分页；流程：由应用服务执行租户隔离与权限校验。
+     */
+    @Operation(summary = "查询派工操作员目录", description = "返回当前租户启用用户的最小身份字段，供派工下拉框使用")
+    @GetMapping("/directory")
+    public ApiResponse<PageResult<OperatorDirectoryVo>> pageOperatorDirectory(
+            @RequestParam(name = "keyword", required = false) String keyword,
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "1000") int size) {
+        return ApiResponse.ok(userAdminService.pageOperatorDirectory(keyword, page, size));
     }
 
     /**

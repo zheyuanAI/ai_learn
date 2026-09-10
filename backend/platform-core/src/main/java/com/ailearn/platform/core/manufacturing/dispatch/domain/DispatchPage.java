@@ -1,10 +1,11 @@
 package com.ailearn.platform.core.manufacturing.dispatch.domain;
 
+import com.ailearn.platform.core.manufacturing.dispatch.dto.DispatchOrderView;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
 /** 派工列表统一分页响应。 */
-public record DispatchPage(@JsonProperty("records") List<DispatchOrder> records,
+public record DispatchPage(@JsonProperty("records") List<DispatchOrderView> records,
                            long total, int page, int size) {
     public DispatchPage {
         records = records == null ? List.of() : List.copyOf(records);

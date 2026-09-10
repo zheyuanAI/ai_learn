@@ -7,7 +7,7 @@
       description="销售订单采用生命周期与履约进度双轴模型。正常路径只保留【直接拣货】与【发货确认】；直接拣货在同一事务内自动补足来源库位预留并移入发货暂存位（ShippingStaging），发货出库正式扣减实物库存并释放业务预留。"
     >
       <template #actions>
-        <button type="button" class="btn-primary" @click="isCreateModalOpen = true">
+        <button v-if="hasPermission('sales:order:create')" type="button" class="btn-primary" @click="isCreateModalOpen = true">
           <span>＋ 新建销售订单</span>
         </button>
       </template>
@@ -72,7 +72,7 @@
       description="当前筛选条件下未发现符合的销售订单，您可以调整筛选条件或新建订单。"
     >
       <template #action>
-        <button type="button" class="btn-create-sm" @click="isCreateModalOpen = true">
+        <button v-if="hasPermission('sales:order:create')" type="button" class="btn-create-sm" @click="isCreateModalOpen = true">
           立即新建销售单
         </button>
       </template>
@@ -162,34 +162,25 @@
         <form class="modal-body" @submit.prevent="submitCreateOrder">
           <div class="form-item">
             <label>往来客户 <span class="req">*</span></label>
-            <select v-model="createForm.customerId" class="form-select" required>
+            <select v-model="createForm.customerId" class="form-select" required :disabled="masterDataLoading">
               <option value="">请选择真实客户</option>
+              <option v-if="customers.length === 0" value="" disabled>暂无可用客户，请检查权限或 ACTIVE 主数据</option>
               <option v-for="customer in customers" :key="customer.id" :value="String(customer.id)">
                 {{ customer.customerName }} ({{ customer.customerCode }})
               </option>
             </select>
           </div>
-          <div class="form-row">
-            <div class="form-item">
-              <label>出库仓库 <span class="req">*</span></label>
-              <select v-model="createForm.warehouseId" class="form-select" required>
-                <option value="">请选择真实仓库</option>
-                <option v-for="warehouse in warehouses" :key="warehouse.id" :value="String(warehouse.id)">
-                  {{ warehouse.name }} ({{ warehouse.code }})
-                </option>
-              </select>
-            </div>
-            <div class="form-item">
-              <label>计划发货日期 <span class="req">*</span></label>
-              <input v-model="createForm.plannedShipDate" type="date" class="form-input" required />
-            </div>
+          <div class="form-item">
+            <label>计划发货日期 <span class="req">*</span></label>
+            <input v-model="createForm.plannedShipDate" type="date" class="form-input" required />
           </div>
           <div class="form-item">
             <label>订购物料 <span class="req">*</span></label>
-            <select v-model="createForm.productId" class="form-select" required>
+            <select v-model="createForm.productId" class="form-select" required :disabled="masterDataLoading">
               <option value="">请选择真实产品</option>
+              <option v-if="products.length === 0" value="" disabled>暂无可用物料，请先维护 ACTIVE 主数据</option>
               <option v-for="product in products" :key="product.id" :value="String(product.id)">
-                {{ product.sku }} ({{ product.name }})
+                {{ product.sku }} ({{ product.name }}) · 单位 {{ product.uom }}
               </option>
             </select>
           </div>
@@ -229,8 +220,9 @@ import SalesOrderDetailView from "./SalesOrderDetailView.vue";
 import type { ViewState } from "@/types/common";
 import type { SalesOrder } from "@/types/sales";
 import { getSalesOrders, createSalesOrder } from "@/api/sales";
-import { getCustomers, getProducts, getWarehouses } from "@/api/masterData";
-import type { Customer, Product, Warehouse } from "@/types/inventory";
+import { getCustomers, getProducts } from "@/api/masterData";
+import type { Customer, Product } from "@/types/inventory";
+import { usePermission } from "@/composables/usePermission";
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
@@ -238,7 +230,8 @@ const orderList = ref<SalesOrder[]>([]);
 const totalCount = ref(0);
 const customers = ref<Customer[]>([]);
 const products = ref<Product[]>([]);
-const warehouses = ref<Warehouse[]>([]);
+const masterDataLoading = ref(false);
+const { hasPermission } = usePermission();
 
 const queryParams = reactive({
   page: 1,
@@ -279,7 +272,6 @@ const isCreateModalOpen = ref(false);
 const isCreating = ref(false);
 const createForm = reactive({
   customerId: "",
-  warehouseId: "",
   plannedShipDate: new Date().toISOString().slice(0, 10),
   productId: "",
   orderedQty: "",
@@ -376,19 +368,23 @@ function openOrderDetail(row: SalesOrder) {
 }
 
 async function submitCreateOrder() {
-  if (!createForm.customerId || !createForm.warehouseId || !createForm.productId || !createForm.orderedQty) return;
+  const product = products.value.find((item) => String(item.id) === String(createForm.productId));
+  if (!createForm.customerId || !product || !product.uom || !createForm.orderedQty) {
+    alert("请选择真实客户、物料并确认物料单位已加载");
+    return;
+  }
   isCreating.value = true;
   try {
     await createSalesOrder({
       customerId: createForm.customerId,
       plannedShipDate: createForm.plannedShipDate,
-      warehouseId: createForm.warehouseId,
       remark: createForm.remark,
       lines: [
         {
           productId: createForm.productId,
           orderedQty: createForm.orderedQty,
-          uom: "台",
+          // 修改：沿用所选物料的真实 UOM，避免固定发送“台”导致后端订单行校验失败。
+          uom: product.uom,
         },
       ],
     });
@@ -407,17 +403,33 @@ onMounted(() => {
 
 /** 加载销售订单创建所需的真实主数据 UUID，前端不维护演示业务事实。 */
 async function loadMasterData() {
+  masterDataLoading.value = true;
   try {
-    const [customerRes, productRes, warehouseRes] = await Promise.all([
-      getCustomers({ page: 1, size: 20, status: "ACTIVE" }),
-      getProducts({ page: 1, size: 20, status: "ENABLE" }),
-      getWarehouses({ page: 1, size: 20, status: "ACTIVE" }),
+    const [customerResult, productResult] = await Promise.allSettled([
+      // 修改：下拉框使用服务端允许的最大页大小，避免只展示前 20 条真实主数据。
+      getCustomers({ page: 1, size: 1000, status: "ACTIVE" }),
+      getProducts({ page: 1, size: 1000, status: "ACTIVE" }),
     ]);
-    customers.value = customerRes.data.records || [];
-    products.value = productRes.data.records || [];
-    warehouses.value = warehouseRes.data.records || [];
+    const failures: string[] = [];
+    if (customerResult.status === "fulfilled") {
+      customers.value = customerResult.value.data.records || [];
+    } else {
+      customers.value = [];
+      failures.push("客户");
+    }
+    if (productResult.status === "fulfilled") {
+      products.value = productResult.value.data.records || [];
+    } else {
+      products.value = [];
+      failures.push("物料");
+    }
+    if (failures.length > 0) {
+      errorMessage.value = `${failures.join("、")}选项加载失败，请检查当前角色权限或主数据状态`;
+    }
   } catch (err: any) {
     errorMessage.value = err?.message || "加载销售主数据失败";
+  } finally {
+    masterDataLoading.value = false;
   }
 }
 </script>

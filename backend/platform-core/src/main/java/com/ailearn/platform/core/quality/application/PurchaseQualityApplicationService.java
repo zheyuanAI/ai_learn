@@ -5,6 +5,7 @@ import com.ailearn.platform.core.quality.dto.QualityDispositionRequest;
 import com.ailearn.platform.core.quality.dto.QualityDispositionView;
 import com.ailearn.platform.core.quality.dto.QualityInspectionRequest;
 import com.ailearn.platform.core.quality.dto.QualityInspectionView;
+import com.ailearn.platform.core.quality.dto.QualityReceiptCandidateView;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,6 +27,9 @@ public interface PurchaseQualityApplicationService {
                                               String idempotencyKey);
 
     List<QualityInspectionView> listInspections();
+
+    /** 查询可由质检人员手动关联的真实收货明细。 */
+    List<QualityReceiptCandidateView> listReceiptCandidates();
 
     List<QualityDispositionView> listDispositions();
 }

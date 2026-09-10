@@ -2,7 +2,7 @@ package com.ailearn.platform.core.manufacturing.operation.dto;
 
 import java.util.UUID;
 
-/** 工序执行列表查询参数；查询只在当前可信租户内生效，页大小上限为 200。 */
+/** 工序执行列表查询参数；查询只在当前可信租户内生效，页大小上限为 1000。 */
 public class OperationExecutionPageQuery {
     private int page = 1;
     private int size = 20;
@@ -15,7 +15,8 @@ public class OperationExecutionPageQuery {
     public OperationExecutionPageQuery normalized() {
         OperationExecutionPageQuery result = new OperationExecutionPageQuery();
         result.page = page < 1 ? 1 : page;
-        result.size = size < 1 ? 20 : Math.min(size, 200);
+        // 修改：工序执行相关选择器统一支持最多 1000 条候选。
+        result.size = size < 1 ? 20 : Math.min(size, 1000);
         result.workOrderId = workOrderId;
         result.operationId = operationId;
         result.deviceId = deviceId;

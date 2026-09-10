@@ -393,8 +393,8 @@ async function loadEntityOptions() {
   loadingEntities.value = true;
   try {
     const [devRes, whRes] = await Promise.allSettled([
-      getDevices({ page: 1, size: 200 }),
-      getWarehouses({ page: 1, size: 200 }),
+      getDevices({ page: 1, size: 1000 }),
+      getWarehouses({ page: 1, size: 1000 }),
     ]);
     if (devRes.status === "fulfilled" && devRes.value.data) {
       deviceOptions.value = devRes.value.data.records || [];

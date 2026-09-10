@@ -13,6 +13,7 @@ import type {
   PurchaseOrderCreatePayload,
   PurchaseReceipt,
   PurchaseReceiptConfirmPayload,
+  PurchaseQualityReceiptCandidate,
   PurchaseQualityInspection,
   QualityInspectPayload,
   PurchaseQualityDisposition,
@@ -178,6 +179,17 @@ export async function getQualityDispositions(): Promise<ApiResponse<PurchaseQual
 export async function getQualityInspections(): Promise<ApiResponse<PurchaseQualityInspection[]>> {
   return await request<PurchaseQualityInspection[]>({
     url: "/api/purchase-receipts/quality-inspections",
+    method: "GET",
+  });
+}
+
+/**
+ * 查询可供质检人员手动关联的真实收货明细。
+ * 接口只返回已确认且仍有待检数量的收货事实，前端不生成或拼接 UUID。
+ */
+export async function getQualityReceiptCandidates(): Promise<ApiResponse<PurchaseQualityReceiptCandidate[]>> {
+  return await request<PurchaseQualityReceiptCandidate[]>({
+    url: "/api/purchase-receipts/quality-candidates",
     method: "GET",
   });
 }

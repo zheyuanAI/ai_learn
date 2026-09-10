@@ -8,6 +8,7 @@ import com.ailearn.platform.auth.domain.dto.admin.UserStatusUpdateRequest;
 import com.ailearn.platform.auth.domain.dto.admin.UserUpdateRequest;
 import com.ailearn.platform.auth.domain.vo.admin.PageResult;
 import com.ailearn.platform.auth.domain.vo.admin.UserAdminVo;
+import com.ailearn.platform.auth.domain.vo.OperatorDirectoryVo;
 import java.util.UUID;
 
 /**
@@ -31,6 +32,9 @@ public interface UserAdminService {
      * @return 分页结果包装对象
      */
     PageResult<UserAdminVo> pageUsers(UserPageQueryRequest request);
+
+    /** 查询当前租户可用于派工指派的最小启用用户目录。 */
+    PageResult<OperatorDirectoryVo> pageOperatorDirectory(String keyword, int page, int size);
 
     /**
      * 查询指定用户的详细信息。

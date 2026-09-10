@@ -25,11 +25,17 @@ public interface ProductionFactApplicationService {
     /** 确认生产领料并通过库存端口扣减。 */
     ProductionFactSummary confirmMaterialIssue(UUID id, String idempotencyKey);
 
+    /** 查询当前租户指定工单的生产领料事实。 */
+    List<MaterialIssue> findMaterialIssues(UUID workOrderId);
+
     /** 创建生产退料 Draft。 */
     MaterialReturn createMaterialReturn(MaterialReturnCreateRequest request, String idempotencyKey);
 
     /** 确认生产退料并通过库存端口增加退回库位库存。 */
     ProductionFactSummary confirmMaterialReturn(UUID id, String idempotencyKey);
+
+    /** 查询当前租户指定工单的生产退料事实。 */
+    List<MaterialReturn> findMaterialReturns(UUID workOrderId);
 
     /** 创建不可变报工事实。 */
     WorkReport createWorkReport(WorkReportCreateRequest request, String idempotencyKey);

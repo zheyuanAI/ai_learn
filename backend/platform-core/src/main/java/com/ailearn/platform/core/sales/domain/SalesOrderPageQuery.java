@@ -10,6 +10,7 @@ public record SalesOrderPageQuery(String keyword, SalesOrderStatus status, UUID 
 
     public SalesOrderPageQuery {
         page = page < 1 ? 1 : page;
-        size = size < 1 ? 20 : Math.min(size, 200);
+        // 修改：销售订单目录查询与页面下拉选择器统一支持最多 1000 条记录。
+        size = size < 1 ? 20 : Math.min(size, 1000);
     }
 }

@@ -3,6 +3,7 @@ package com.ailearn.platform.core.sales;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -105,10 +106,29 @@ class SalesOrderApplicationServiceTest {
 
         assertEquals("Draft", result.getStatus());
         assertEquals("NotStarted", result.getFulfillmentStatus());
+        assertEquals("CUS-TEST", result.getCustomerCode());
+        assertEquals("测试客户", result.getCustomerName());
+        assertEquals("SKU-TEST", result.getLines().getFirst().sku());
+        assertEquals("测试物料", result.getLines().getFirst().productName());
         assertEquals("10.000000", result.getLines().getFirst().orderedQty());
         assertEquals("0.000000", result.getLines().getFirst().activeReservedQty());
         assertEquals(List.of("update", "submit"), result.getAllowedActions().stream()
                 .map(action -> action.getAction()).toList());
+    }
+
+    /**
+     * 页面未提交人工订单号时由服务端补生成销售单号，保持创建请求与页面表单契约一致。
+     */
+    @Test
+    void createWithoutOrderNoGeneratesOrderNo() {
+        when(repository.insert(any(SalesOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        SalesOrderSaveRequest request = saveRequest(null, "1");
+        request.getLines().getFirst().setLineNo(null);
+
+        SalesOrderView result = service.create(request, "sales-create-generated-no-1");
+
+        assertTrue(result.getSoNo().startsWith("SO-"));
+        assertEquals(1, result.getLines().getFirst().lineNo());
     }
 
     /**
@@ -279,6 +299,7 @@ class SalesOrderApplicationServiceTest {
         customer.setId(CUSTOMER_ID);
         customer.setTenantId(TENANT_A);
         customer.setStatus("ACTIVE");
+        customer.setCustomerCode("CUS-TEST");
         customer.setCustomerName("测试客户");
         return customer;
     }
@@ -291,6 +312,8 @@ class SalesOrderApplicationServiceTest {
         product.setId(PRODUCT_ID);
         product.setTenantId(TENANT_A);
         product.setStatus("ACTIVE");
+        product.setSku("SKU-TEST");
+        product.setName("测试物料");
         product.setUom("件");
         return product;
     }

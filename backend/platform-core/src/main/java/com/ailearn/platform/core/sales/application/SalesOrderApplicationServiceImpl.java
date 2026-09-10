@@ -245,16 +245,25 @@ public class SalesOrderApplicationServiceImpl implements SalesOrderApplicationSe
         validateCustomer(actor.tenantId(), request.getCustomerId());
         List<SalesOrderLine> lines = buildLines(request.getLines(), actor.tenantId());
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        return new SalesOrder(UUID.randomUUID(), actor.tenantId(), request.getSoNo().trim(), request.getCustomerId(),
+        // 修改：页面创建销售单不展示人工订单号输入，未提供时由服务端生成唯一单号。
+        String soNo = request.getSoNo() == null || request.getSoNo().trim().isBlank()
+                ? "SO-" + UUID.randomUUID() : request.getSoNo().trim();
+        return new SalesOrder(UUID.randomUUID(), actor.tenantId(), soNo, request.getCustomerId(),
                 request.getPlannedShipDate(), SalesOrderStatus.Draft, null, null, null, null, null,
                 normalizeRemark(request.getRemark()), 0L, actor.userId(), now, actor.userId(), now, lines);
     }
 
     private List<SalesOrderLine> buildLines(List<SalesOrderLineRequest> requests, UUID tenantId) {
-        return requests.stream().map(request -> {
-            if (request == null || request.getLineNo() == null || request.getProductId() == null
+        return java.util.stream.IntStream.range(0, requests.size()).mapToObj(index -> {
+            SalesOrderLineRequest request = requests.get(index);
+            if (request == null || request.getProductId() == null
                     || request.getUom() == null || request.getUom().isBlank()) {
                 throw new SalesOrderException(SalesOrderErrorCode.SO_006, "销售订单明细必要字段不能为空");
+            }
+            // 修改：页面按明细顺序提交，不要求用户填写行号；缺省时由服务端生成 1..n。
+            int lineNo = request.getLineNo() == null ? index + 1 : request.getLineNo();
+            if (lineNo <= 0) {
+                throw new SalesOrderException(SalesOrderErrorCode.SO_006, "订单行号必须大于 0");
             }
             Product product = productRepository.findById(tenantId, request.getProductId())
                     .orElseThrow(() -> new SalesOrderException(SalesOrderErrorCode.SO_004, "产品不存在或不属于当前租户"));
@@ -267,16 +276,16 @@ public class SalesOrderApplicationServiceImpl implements SalesOrderApplicationSe
             if (!product.getUom().equals(request.getUom().trim())) {
                 throw new SalesOrderException(SalesOrderErrorCode.SO_006, "订单行计量单位与产品主数据不一致");
             }
-            return new SalesOrderLine(UUID.randomUUID(), tenantId, request.getLineNo(), request.getProductId(),
+            return new SalesOrderLine(UUID.randomUUID(), tenantId, lineNo, request.getProductId(),
                     request.getUom().trim(), parsePositive(request.getOrderedQty(), "orderedQty"),
                     BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
         }).toList();
     }
 
     private void validateSaveRequest(SalesOrderSaveRequest request, boolean creating) {
-        if (request == null || (creating && (request.getSoNo() == null || request.getSoNo().trim().isBlank()))
-                || request.getCustomerId() == null || request.getLines() == null || request.getLines().isEmpty()) {
-            throw new SalesOrderException(SalesOrderErrorCode.SO_006, "销售订单号、客户和明细不能为空");
+        if (request == null || request.getCustomerId() == null || request.getLines() == null
+                || request.getLines().isEmpty()) {
+            throw new SalesOrderException(SalesOrderErrorCode.SO_006, "客户和明细不能为空");
         }
         if (request.getSoNo() != null && request.getSoNo().trim().length() > 64) {
             throw new SalesOrderException(SalesOrderErrorCode.SO_006, "销售订单号不能超过 64 个字符");
@@ -329,7 +338,11 @@ public class SalesOrderApplicationServiceImpl implements SalesOrderApplicationSe
         if (order == null) {
             throw new ServiceUnavailableException("销售订单持久化结果为空");
         }
-        return new SalesOrderView(order, actions(order));
+        Customer customer = customerRepository.findById(order.tenantId(), order.customerId()).orElse(null);
+        Map<UUID, Product> products = new LinkedHashMap<>();
+        order.lines().forEach(line -> productRepository.findById(order.tenantId(), line.productId())
+                .ifPresent(product -> products.put(line.productId(), product)));
+        return new SalesOrderView(order, actions(order), customer, products);
     }
 
     private List<com.ailearn.platform.core.masterdata.dto.AllowedActionVo> actions(SalesOrder order) {

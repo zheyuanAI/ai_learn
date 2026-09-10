@@ -6,6 +6,7 @@ import com.ailearn.platform.core.manufacturing.foundation.dto.WorkOrderCreateReq
 import com.ailearn.platform.core.manufacturing.foundation.application.ManufacturingFoundationService;
 import com.ailearn.platform.core.manufacturing.foundation.dto.ManufacturingPageQuery;
 import com.ailearn.platform.core.manufacturing.foundation.domain.WorkOrderFact;
+import com.ailearn.platform.core.manufacturing.execution.dto.WorkOrderExecutionView;
 import com.ailearn.platform.core.masterdata.dto.MasterDataPageResult;
 import com.ailearn.platform.shared.api.ApiResponse;
 import com.fasterxml.jackson.annotation.JsonAlias;
@@ -22,6 +23,11 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.beans.factory.annotation.Autowired;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 工单生命周期 REST Controller。
@@ -53,12 +59,25 @@ public class WorkOrderExecutionController {
         this(service, null);
     }
 
-    /** 查询当前租户工单基础事实分页；详情仍返回生命周期聚合。 */
+    /** 查询当前租户工单生命周期视图分页；列表与详情保持同一扁平字段和动作能力契约。 */
     @GetMapping
     @PreAuthorize("hasAuthority('mes:workorder:view')")
-    public ApiResponse<MasterDataPageResult<WorkOrderFact>> page(
+    public ApiResponse<MasterDataPageResult<WorkOrderExecutionView>> page(
             @ModelAttribute ManufacturingPageQuery query) {
-        return ApiResponse.success(foundationService.listWorkOrders(query));
+        MasterDataPageResult<WorkOrderFact> facts = foundationService.listWorkOrders(query);
+        Set<UUID> workOrderIds = facts.getRecords().stream()
+                .map(WorkOrderFact::id)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, WorkOrderLifecycle> lifecycles = service.findAll(workOrderIds).stream()
+                .collect(Collectors.toMap(item -> item.workOrder().id(), item -> item, (left, right) -> left));
+        List<WorkOrderExecutionView> records = facts.getRecords().stream()
+                .map(WorkOrderFact::id)
+                .map(lifecycles::get)
+                .filter(Objects::nonNull)
+                .map(WorkOrderExecutionView::from)
+                .toList();
+        return ApiResponse.success(new MasterDataPageResult<>(records, facts.getTotal(), facts.getPage(), facts.getSize()));
     }
 
     /** 修改 Draft/Rejected 工单。 */
@@ -95,8 +114,8 @@ public class WorkOrderExecutionController {
      */
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('mes:workorder:view')")
-    public ApiResponse<WorkOrderLifecycle> detail(@PathVariable("id") UUID id) {
-        return ApiResponse.success(service.find(id).orElse(null));
+    public ApiResponse<WorkOrderExecutionView> detail(@PathVariable("id") UUID id) {
+        return ApiResponse.success(service.find(id).map(WorkOrderExecutionView::from).orElse(null));
     }
 
     /**

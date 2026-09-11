@@ -1,184 +1,205 @@
 <template>
-  <div class="login-page">
-    <div class="login-container">
-      <!-- 页面顶部 Header -->
-      <header class="console-topbar">
-        <div class="console-title-block">
-          <div class="console-title-meta">
-            <span class="console-module-code">AUTH / PLATFORM LOGIN &amp; SESSION</span>
-            <span class="console-live-mark"><i aria-hidden="true"></i> 租户与单会话</span>
-          </div>
-          <h1 class="page-main-title">系统登录与认证上下文</h1>
-          <p class="page-sub-title">
-            承接租户识别、用户鉴权、角色权限与菜单加载。执行“后登录替换前登录”的单会话规则，旧 JWT 再次调用返回 401。
-          </p>
+  <div class="cloud-login-page">
+    <!-- 动态高科技背景：Canvas 星空粒子 + 3D 空间坐标网格 + SVG 激光能量光流 -->
+    <canvas ref="particleCanvas" class="bg-particle-canvas"></canvas>
+    <div class="cyber-perspective-grid" aria-hidden="true"></div>
+    <div class="laser-energy-ribbons" aria-hidden="true">
+      <svg class="laser-svg" viewBox="0 0 1440 900" fill="none" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="laserGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#0284c7" stop-opacity="0" />
+            <stop offset="30%" stop-color="#38bdf8" stop-opacity="0.6" />
+            <stop offset="70%" stop-color="#818cf8" stop-opacity="0.4" />
+            <stop offset="100%" stop-color="#c084fc" stop-opacity="0" />
+          </linearGradient>
+          <linearGradient id="laserGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0" />
+            <stop offset="40%" stop-color="#06b6d4" stop-opacity="0.5" />
+            <stop offset="80%" stop-color="#3b82f6" stop-opacity="0.3" />
+            <stop offset="100%" stop-color="#1d4ed8" stop-opacity="0" />
+          </linearGradient>
+          <filter id="laserGlow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="8" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <path
+          d="M-100,550 C300,320 700,750 1200,420 C1400,280 1550,310 1600,350"
+          stroke="url(#laserGrad1)"
+          stroke-width="3"
+          filter="url(#laserGlow)"
+          class="pulse-laser-1"
+        />
+        <path
+          d="M-50,680 C350,480 650,820 1150,560 C1380,440 1520,490 1600,520"
+          stroke="url(#laserGrad2)"
+          stroke-width="1.8"
+          stroke-dasharray="12 6"
+          filter="url(#laserGlow)"
+          class="pulse-laser-2"
+        />
+      </svg>
+    </div>
+
+    <!-- 顶部状态栏（仅保留极简纯净的品牌 Logo） -->
+    <header class="cloud-topbar">
+      <div class="brand-block">
+        <div class="brand-logo-hex">
+          <span class="brand-logo-core">AI</span>
         </div>
-      </header>
+        <div class="brand-text">
+          <span class="brand-name">AI Learn 智能协同智造中枢</span>
+          <span class="brand-sub">ENTERPRISE CLOUD PLATFORM · WMS &amp; MES</span>
+        </div>
+      </div>
+    </header>
 
-      <!-- 登录核心工作区：左侧表单 + 右侧认证事实 -->
-      <section class="console-layout" aria-label="登录与会话工作台">
-        <!-- 左侧：登录表单卡片 -->
-        <div class="console-panel-box login-form-panel">
-          <div>
-            <span class="console-section-index">用户登录</span>
-            <h2 class="panel-heading">统一身份认证</h2>
+    <!-- 401 动态会话过期感知警示条 -->
+    <transition name="fade-slide">
+      <div v-if="show401Alert" class="alert-banner-401" role="alert">
+        <div class="alert-icon-wrap">⚠️</div>
+        <div class="alert-content">
+          <strong class="alert-title">会话状态已失效 (401 Displaced / Session Expired)</strong>
+          <span class="alert-desc">
+            检测到单会话已被新设备顶替或认证令牌已超时。请重新输入账号凭证接入系统。
+          </span>
+        </div>
+        <button type="button" class="alert-close-btn" @click="dismiss401Alert" title="关闭提示">✕</button>
+      </div>
+    </transition>
+
+    <!-- 核心工作区：居中悬浮黑曜石主控制舱 -->
+    <main class="cloud-main-layout">
+      <section class="login-center-console" aria-label="统一身份认证主控制舱">
+        <div class="console-card-header">
+          <div class="card-chip">AUTH // 统一身份认证</div>
+          <h2 class="card-main-title">欢迎登录云端控制台</h2>
+          <p class="card-sub-title">承接多租户识别、鉴权通行、动态权限与单会话追踪</p>
+        </div>
+
+        <form class="login-form" @submit.prevent="handleLoginSubmit">
+          <!-- 租户选择 -->
+          <div class="form-group">
+            <label for="loginTenant" class="field-label">
+              <span>企业租户编码 (Tenant Code)</span>
+              <span class="required-star">*</span>
+            </label>
+            <el-select
+              id="loginTenant"
+              v-model="formData.tenantCode"
+              class="tech-select"
+              popper-class="tech-select-popper"
+              @change="onTenantChange"
+            >
+              <el-option label="tenant_demo_a (华北智能工厂示范租户)" value="tenant_demo_a" />
+              <el-option label="tenant_demo_b (华东高精装备制造租户)" value="tenant_demo_b" />
+            </el-select>
           </div>
 
-          <form class="login-form" @submit.prevent="handleLoginSubmit">
-            <div class="form-field">
-              <label for="loginTenant">企业租户编码 (Tenant Code) <b class="req-star">*</b></label>
-              <el-select
-                id="loginTenant"
-                v-model="formData.tenantCode"
-                style="width: 100%"
-                @change="onTenantChange"
-              >
-                <el-option label="tenant_demo_a (华北智能工厂示范租户)" value="tenant_demo_a" />
-                <el-option label="tenant_demo_b (华东高精装备制造租户)" value="tenant_demo_b" />
-              </el-select>
+          <!-- 用户账号（合并快速体验角色选择 + 手动输入自由填写） -->
+          <div class="form-group username-merged-group">
+            <div class="field-label-row">
+              <label for="loginUsername" class="field-label">
+                <span>账号用户名 (Username)</span>
+                <span class="required-star">*</span>
+              </label>
+              <span class="quick-tip-badge">可手动填写或点击下方角色快速填报</span>
             </div>
 
-            <div class="form-field">
-              <label for="loginUsername">账号用户名 (Username) <b class="req-star">*</b></label>
-              <el-input
-                id="loginUsername"
-                v-model="formData.username"
-                placeholder="请输入用户名"
-                @input="onUsernameInput"
-              />
-            </div>
-
-            <div class="form-field">
-              <label for="loginPassword">登录密码 (Password) <b class="req-star">*</b></label>
-              <el-input
-                id="loginPassword"
-                v-model="formData.password"
-                type="password"
-                show-password
-                placeholder="请输入登录密码"
-              />
-            </div>
-
-            <el-button
-              type="primary"
-              size="large"
-              native-type="submit"
-              class="login-submit-btn"
-              :loading="isLoading"
+            <!-- 手动输入框 -->
+            <el-input
+              id="loginUsername"
+              v-model="formData.username"
+              class="tech-input"
+              placeholder="请输入用户名或从下方快速选择"
+              clearable
+              @input="onUsernameInput"
             >
-              <span class="btn-text">{{ isLoading ? "正在登录..." : "登录进入系统" }}</span>
-              <span class="btn-perm-tag">POST /api/auth/login</span>
-            </el-button>
-          </form>
+              <template #prefix>
+                <span class="input-icon">👤</span>
+              </template>
+            </el-input>
 
-          <!-- 6 个正式业务角色快捷切换卡片 -->
-          <div class="quick-role-section">
-            <span class="quick-role-title">快速切换演示角色登录（6 类正式角色）：</span>
-            <div class="quick-role-grid">
+            <!-- 与用户名直接合并的 6 类正式角色微型快捷胶囊 -->
+            <div class="merged-role-selector" aria-label="正式角色快捷填报">
               <button
                 v-for="(profile, uname) in ROLE_PRESETS"
                 :key="uname"
                 type="button"
-                class="role-quick-btn"
-                :class="{ 'is-active': formData.username === uname }"
+                class="role-mini-chip"
+                :class="{ 'is-active': formData.username.toLowerCase().trim() === uname.toLowerCase() }"
                 @click="quickSelectRole(uname)"
+                :title="`点击填入角色: ${profile.roleName} (${uname})`"
               >
-                <span class="role-quick-name">{{ profile.roleName }}</span>
-                <span class="role-quick-user">{{ uname }}</span>
+                <span class="chip-dot"></span>
+                <span class="chip-role-name">{{ profile.roleName }}</span>
               </button>
             </div>
           </div>
+
+          <!-- 访问密码 -->
+          <div class="form-group">
+            <label for="loginPassword" class="field-label">
+              <span>登录密码 (Password)</span>
+              <span class="required-star">*</span>
+            </label>
+            <el-input
+              id="loginPassword"
+              v-model="formData.password"
+              type="password"
+              class="tech-input"
+              show-password
+              placeholder="请输入登录密码"
+            >
+              <template #prefix>
+                <span class="input-icon">🔒</span>
+              </template>
+            </el-input>
+          </div>
+
+          <!-- 登录按钮 -->
+          <el-button
+            type="primary"
+            size="large"
+            native-type="submit"
+            class="tech-submit-btn"
+            :loading="isLoading"
+          >
+            <span class="submit-text">{{ isLoading ? "正在鉴权验证..." : "登录进入系统" }}</span>
+            <span class="submit-api-tag">POST /api/auth/login</span>
+          </el-button>
+        </form>
+
+        <!-- 底部微状态条 -->
+        <div class="console-card-footer">
+          <span class="sec-item">
+            <i class="sec-dot green"></i> Redis 单一会话指纹监听
+          </span>
+          <span class="sec-divider">|</span>
+          <span class="sec-item">
+            <i class="sec-icon">🛡️</i> TLS 256-bit 加密
+          </span>
         </div>
-
-        <!-- 右侧：会话机制与权限说明 -->
-        <aside class="console-detail session-detail-panel">
-          <div>
-            <div class="detail-header-meta">
-              <span class="console-module-code">SECURITY &amp; JWT SESSION</span>
-              <span
-                class="session-badge"
-                :class="authStore.isSessionValid ? 'badge-green' : 'badge-red'"
-              >
-                {{ authStore.isSessionValid ? "会话正常 (Active)" : "已失效 (401 Displaced)" }}
-              </span>
-            </div>
-            <h2 class="detail-heading">当前认证上下文与会话事实</h2>
-            <p class="detail-desc">
-              服务端在 Redis 维护最新 jti，当同一账号在另一设备登录时，新 jti 替换旧 jti。
-            </p>
-          </div>
-
-          <!-- 事实网格 -->
-          <div class="fact-grid">
-            <div class="fact-item">
-              <span class="fact-label">当前生效租户</span>
-              <span class="fact-value highlight-cyan">{{ formData.tenantCode }}</span>
-            </div>
-            <div class="fact-item">
-              <span class="fact-label">当前登录用户</span>
-              <span class="fact-value">{{ currentProfile?.realName }} ({{ formData.username }})</span>
-            </div>
-            <div class="fact-item">
-              <span class="fact-label">生效角色</span>
-              <span class="fact-value highlight-warm">{{ currentProfile?.roleName || "未指定角色" }}</span>
-            </div>
-            <div class="fact-item">
-              <span class="fact-label">当前 JWT 会话标识 (jti)</span>
-              <span class="fact-value font-mono highlight-blue">
-                {{ authStore.isSessionValid ? (currentProfile?.jti || "jti_pending") : "jti_INVALIDATED_401" }}
-              </span>
-            </div>
-          </div>
-
-          <!-- 单会话顶替机制模拟演示 -->
-          <div class="kick-demo-card">
-            <div class="kick-demo-header">
-              <strong>单会话顶替机制模拟演示</strong>
-              <el-button
-                type="warning"
-                size="small"
-                class="kick-action-btn"
-                @click="simulateKickOut"
-              >
-                ⚠️ 模拟新设备登录（踢出当前会话）
-              </el-button>
-            </div>
-            <p class="kick-demo-desc">
-              模拟另一个客户端使用相同账号成功登录并获取新 jti。当前页面下一次请求将被服务端 401 拦截并弹出失效警告。
-            </p>
-          </div>
-
-          <!-- 已加载菜单与功能权限树 -->
-          <section class="perm-tree-section">
-            <div class="perm-tree-head">
-              <h3>已加载菜单与功能权限树 (Menu Permissions)</h3>
-              <small>根据 Auth 服务加载当前用户权限点</small>
-            </div>
-            <div class="perm-tag-list">
-              <div
-                v-for="perm in currentProfile?.permissions || []"
-                :key="perm"
-                class="perm-tag-item"
-              >
-                🔑 <code>{{ perm }}</code>
-              </div>
-            </div>
-          </section>
-        </aside>
       </section>
+    </main>
 
-      <!-- 底部声明 -->
-      <footer class="console-disclaimer">
-        <span class="disclaimer-tag">PRODUCTION / AUTHENTICATED WORKSPACE</span>
-        <p>基于 Vue 3 + Pinia + Axios 真实前后端链路，承载 6 类正式角色鉴权与动态菜单流转。</p>
-      </footer>
-    </div>
+    <!-- 底部架构声明 -->
+    <footer class="cloud-footer">
+      <span class="footer-badge">PRODUCTION / AUTHENTICATED WORKSPACE</span>
+      <span class="footer-text">
+        基于 Vue 3 + Pinia + Axios 真实前后端链路，承载 6 类正式角色鉴权与动态菜单流转。
+      </span>
+    </footer>
 
     <!-- 统一 Toast 提示 -->
     <div
       v-if="toast.visible"
-      class="console-toast"
-      :class="[`is-${toast.type}`, { 'is-visible': toast.visible }]"
+      class="cloud-toast"
+      :class="[`toast-${toast.type}`, { 'is-visible': toast.visible }]"
       role="status"
     >
       {{ toast.message }}
@@ -187,7 +208,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, computed } from "vue";
+import { reactive, ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { useAuthStore, ROLE_PRESETS } from "../stores/auth";
@@ -197,13 +218,17 @@ const route = useRoute();
 const authStore = useAuthStore();
 
 const isLoading = ref(false);
+const show401Alert = ref(false);
+const particleCanvas = ref<HTMLCanvasElement | null>(null);
 
+// 表单响应式数据
 const formData = reactive({
   tenantCode: authStore.activeTenant || "tenant_demo_a",
   username: "admin.zhang",
   password: "",
 });
 
+// Toast 状态管理
 const toast = reactive({
   visible: false,
   message: "",
@@ -211,10 +236,11 @@ const toast = reactive({
 });
 
 let toastTimer: any = null;
+let animationFrameId: number | null = null;
 
 /**
  * 弹出提示消息
- * 入参为消息文本与类型，出参无
+ * 中文注释：入参为消息文本与消息类型，同步调用 ElMessage 与本地微型 Toast 组件
  */
 function showToast(message: string, type: "success" | "danger" | "warning" = "success") {
   ElMessage({
@@ -239,11 +265,18 @@ const currentProfile = computed(() => {
 });
 
 /**
+ * 关闭 401 提示条
+ */
+function dismiss401Alert() {
+  show401Alert.value = false;
+}
+
+/**
  * 租户下拉切换
  */
 function onTenantChange() {
   authStore.activeTenant = formData.tenantCode;
-  showToast(`已切换租户：${formData.tenantCode}`);
+  showToast(`已切换企业租户：${formData.tenantCode}`);
 }
 
 /**
@@ -255,12 +288,14 @@ function onUsernameInput() {
 
 /**
  * 快捷选择 6 类演示角色
+ * 中文注释：点击预设角色芯片，秒级填入对应的系统用户名与演示密码 123456，同时点亮对应芯片
  */
 function quickSelectRole(username: string) {
   formData.username = username;
   formData.password = "123456";
   authStore.isSessionValid = true;
-  showToast(`已选择角色：${username}，已自动填入演示密码 123456`);
+  show401Alert.value = false;
+  showToast(`已选择角色：${ROLE_PRESETS[username]?.roleName || username}，已自动填入用户名及演示密码 123456`);
 }
 
 /**
@@ -268,7 +303,7 @@ function quickSelectRole(username: string) {
  */
 async function handleLoginSubmit() {
   if (!formData.tenantCode) {
-    showToast("登录失败：租户编码不能为空", "danger");
+    showToast("登录失败：企业租户编码不能为空", "danger");
     return;
   }
   if (!formData.username) {
@@ -296,7 +331,7 @@ async function handleLoginSubmit() {
     const redirectUrl = (route.query.redirect as string) || currentProfile.value.redirect || "/";
     setTimeout(() => {
       router.push({ path: redirectUrl });
-    }, 500);
+    }, 450);
   } catch (error: any) {
     showToast(`登录失败：${error.message || "服务异常"}`, "danger");
   } finally {
@@ -305,502 +340,664 @@ async function handleLoginSubmit() {
 }
 
 /**
- * 模拟单会话被新客户端顶替
+ * 初始化轻量 Canvas 星空与微光粒子（耗能极低，自适应屏幕）
  */
-function simulateKickOut() {
-  authStore.simulateSessionKicked();
-  showToast("⚠️ 401 告警：该账号已在另一客户端登录，旧会话已失效！", "danger");
+function initParticles() {
+  const canvas = particleCanvas.value;
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  let width = (canvas.width = window.innerWidth);
+  let height = (canvas.height = window.innerHeight);
+
+  const handleResize = () => {
+    if (!canvas) return;
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+  };
+  window.addEventListener("resize", handleResize);
+
+  // 粒子集
+  const count = Math.min(Math.floor((width * height) / 18000), 60);
+  const particles: Array<{
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    size: number;
+    alpha: number;
+  }> = [];
+
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      vx: (Math.random() - 0.5) * 0.35,
+      vy: (Math.random() - 0.5) * 0.35,
+      size: Math.random() * 1.8 + 0.6,
+      alpha: Math.random() * 0.6 + 0.2,
+    });
+  }
+
+  function render() {
+    if (!ctx) return;
+    ctx.clearRect(0, 0, width, height);
+
+    // 绘制粒子与微妙连线
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0) p.x = width;
+      if (p.x > width) p.x = 0;
+      if (p.y < 0) p.y = height;
+      if (p.y > height) p.y = 0;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(56, 189, 248, ${p.alpha})`;
+      ctx.fill();
+
+      for (let j = i + 1; j < particles.length; j++) {
+        const p2 = particles[j];
+        const dx = p.x - p2.x;
+        const dy = p.y - p2.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 100) {
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.strokeStyle = `rgba(56, 189, 248, ${0.12 * (1 - dist / 100)})`;
+          ctx.lineWidth = 0.6;
+          ctx.stroke();
+        }
+      }
+    }
+
+    animationFrameId = requestAnimationFrame(render);
+  }
+
+  render();
 }
+
+onMounted(() => {
+  // 检查 URL 是否带 401 会话失效标记
+  if (route.query.reason === "401" || !authStore.isSessionValid) {
+    show401Alert.value = true;
+  }
+
+  initParticles();
+});
+
+onUnmounted(() => {
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId);
+  }
+  if (toastTimer) {
+    clearTimeout(toastTimer);
+  }
+});
 </script>
 
 <style scoped>
-.login-page {
+/* ================= 全局页面与高科技背景 ================= */
+.cloud-login-page {
+  position: relative;
   min-height: 100vh;
-  padding: 32px;
+  width: 100%;
+  background: radial-gradient(circle at 50% 25%, #0a1630 0%, #030712 75%, #01040a 100%);
+  color: #f1f5f9;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+/* Canvas 粒子层 */
+.bg-particle-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 3D 空间坐标网格地平线 */
+.cyber-perspective-grid {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 50%;
+  background-image:
+    linear-gradient(to right, rgba(56, 189, 248, 0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(56, 189, 248, 0.12) 1px, transparent 1px);
+  background-size: 60px 60px;
+  transform: perspective(480px) rotateX(68deg);
+  transform-origin: bottom center;
+  mask-image: linear-gradient(to top, rgba(0, 0, 0, 1) 15%, rgba(0, 0, 0, 0) 90%);
+  -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 1) 15%, rgba(0, 0, 0, 0) 90%);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* 激光流束 SVG */
+.laser-energy-ribbons {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+  overflow: hidden;
+}
+
+.laser-svg {
+  width: 100%;
+  height: 100%;
+  opacity: 0.85;
+}
+
+.pulse-laser-1 {
+  animation: laserPulse1 8s ease-in-out infinite alternate;
+}
+
+.pulse-laser-2 {
+  animation: laserPulse2 10s ease-in-out infinite alternate;
+}
+
+@keyframes laserPulse1 {
+  0% { opacity: 0.55; transform: translateY(0px) scaleY(1); }
+  100% { opacity: 0.95; transform: translateY(-15px) scaleY(1.05); }
+}
+
+@keyframes laserPulse2 {
+  0% { opacity: 0.4; stroke-dashoffset: 0; }
+  100% { opacity: 0.8; stroke-dashoffset: 120; }
+}
+
+/* ================= 顶部状态栏 ================= */
+.cloud-topbar {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 20px 36px;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+  background: rgba(3, 7, 18, 0.55);
+  backdrop-filter: blur(14px);
+}
+
+.brand-block {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-logo-hex {
+  width: 38px;
+  height: 38px;
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  border: 1px solid #38bdf8;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.45);
+}
+
+.brand-logo-core {
+  font-weight: 900;
+  font-size: 15px;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+}
+
+.brand-sub {
+  font-size: 10px;
+  color: #38bdf8;
+  letter-spacing: 0.14em;
+  font-weight: 600;
+}
+
+/* ================= 401 动态会话感知警示条 ================= */
+.alert-banner-401 {
+  position: relative;
+  z-index: 15;
+  margin: 16px auto 0;
+  max-width: 520px;
+  width: calc(100% - 48px);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.16) 0%, rgba(217, 119, 6, 0.1) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  border-radius: 10px;
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 0 24px rgba(245, 158, 11, 0.25);
+  backdrop-filter: blur(8px);
+}
+
+.alert-icon-wrap {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.alert-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.alert-title {
+  color: #fbbf24;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.alert-desc {
+  color: #fde68a;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.alert-close-btn {
+  background: transparent;
+  border: none;
+  color: #fbbf24;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px;
+  opacity: 0.8;
+  transition: opacity 0.15s;
+}
+
+.alert-close-btn:hover {
+  opacity: 1;
+}
+
+/* ================= 核心工作区：完美居中主控制舱 ================= */
+.cloud-main-layout {
+  position: relative;
+  z-index: 10;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
+  padding: 36px 24px 24px;
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+  flex: 1;
   box-sizing: border-box;
 }
 
-.login-container {
+/* 居中黑曜石主控制舱 */
+.login-center-console {
   width: 100%;
-  max-width: 1280px;
-}
-
-.console-topbar {
-  margin-bottom: 24px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--line, rgba(124, 162, 194, 0.18));
-}
-
-.console-title-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.console-module-code {
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  color: var(--accent, #67d2ff);
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.console-live-mark {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: #6fe1a6;
-  padding: 2px 8px;
-  background: rgba(111, 225, 166, 0.1);
-  border-radius: 4px;
-  border: 1px solid rgba(111, 225, 166, 0.2);
-}
-
-.console-live-mark i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #6fe1a6;
-  box-shadow: 0 0 6px #6fe1a6;
-}
-
-.page-main-title {
-  font-size: 24px;
-  font-weight: 700;
-  margin: 0 0 8px;
-  color: #fff;
-}
-
-.page-sub-title {
-  font-size: 13px;
-  color: var(--muted, #8ca2b8);
-  margin: 0;
-  line-height: 1.6;
-}
-
-.console-layout {
-  display: grid;
-  grid-template-columns: minmax(360px, 440px) minmax(0, 1fr);
-  gap: 24px;
-  margin-top: 18px;
-}
-
-.console-panel-box,
-.console-detail {
-  border: 1px solid var(--line, rgba(124, 162, 194, 0.18));
+  max-width: 490px;
+  background: rgba(8, 16, 33, 0.84);
+  border: 1px solid rgba(56, 189, 248, 0.35);
   border-radius: 20px;
-  background: var(--panel, rgba(10, 18, 28, 0.84));
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(16px);
-}
-
-.login-form-panel {
-  padding: 26px;
+  padding: 32px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85), 0 0 40px rgba(56, 189, 248, 0.12);
+  backdrop-filter: blur(22px);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 22px;
 }
 
-.console-section-index {
+.console-card-header {
+  border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+  padding-bottom: 16px;
+}
+
+.card-chip {
+  display: inline-block;
   font-size: 11px;
+  color: #38bdf8;
+  font-weight: 600;
   letter-spacing: 0.12em;
-  color: var(--accent, #67d2ff);
-  text-transform: uppercase;
+  margin-bottom: 6px;
 }
 
-.panel-heading {
-  margin: 6px 0 0;
-  font-size: 20px;
-  color: #fff;
+.card-main-title {
+  font-size: 21px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 4px;
 }
 
+.card-sub-title {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+/* 表单组件 */
 .login-form {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.form-field {
+.form-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.form-field label {
+.field-label {
   font-size: 12px;
-  color: var(--muted, #8ca2b8);
+  color: #cbd5e1;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.req-star {
-  color: #ff7d7d;
+.field-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-.form-input {
-  width: 100%;
-  padding: 10px 14px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(124, 162, 194, 0.25);
-  color: #fff;
+.quick-tip-badge {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.required-star {
+  color: #f87171;
+}
+
+.input-icon {
   font-size: 13px;
-  font-family: inherit;
-  outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  box-sizing: border-box;
+  opacity: 0.7;
+  margin-right: 4px;
 }
 
-.form-input:focus {
-  border-color: var(--accent, #67d2ff);
-  box-shadow: 0 0 0 2px rgba(103, 210, 255, 0.2);
+/* 用户名与角色合并选择器 */
+.username-merged-group {
+  gap: 8px;
 }
 
-.form-select {
+.merged-role-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.role-mini-chip {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 6px;
+  padding: 4px 10px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.18s ease;
+  user-select: none;
 }
 
-.form-select option {
-  background: #0d1723;
-  color: #fff;
+.role-mini-chip:hover {
+  background: rgba(14, 165, 233, 0.18);
+  border-color: rgba(56, 189, 248, 0.5);
+  transform: translateY(-1px);
 }
 
-.login-submit-btn {
+.role-mini-chip.is-active {
+  background: rgba(14, 165, 233, 0.28);
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+}
+
+.chip-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #38bdf8;
+  transition: all 0.2s ease;
+}
+
+.role-mini-chip.is-active .chip-dot {
+  background: #34d399;
+  box-shadow: 0 0 6px #34d399;
+}
+
+.chip-role-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: #cbd5e1;
+}
+
+.role-mini-chip.is-active .chip-role-name {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* Element Plus 科技风深色穿透覆盖 */
+:deep(.tech-select .el-select__wrapper) {
+  background: rgba(15, 23, 42, 0.8) !important;
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25) inset !important;
+  border-radius: 8px;
+  color: #f1f5f9;
+  min-height: 42px;
+  transition: all 0.2s ease;
+}
+
+:deep(.tech-select .el-select__wrapper.is-focused) {
+  box-shadow: 0 0 0 1px #38bdf8 inset, 0 0 12px rgba(56, 189, 248, 0.3) !important;
+}
+
+:deep(.tech-select .el-select__placeholder),
+:deep(.tech-select .el-select__selected-item) {
+  color: #e2e8f0 !important;
+  font-size: 13px;
+}
+
+:deep(.tech-input .el-input__wrapper) {
+  background: rgba(15, 23, 42, 0.8) !important;
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25) inset !important;
+  border-radius: 8px;
+  min-height: 42px;
+  transition: all 0.2s ease;
+}
+
+:deep(.tech-input .el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #38bdf8 inset, 0 0 12px rgba(56, 189, 248, 0.3) !important;
+}
+
+:deep(.tech-input .el-input__inner) {
+  color: #ffffff !important;
+  font-size: 13px;
+}
+
+:deep(.tech-input .el-input__inner::placeholder) {
+  color: #64748b !important;
+}
+
+/* 提交按钮 */
+.tech-submit-btn {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 8px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+  border: 1px solid rgba(56, 189, 248, 0.5) !important;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 12px;
-  min-height: 48px;
-  margin-top: 8px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #1c7ba6, #0f5478);
-  border: 1px solid rgba(103, 210, 255, 0.4);
-  color: #fff;
-  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(2, 132, 199, 0.4);
   transition: all 0.2s ease;
 }
 
-.login-submit-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #2492c4, #146691);
-  box-shadow: 0 0 16px rgba(103, 210, 255, 0.35);
+.tech-submit-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0369a1 0%, #0284c7 100%) !important;
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.6);
+  transform: translateY(-1px);
 }
 
-.login-submit-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-text {
+.submit-text {
   font-size: 14px;
   font-weight: 700;
+  color: #ffffff;
   letter-spacing: 0.04em;
 }
 
-.btn-perm-tag {
+.submit-api-tag {
   font-size: 10px;
-  color: #92d4f8;
+  color: #bae6fd;
   font-family: monospace;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
-.quick-role-section {
-  border-top: 1px solid var(--line, rgba(124, 162, 194, 0.18));
-  padding-top: 16px;
-}
-
-.quick-role-title {
-  font-size: 11px;
-  color: var(--muted, #8ca2b8);
-  display: block;
-  margin-bottom: 10px;
-}
-
-.quick-role-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.role-quick-btn {
+/* 主舱安全页脚 */
+.console-card-footer {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(124, 162, 194, 0.18);
-  color: var(--text, #ebf3fb);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  text-align: left;
-}
-
-.role-quick-btn:hover {
-  background: rgba(103, 210, 255, 0.1);
-  border-color: rgba(103, 210, 255, 0.4);
-}
-
-.role-quick-btn.is-active {
-  background: rgba(103, 210, 255, 0.14);
-  border-color: var(--accent, #67d2ff);
-}
-
-.role-quick-name {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.role-quick-user {
-  font-size: 10px;
-  color: var(--muted, #8ca2b8);
-  margin-top: 2px;
-}
-
-.session-detail-panel {
-  padding: 26px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.detail-header-meta {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
-}
-
-.session-badge {
-  font-size: 11px;
-  padding: 3px 10px;
-  border-radius: 12px;
-  font-weight: 600;
-}
-
-.badge-green {
-  background: rgba(111, 225, 166, 0.15);
-  border: 1px solid rgba(111, 225, 166, 0.35);
-  color: #6fe1a6;
-}
-
-.badge-red {
-  background: rgba(255, 125, 125, 0.15);
-  border: 1px solid rgba(255, 125, 125, 0.35);
-  color: #ff7d7d;
-}
-
-.detail-heading {
-  margin: 4px 0 0;
-  font-size: 20px;
-  color: #fff;
-}
-
-.detail-desc {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--muted, #8ca2b8);
-  line-height: 1.6;
-}
-
-.fact-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  justify-content: center;
   gap: 12px;
-}
-
-.fact-item {
-  padding: 12px 14px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(124, 162, 194, 0.12);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.fact-label {
   font-size: 11px;
-  color: var(--muted, #8ca2b8);
+  color: #64748b;
+  border-top: 1px solid rgba(56, 189, 248, 0.1);
+  padding-top: 14px;
 }
 
-.fact-value {
-  font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-  word-break: break-all;
-}
-
-.highlight-cyan {
-  color: var(--accent, #67d2ff);
-}
-
-.highlight-warm {
-  color: var(--warm, #ffb25e);
-}
-
-.highlight-blue {
-  color: #71e1dc;
-}
-
-.font-mono {
-  font-family: monospace;
-}
-
-.kick-demo-card {
-  padding: 16px;
-  border-radius: 10px;
-  background: rgba(255, 178, 94, 0.05);
-  border: 1px solid rgba(255, 178, 94, 0.25);
+.sec-item {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.kick-demo-header {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 5px;
 }
 
-.kick-demo-header strong {
-  font-size: 13px;
-  color: #fff;
+.sec-dot.green {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #10b981;
 }
 
-.kick-action-btn {
-  padding: 6px 12px;
-  border-radius: 6px;
-  background: rgba(255, 178, 94, 0.15);
-  border: 1px solid rgba(255, 178, 94, 0.4);
-  color: var(--warm, #ffb25e);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
+.sec-divider {
+  opacity: 0.3;
 }
 
-.kick-action-btn:hover {
-  background: rgba(255, 178, 94, 0.28);
-  border-color: rgba(255, 178, 94, 0.7);
-}
-
-.kick-demo-desc {
-  margin: 0;
-  font-size: 11px;
-  color: var(--muted, #8ca2b8);
-  line-height: 1.6;
-}
-
-.perm-tree-section {
+/* ================= 底部页脚 ================= */
+.cloud-footer {
+  position: relative;
+  z-index: 10;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.perm-tree-head h3 {
-  margin: 0;
-  font-size: 13px;
-  color: #fff;
-}
-
-.perm-tree-head small {
-  font-size: 11px;
-  color: var(--muted, #8ca2b8);
-}
-
-.perm-tag-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-.perm-tag-item {
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: rgba(113, 225, 220, 0.05);
-  border: 1px solid rgba(113, 225, 220, 0.18);
-  font-family: monospace;
-  font-size: 11px;
-  color: #71e1dc;
-}
-
-.console-disclaimer {
-  margin-top: 24px;
-  padding: 16px 20px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--line, rgba(124, 162, 194, 0.14));
-  display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 4px;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(56, 189, 248, 0.12);
+  background: rgba(3, 7, 18, 0.5);
+  backdrop-filter: blur(10px);
 }
 
-.disclaimer-tag {
+.footer-badge {
   font-size: 10px;
-  letter-spacing: 0.12em;
-  color: var(--accent, #67d2ff);
+  color: #38bdf8;
+  letter-spacing: 0.14em;
   font-weight: 700;
 }
 
-.console-disclaimer p {
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted, #8ca2b8);
+.footer-text {
+  font-size: 11px;
+  color: #64748b;
+  text-align: center;
 }
 
-.console-toast {
+/* ================= 统一 Toast ================= */
+.cloud-toast {
   position: fixed;
   bottom: 24px;
   right: 24px;
   padding: 12px 20px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 13px;
   font-weight: 600;
   z-index: 9999;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  transition: all 0.3s ease;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   opacity: 0;
-  transform: translateY(10px);
+  transform: translateY(16px);
   pointer-events: none;
+  backdrop-filter: blur(12px);
 }
 
-.console-toast.is-visible {
+.cloud-toast.is-visible {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
 }
 
-.console-toast.is-success {
-  background: #0d281e;
-  border: 1px solid #6fe1a6;
-  color: #6fe1a6;
+.cloud-toast.toast-success {
+  background: rgba(6, 78, 59, 0.9);
+  border: 1px solid #10b981;
+  color: #a7f3d0;
 }
 
-.console-toast.is-danger {
-  background: #2b1114;
-  border: 1px solid #ff7d7d;
-  color: #ff9b9b;
+.cloud-toast.toast-danger {
+  background: rgba(127, 29, 29, 0.9);
+  border: 1px solid #ef4444;
+  color: #fecaca;
 }
 
-.console-toast.is-warning {
-  background: #2c2010;
-  border: 1px solid #ffb25e;
-  color: #ffb25e;
+.cloud-toast.toast-warning {
+  background: rgba(120, 53, 15, 0.9);
+  border: 1px solid #f59e0b;
+  color: #fde68a;
 }
 
-@media (max-width: 960px) {
-  .console-layout {
-    grid-template-columns: 1fr;
+/* ================= 动画与响应式断点 ================= */
+.fade-slide-enter-active, .fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+.fade-slide-enter-from, .fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+@media (max-width: 640px) {
+  .cloud-topbar {
+    padding: 14px 18px;
   }
-  .fact-grid {
-    grid-template-columns: 1fr;
+  .brand-sub {
+    display: none;
+  }
+  .login-center-console {
+    padding: 22px 16px;
+  }
+  .merged-role-selector {
+    gap: 4px;
+  }
+  .role-mini-chip {
+    padding: 3px 6px;
   }
 }
 </style>

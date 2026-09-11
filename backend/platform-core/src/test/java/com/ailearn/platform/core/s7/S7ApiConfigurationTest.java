@@ -17,21 +17,22 @@ import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 缺少真实 Facts 适配器时 S7 不创建可返回伪造成功数据的 Bean。 */
+/** S7 各查询入口按自身事实依赖独立装配与降级。 */
 class S7ApiConfigurationTest {
 
     @Test
-    void shouldKeepS7ServicesAndControllersAbsentUntilAllFactsAdaptersAreAvailable() {
+    void shouldKeepDashboardEndpointAvailableWhileOtherS7CapabilitiesLackFactsAdapters() {
         new WebApplicationContextRunner()
                 .withUserConfiguration(S7ApiConfiguration.class, GisController.class,
-                        TraceabilityController.class, DashboardController.class)
+                        TraceabilityController.class, DashboardController.class,
+                        TrustedFactsQueryContextFactory.class)
                 .run(context -> {
                     assertThat(context).doesNotHaveBean(GisApplicationService.class);
                     assertThat(context).doesNotHaveBean(TraceabilityApplicationService.class);
-                    assertThat(context).doesNotHaveBean(DashboardApplicationService.class);
+                    assertThat(context).hasSingleBean(DashboardApplicationService.class);
                     assertThat(context).doesNotHaveBean(GisController.class);
                     assertThat(context).doesNotHaveBean(TraceabilityController.class);
-                    assertThat(context).doesNotHaveBean(DashboardController.class);
+                    assertThat(context).hasSingleBean(DashboardController.class);
                     assertThat(context).hasSingleBean(DashboardCache.class);
                 });
     }

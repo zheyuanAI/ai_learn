@@ -3,7 +3,7 @@
     <!-- 侧边导航栏 (根据 authStore.menus 动态渲染) -->
     <aside class="rail">
       <div class="brand">
-        <p class="eyebrow">AI Learn</p>
+        <!-- 修改说明：根据规范去除左侧导航栏英文标签，保留纯中文主标题与架构说明 -->
         <h1 class="brand-title">制造与仓储协同执行平台</h1>
         <p class="brand-desc">一期壳层按黄金业务闭环组织；动态挂载当前角色授权菜单。</p>
       </div>
@@ -73,7 +73,7 @@
       <!-- 统一顶部栏 -->
       <header class="topbar">
         <div class="topbar-left">
-          <span class="topbar-module-tag">AI-LEARN / WORKSPACE</span>
+          <span class="topbar-module-tag">智造协同 / 工作空间</span>
           <el-tag type="info" effect="dark" size="small" class="topbar-tenant-tag-ep">
             🏢 {{ authStore.activeTenant }}
           </el-tag>
@@ -151,19 +151,40 @@ const authStore = useAuthStore();
 const openGroupIds = ref<Set<string>>(new Set(["7", "System"]));
 
 /**
+ * 净化侧边栏菜单文字，去除英文字符与缩写，规范化为中文术语
+ * 用途：满足左侧导航栏纯中文展示规范，自动将 BOM/IoT/GIS/AI 等替换为标准中文或去除英文字符
+ * 入参：text 原菜单名称或详情说明
+ * 出参：净化后的纯中文文本
+ */
+function cleanMenuText(text: string): string {
+  if (!text) return "";
+  let res = text
+    .replace(/BOM\s*物料清单/gi, "物料清单")
+    .replace(/BOM/gi, "物料清单")
+    .replace(/IoT\s*/gi, "物联")
+    .replace(/GIS\s*/gi, "空间")
+    .replace(/AI\s*/gi, "智能")
+    .replace(/[a-zA-Z]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  // 去除汉字之间多余的空格，例如“物联 设备事实”->“物联设备事实”
+  return res.replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, "$1$2");
+}
+
+/**
  * 结构化侧边栏菜单（支持平铺与嵌套两种返回格式的无缝归一化）
  */
 const structuredMenus = computed<DisplayMenuItem[]>(() => {
   const storeMenus = authStore.menus;
   if (!storeMenus || storeMenus.length === 0) {
-    // 默认基础菜单
+    // 默认基础菜单（全中文）
     return [
       { id: "1", path: "/", label: "一期总览", detail: "一条黄金业务闭环", icon: "📊" },
       { id: "2", path: "/erp-wms", label: "供需与仓储", detail: "人工关联、预留、收发存", icon: "📦" },
       { id: "3", path: "/mes", label: "制造执行", detail: "领退料、工序执行、质检", icon: "🏭" },
       { id: "4", path: "/iot", label: "设备事实", detail: "遥测、状态、告警分离", icon: "📡" },
       { id: "5", path: "/gis", label: "地图与看板", detail: "业务事实只读展示", icon: "🗺️" },
-      { id: "6", path: "/ai", label: "AI 只读助手", detail: "受控查询、来源与审计", icon: "🤖" },
+      { id: "6", path: "/ai", label: "智能只读助手", detail: "受控查询、来源与审计", icon: "🤖" },
     ];
   }
 
@@ -177,11 +198,13 @@ const structuredMenus = computed<DisplayMenuItem[]>(() => {
   const nodeMap = new Map<string, DisplayMenuItem>();
   for (const m of storeMenus) {
     const idStr = String(m.id || m.menuCode || m.routePath);
+    const rawLabel = m.menuName || m.label || m.name || "未命名菜单";
+    const rawDetail = m.detail || "";
     nodeMap.set(idStr, {
       id: idStr,
       path: normalizeMenuRoutePath(m.routePath || m.path),
-      label: m.menuName || m.label || m.name || "未命名菜单",
-      detail: m.detail || "",
+      label: cleanMenuText(rawLabel) || rawLabel,
+      detail: cleanMenuText(rawDetail),
       icon: m.icon || "",
       children: [],
     });
@@ -203,11 +226,13 @@ const structuredMenus = computed<DisplayMenuItem[]>(() => {
 });
 
 function formatMenuNode(m: any): DisplayMenuItem {
+  const rawLabel = m.menuName || m.label || m.name || "未命名菜单";
+  const rawDetail = m.detail || "";
   return {
     id: String(m.id || m.menuCode || m.routePath),
     path: normalizeMenuRoutePath(m.routePath || m.path),
-    label: m.menuName || m.label || m.name || "未命名菜单",
-    detail: m.detail || "",
+    label: cleanMenuText(rawLabel) || rawLabel,
+    detail: cleanMenuText(rawDetail),
     icon: m.icon || "",
     children: m.children && m.children.length > 0 ? m.children.map(formatMenuNode) : undefined,
   };

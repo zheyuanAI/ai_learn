@@ -109,26 +109,35 @@ public class DashboardApplicationService {
     }
 
     /**
-     * 按摘要类型选择事实端口；履约摘要需要同时合并采购和销售来源，其余摘要保持单一来源口径。
-     * 端口调用中未声明的运行时失败统一转成事实源不可用，由上层决定是否返回陈旧缓存，不能在此处用 0 值补齐指标。
+     * 按摘要类型只检查并调用该接口自己的事实端口；履约摘要需要同时合并采购和销售来源。
+     * 缺少某一端口时仅该摘要进入陈旧回退或返回 GIS_QUERY_002，不影响其他看板接口。
      */
     private FactsSummary load(DashboardSummaryType type, FactsQueryRequest request) {
         try {
             return switch (type) {
-                case INVENTORY -> inventoryFacts.inventory(request);
-                case FULFILLMENT -> merge("采购", purchasingFacts.fulfillment(request),
-                        "销售", salesFacts.fulfillment(request));
-                case MANUFACTURING -> manufacturingFacts.manufacturing(request);
-                case QUALITY -> qualityFacts.quality(request);
-                case DEVICE -> iotFacts.device(request);
-                case ALARM -> iotFacts.alarm(request);
-                case TRACEABILITY -> traceability.summary(request);
+                case INVENTORY -> requireSource(inventoryFacts, "库存").inventory(request);
+                case FULFILLMENT -> merge("采购",
+                        requireSource(purchasingFacts, "采购履约").fulfillment(request),
+                        "销售", requireSource(salesFacts, "销售履约").fulfillment(request));
+                case MANUFACTURING -> requireSource(manufacturingFacts, "制造").manufacturing(request);
+                case QUALITY -> requireSource(qualityFacts, "质量").quality(request);
+                case DEVICE -> requireSource(iotFacts, "设备").device(request);
+                case ALARM -> requireSource(iotFacts, "告警").alarm(request);
+                case TRACEABILITY -> requireSource(traceability, "追溯").summary(request);
             };
         } catch (FactQueryUnavailableException exception) {
             throw exception;
         } catch (RuntimeException exception) {
             throw new FactQueryUnavailableException("摘要源查询失败", exception);
         }
+    }
+
+    /** 返回当前摘要需要的事实端口；端口未装配时转换为统一的事实源不可用。 */
+    private static <T> T requireSource(T source, String sourceName) {
+        if (source == null) {
+            throw new FactQueryUnavailableException(sourceName + "事实源未装配");
+        }
+        return source;
     }
 
     /**
@@ -151,10 +160,12 @@ public class DashboardApplicationService {
      * 只校验契约允许的实体筛选项，并把可信查询上下文传递给各领域 Facts 端口，避免看板自行拼接跨域查询。
      */
     private void validateFilters(FactsQueryContext context, Map<String, String> filters) {
-        validateEntityFilter(filters, "warehouse_id", value -> inventoryFacts.findWarehouse(context, value));
+        validateEntityFilter(filters, "warehouse_id",
+                value -> requireSource(inventoryFacts, "库存").findWarehouse(context, value));
         validateEntityFilter(filters, "production_area_id",
-                value -> manufacturingFacts.findProductionArea(context, value));
-        validateEntityFilter(filters, "device_id", value -> iotFacts.findDevice(context, value));
+                value -> requireSource(manufacturingFacts, "制造").findProductionArea(context, value));
+        validateEntityFilter(filters, "device_id",
+                value -> requireSource(iotFacts, "设备").findDevice(context, value));
     }
 
     /**

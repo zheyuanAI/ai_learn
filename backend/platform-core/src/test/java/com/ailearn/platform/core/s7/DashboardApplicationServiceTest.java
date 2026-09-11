@@ -103,6 +103,31 @@ class DashboardApplicationServiceTest {
         assertEquals("GIS_QUERY_002", unavailable.getBusinessCode());
     }
 
+    /** IoT 与追溯端口缺失时，Core 内部库存摘要仍可查询，只有依赖缺失的卡片返回受控不可用。 */
+    @Test
+    void shouldIsolateMissingIotAndTraceabilityDependenciesPerSummary() {
+        S7FactsFake facts = new S7FactsFake();
+        DashboardApplicationService service = new DashboardApplicationService(
+                facts, facts, facts, facts, facts, null, null,
+                new InMemoryDashboardCache(), new MutableClock(START, ZoneId.of("UTC")));
+        var context = S7TestSupport.context(TENANT, "perm-a", "dashboard:view");
+
+        for (DashboardSummaryType type : List.of(DashboardSummaryType.INVENTORY,
+                DashboardSummaryType.FULFILLMENT, DashboardSummaryType.MANUFACTURING,
+                DashboardSummaryType.QUALITY)) {
+            DashboardSummaryProjection summary = service.query(type,
+                    new DashboardQuery(context, "today", Map.of()));
+            assertFalse(summary.metrics().isEmpty());
+        }
+
+        for (DashboardSummaryType type : List.of(DashboardSummaryType.DEVICE,
+                DashboardSummaryType.ALARM, DashboardSummaryType.TRACEABILITY)) {
+            GisException unavailable = assertThrows(GisException.class,
+                    () -> service.query(type, new DashboardQuery(context, "today", Map.of())));
+            assertEquals("GIS_QUERY_002", unavailable.getBusinessCode());
+        }
+    }
+
     private static DashboardApplicationService dashboardService(S7FactsFake facts, MutableClock clock) {
         TraceabilityApplicationService traceability = new TraceabilityApplicationService(
                 facts, facts, facts, facts, facts, facts, clock);

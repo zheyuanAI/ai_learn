@@ -59,12 +59,13 @@ defineEmits<{
   display: flex;
   align-items: center;
   gap: 16px;
-  background: rgba(245, 158, 11, 0.12);
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  border-radius: 8px;
-  padding: 14px 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.1);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.16) 0%, rgba(217, 119, 6, 0.08) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 12px;
+  padding: 14px 22px;
+  margin-bottom: 24px;
+  box-shadow: 0 0 24px rgba(245, 158, 11, 0.15), 0 8px 24px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(14px);
   animation: banner-fade-in 0.3s ease-out;
 }
 
@@ -72,6 +73,7 @@ defineEmits<{
   font-size: 24px;
   line-height: 1;
   color: #fbbf24;
+  filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.5));
 }
 
 .banner-content {
@@ -81,7 +83,7 @@ defineEmits<{
 .banner-title-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 4px;
 }
 
@@ -89,33 +91,52 @@ defineEmits<{
   font-size: 14px;
   color: #fbbf24;
   font-weight: 700;
+  letter-spacing: 0.3px;
 }
 
 .stale-count-badge {
   font-size: 11px;
-  padding: 1px 8px;
-  border-radius: 12px;
-  background: rgba(245, 158, 11, 0.2);
-  border: 1px solid rgba(245, 158, 11, 0.4);
+  padding: 2px 10px;
+  border-radius: 9999px;
+  background: rgba(245, 158, 11, 0.22);
+  border: 1px solid rgba(245, 158, 11, 0.5);
   color: #fef3c7;
+  font-weight: 600;
 }
 
 .banner-desc {
   margin: 0;
   font-size: 12px;
-  color: #e2e8f0;
-  line-height: 1.5;
+  color: #fde68a;
+  line-height: 1.6;
+  opacity: 0.92;
 }
 
 .stale-time {
   font-family: var(--font-mono, monospace);
   color: #fbbf24;
-  font-weight: 600;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
 }
 
 .banner-actions {
   display: flex;
   align-items: center;
+}
+
+:deep(.banner-actions .el-button--warning) {
+  background: rgba(245, 158, 11, 0.25) !important;
+  border-color: rgba(245, 158, 11, 0.6) !important;
+  color: #fef3c7 !important;
+  font-weight: 600;
+  border-radius: 8px;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
+}
+
+:deep(.banner-actions .el-button--warning:hover) {
+  background: rgba(245, 158, 11, 0.45) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.45);
 }
 
 @keyframes banner-fade-in {

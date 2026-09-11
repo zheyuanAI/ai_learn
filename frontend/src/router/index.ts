@@ -110,12 +110,12 @@ const routes: RouteRecordRaw[] = [
         name: "Iot",
         component: DomainView,
         props: {
-          title: "IoT 设备事实",
+          title: "物联设备事实",
           summary: "一期 MQTT 消息按 message_id/sequence 去重，遥测、设备状态与告警分别保存，并补充工序执行上下文。",
           specPath: "docs/specs/30-iot-digital-twin",
           prototypePath: "docs/prototype/pages/device-alarm.html",
         },
-        meta: { requiresAuth: true, title: "IoT 设备事实" },
+        meta: { requiresAuth: true, title: "物联设备事实" },
       },
       {
         path: "gis",
@@ -134,24 +134,24 @@ const routes: RouteRecordRaw[] = [
         name: "Ai",
         component: DomainView,
         props: {
-          title: "AI 只读助手",
+          title: "智能只读助手",
           summary: "通过受权限约束的只读工具查询库存、订单、工单、告警与追溯信息，并展示来源与调用审计。",
           specPath: "docs/specs/50-ai-assistant",
           prototypePath: "docs/prototype/pages/ai-assistant.html / tool-audit.html",
         },
-        meta: { requiresAuth: true, title: "AI 只读助手" },
+        meta: { requiresAuth: true, title: "智能只读助手" },
       },
       {
         path: "ai/chat",
         name: "AiChat",
         component: DomainView,
         props: {
-          title: "AI 对话查询",
-          summary: "当前入口承载 AI 只读助手的对话能力说明，具体工具调用仍以权限约束和审计记录为准。",
+          title: "智能对话查询",
+          summary: "当前入口承载智能只读助手的对话能力说明，具体工具调用仍以权限约束和审计记录为准。",
           specPath: "docs/specs/50-ai-assistant",
           prototypePath: "docs/prototype/pages/ai-assistant.html",
         },
-        meta: { requiresAuth: true, title: "AI 对话查询" },
+        meta: { requiresAuth: true, title: "智能对话查询" },
       },
       {
         path: "ai/trace",
@@ -162,12 +162,12 @@ const routes: RouteRecordRaw[] = [
         name: "AiAudit",
         component: DomainView,
         props: {
-          title: "AI 工具审计",
-          summary: "当前入口承载 AI 工具调用审计能力说明，查询结果必须展示来源并受当前用户权限约束。",
+          title: "智能工具审计",
+          summary: "当前入口承载智能工具调用审计能力说明，查询结果必须展示来源并受当前用户权限约束。",
           specPath: "docs/specs/50-ai-assistant",
           prototypePath: "docs/prototype/pages/tool-audit.html",
         },
-        meta: { requiresAuth: true, title: "AI 工具审计" },
+        meta: { requiresAuth: true, title: "智能工具审计" },
       },
 
       // ====== 阶段 2：主数据与库存 (ERP/WMS) ======
@@ -328,7 +328,7 @@ const routes: RouteRecordRaw[] = [
         path: "mes/boms",
         name: "MesBomList",
         component: () => import("../views/manufacturing/BomListView.vue"),
-        meta: { requiresAuth: true, requiredPermission: "mes:bom:view", title: "BOM 物料清单" },
+        meta: { requiresAuth: true, requiredPermission: "mes:bom:view", title: "物料清单" },
       },
       {
         path: "mes/routings",
@@ -434,7 +434,7 @@ const routes: RouteRecordRaw[] = [
         path: "gis/site-maps",
         name: "SiteMapList",
         component: () => import("../views/insights/SiteMapListView.vue"),
-        meta: { requiresAuth: true, requiredPermission: "gis:map:view", title: "二维 GIS 站点地图" },
+        meta: { requiresAuth: true, requiredPermission: "gis:map:view", title: "二维空间站点地图" },
       },
       {
         path: "gis/site-maps/:id",

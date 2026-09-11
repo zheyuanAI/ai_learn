@@ -8,7 +8,6 @@ import com.ailearn.platform.core.traceability.web.TrustedFactsQueryContextFactor
 import com.ailearn.platform.shared.api.ApiResponse;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,8 +24,6 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/dashboard")
-// S7 控制器由同一开关统一启用，避免组件扫描早于条件 Bean 注册造成启动顺序依赖。
-@ConditionalOnProperty(prefix = "core.facts.iot", name = "enabled", havingValue = "true")
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class DashboardController {
 

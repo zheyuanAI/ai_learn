@@ -12,25 +12,27 @@ import ElementPlus from "unplugin-element-plus/vite";
  * 2. 配置 /api 反向代理至 Gateway 网关端口 20001
  * 3. 配置 Element Plus 按需自动导入（组件 + API + 样式）
  */
-export default defineConfig({
-  plugins: [
-    vue(),
-    // Element Plus 按需样式补全插件
-    ElementPlus({
-      useSource: false,
-    }),
-    // 脚本 API 自动导入
-    AutoImport({
-      imports: ["vue", "vue-router", "pinia", "@vueuse/core"],
-      resolvers: [ElementPlusResolver()],
-      dts: "src/auto-imports.d.ts",
-    }),
-    // 模板组件自动导入
-    Components({
-      resolvers: [ElementPlusResolver()],
-      dts: "src/components.d.ts",
-    }),
-  ],
+export default defineConfig(({ command }) => {
+  const isBuild = command === "build";
+  return {
+    plugins: [
+      vue(),
+      // Element Plus 按需样式补全插件
+      ElementPlus({
+        useSource: false,
+      }),
+      // 脚本 API 自动导入
+      AutoImport({
+        imports: ["vue", "vue-router", "pinia", "@vueuse/core"],
+        resolvers: [ElementPlusResolver()],
+        dts: isBuild ? false : "src/auto-imports.d.ts",
+      }),
+      // 模板组件自动导入
+      Components({
+        resolvers: [ElementPlusResolver()],
+        dts: isBuild ? false : "src/components.d.ts",
+      }),
+    ],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
@@ -45,11 +47,12 @@ export default defineConfig({
       },
     },
   },
-  css: {
-    preprocessorOptions: {
-      scss: {
-        api: "modern-compiler",
+    css: {
+      preprocessorOptions: {
+        scss: {
+          api: "modern-compiler",
+        },
       },
     },
-  },
+  };
 });

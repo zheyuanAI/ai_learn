@@ -471,68 +471,79 @@ onUnmounted(() => {
 
 <style scoped>
 .dashboard-view-container {
-  padding: 20px 28px 40px;
-  max-width: 1560px;
+  position: relative;
+  padding: 24px 32px 48px;
+  max-width: 1600px;
   margin: 0 auto;
+  min-height: calc(100vh - 60px);
 }
 
 .nav-sub-tabs {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(30, 41, 59, 0.6);
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.75);
   padding: 4px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  backdrop-filter: blur(12px);
 }
 
 .tab-btn {
-  padding: 6px 14px;
-  border-radius: 6px;
+  padding: 6px 16px;
+  border-radius: 7px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: #94a3b8;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
   text-decoration: none;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .tab-btn:hover {
-  color: #f1f5f9;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
 }
 
 .tab-btn.is-active {
-  background: #0284c7;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  border-color: rgba(56, 189, 248, 0.5);
   color: #ffffff;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.35);
 }
 
 .btn-refresh-now {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 14px;
-  background: #0284c7;
-  border: 1px solid #0369a1;
-  color: #ffffff;
-  border-radius: 6px;
+  padding: 7px 16px;
+  background: linear-gradient(135deg, #0284c7, #0369a1) !important;
+  border: 1px solid rgba(56, 189, 248, 0.45) !important;
+  color: #ffffff !important;
+  border-radius: 8px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  box-shadow: 0 0 16px rgba(2, 132, 199, 0.35);
 }
 
 .btn-refresh-now:hover:not(:disabled) {
-  background: #0369a1;
+  background: linear-gradient(135deg, #0369a1, #0284c7) !important;
+  box-shadow: 0 0 22px rgba(56, 189, 248, 0.55);
+  transform: translateY(-1px);
 }
 
 .countdown-badge {
   font-size: 11px;
   font-family: var(--font-mono, monospace);
-  background: rgba(0, 0, 0, 0.25);
-  padding: 1px 6px;
-  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 2px 7px;
+  border-radius: 5px;
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.3);
 }
 
 .is-spinning {
@@ -546,11 +557,13 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  padding: 12px 18px;
-  margin-bottom: 20px;
+  background: rgba(8, 16, 33, 0.82);
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  border-radius: 12px;
+  padding: 12px 20px;
+  margin-bottom: 24px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   flex-wrap: wrap;
 }
 
@@ -564,35 +577,33 @@ onUnmounted(() => {
 .review-label {
   font-size: 11px;
   color: #94a3b8;
+  font-weight: 500;
 }
 
-.scenario-tabs {
-  display: flex;
-  gap: 6px;
-}
-
-.tab-btn-pill {
-  padding: 4px 12px;
-  border-radius: 20px;
+:deep(.custom-el-radio-group .el-radio-button__inner) {
+  background: rgba(15, 23, 42, 0.7) !important;
+  border-color: rgba(56, 189, 248, 0.25) !important;
+  color: #94a3b8 !important;
   font-size: 12px;
-  background: rgba(30, 41, 59, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
-  cursor: pointer;
   transition: all 0.2s;
 }
 
-.tab-btn-pill.is-active {
-  background: #0284c7;
-  border-color: #0369a1;
-  color: #ffffff;
+:deep(.custom-el-radio-group .el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background: #0284c7 !important;
+  border-color: #38bdf8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.4) !important;
   font-weight: 600;
 }
 
 .effective-range-text {
   font-size: 13px;
-  color: #f1f5f9;
+  color: #7dd3fc;
   font-family: var(--font-mono, monospace);
+  padding: 2px 8px;
+  background: rgba(56, 189, 248, 0.08);
+  border-radius: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
 }
 
 .sync-status-block {
@@ -602,27 +613,10 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
-.sync-controller,
-.state-controller {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.sync-select {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-  outline: none;
-}
-
 .sync-meta-text {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 11px;
   color: #94a3b8;
 }
@@ -646,33 +640,27 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   text-align: center;
+  background: rgba(8, 16, 33, 0.5);
+  border-radius: 14px;
+  border: 1px solid rgba(56, 189, 248, 0.15);
 }
 
 .spinner-large {
   font-size: 40px;
+  color: #38bdf8;
 }
 
 .loading-msg {
   font-size: 14px;
   color: #94a3b8;
-  margin-top: 12px;
-}
-
-.btn-refresh-pill {
-  padding: 6px 16px;
-  background: #0284c7;
-  border: none;
-  border-radius: 6px;
-  color: #ffffff;
-  font-size: 12px;
-  cursor: pointer;
+  margin-top: 14px;
 }
 
 /* 七类卡片网格布局 */
 .cards-dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(370px, 1fr));
+  gap: 22px;
 }
 
 @keyframes spin {

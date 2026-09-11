@@ -30,8 +30,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 /**
  * S7 查询应用服务的条件装配。
  * <p>
- * S7 只消费各领域 Facts 端口。缺少任一真实适配器时，不创建应用服务和 Controller，以免把空实现、
- * 零值或测试 fake 暴露为生产成功响应；接入全部事实 Bean 后由本配置自动启用。
+ * S7 只消费各领域 Facts 端口。追溯和 GIS 缺少必需适配器时保持不装配；看板入口始终存在，
+ * 每个摘要只检查自己的事实来源并独立返回陈旧投影或受控错误，禁止用零值或测试 fake 伪装成功。
  * </p>
  */
 @Configuration(proxyBeanMethods = false)
@@ -83,19 +83,25 @@ public class S7ApiConfiguration {
                 java.time.Clock.systemUTC(), storage, mapper);
     }
 
-    /** 看板依赖全部摘要事实和追溯应用服务，缺一不可。 */
+    /**
+     * 看板入口始终装配，各摘要在查询时只检查自己的事实端口。
+     * 缺失的设备、告警或追溯来源只让对应接口返回受控不可用，不连带关闭 Core 内部摘要。
+     */
     @Bean
     @ConditionalOnMissingBean(DashboardApplicationService.class)
-    @ConditionalOnBean({InventoryFactsQuery.class, PurchasingFactsQuery.class, SalesFactsQuery.class,
-            ManufacturingFactsQuery.class, QualityFactsQuery.class, IotFactsPort.class,
-            TraceabilityApplicationService.class, DashboardCache.class})
     public DashboardApplicationService dashboardApplicationService(
-            InventoryFactsQuery inventoryFacts, PurchasingFactsQuery purchasingFacts,
-            SalesFactsQuery salesFacts, ManufacturingFactsQuery manufacturingFacts,
-            QualityFactsQuery qualityFacts, IotFactsPort iotFacts,
-            TraceabilityApplicationService traceability, DashboardCache cache) {
-        return new DashboardApplicationService(inventoryFacts, purchasingFacts, salesFacts,
-                manufacturingFacts, qualityFacts, iotFacts, traceability, cache,
+            ObjectProvider<InventoryFactsQuery> inventoryFacts,
+            ObjectProvider<PurchasingFactsQuery> purchasingFacts,
+            ObjectProvider<SalesFactsQuery> salesFacts,
+            ObjectProvider<ManufacturingFactsQuery> manufacturingFacts,
+            ObjectProvider<QualityFactsQuery> qualityFacts,
+            ObjectProvider<IotFactsPort> iotFacts,
+            ObjectProvider<TraceabilityApplicationService> traceability,
+            DashboardCache cache) {
+        return new DashboardApplicationService(inventoryFacts.getIfAvailable(),
+                purchasingFacts.getIfAvailable(), salesFacts.getIfAvailable(),
+                manufacturingFacts.getIfAvailable(), qualityFacts.getIfAvailable(),
+                iotFacts.getIfAvailable(), traceability.getIfAvailable(), cache,
                 java.time.Clock.systemUTC());
     }
 

@@ -72,7 +72,7 @@ export const ROLE_PRESETS: Record<
         detail: "工单、工艺、派工与报工",
         sortOrder: 4,
         children: [
-          { id: "4-1", parentId: "4", menuCode: "MesBoms", routePath: "/mes/boms", menuName: "BOM 物料清单", detail: "物料清单与损耗率", sortOrder: 1 },
+          { id: "4-1", parentId: "4", menuCode: "MesBoms", routePath: "/mes/boms", menuName: "物料清单", detail: "物料清单与损耗率", sortOrder: 1 },
           { id: "4-2", parentId: "4", menuCode: "MesRoutings", routePath: "/mes/routings", menuName: "工艺路线管理", detail: "工序与标准工时", sortOrder: 2 },
           { id: "4-3", parentId: "4", menuCode: "MesWorkOrders", routePath: "/mes/work-orders", menuName: "生产工单管理", detail: "工单快照与下达", sortOrder: 3 },
           { id: "4-4", parentId: "4", menuCode: "MesDispatch", routePath: "/mes/dispatch", menuName: "车间派工看板", detail: "产线人员派工", sortOrder: 4 },
@@ -85,7 +85,7 @@ export const ROLE_PRESETS: Record<
         id: "5",
         menuCode: "Iot",
         routePath: "/iot",
-        menuName: "IoT 设备事实",
+        menuName: "物联设备事实",
         icon: "📡",
         detail: "台账、凭证、遥测与告警",
         sortOrder: 5,
@@ -102,15 +102,15 @@ export const ROLE_PRESETS: Record<
         routePath: "/gis",
         menuName: "空间与追溯",
         icon: "🗺️",
-        detail: "GIS 站点图与全链路追溯",
+        detail: "厂区站点图与全链路追溯",
         sortOrder: 6,
         children: [
           { id: "6-1", parentId: "6", menuCode: "Traceability", routePath: "/traceability", menuName: "全链路闭环追溯", detail: "正反向溯源与断链诊断", sortOrder: 1 },
-          { id: "6-2", parentId: "6", menuCode: "GisSiteMaps", routePath: "/gis/site-maps", menuName: "二维 GIS 站点地图", detail: "受控矢量底图与防漂移点位", sortOrder: 2 },
+          { id: "6-2", parentId: "6", menuCode: "GisSiteMaps", routePath: "/gis/site-maps", menuName: "二维空间站点地图", detail: "受控矢量底图与防漂移点位", sortOrder: 2 },
           { id: "6-3", parentId: "6", menuCode: "ExceptionCenter", routePath: "/exception-center", menuName: "跨域异常中心", detail: "库存/工序/告警派生异常", sortOrder: 3 },
         ],
       },
-      { id: "7", menuCode: "Ai", routePath: "/ai", menuName: "AI 只读助手", icon: "🤖", detail: "受控查询、来源与审计", sortOrder: 7 },
+      { id: "7", menuCode: "Ai", routePath: "/ai", menuName: "智能只读助手", icon: "🤖", detail: "受控查询、来源与审计", sortOrder: 7 },
       {
         id: "8",
         menuCode: "System",
@@ -143,7 +143,7 @@ export const ROLE_PRESETS: Record<
     menus: [
       { id: "1", menuCode: "Overview", routePath: "/", menuName: "一期总览", detail: "一条黄金业务闭环", sortOrder: 1 },
       { id: "2", menuCode: "ErpWms", routePath: "/erp-wms", menuName: "供需与仓储", detail: "销售订单与库存跟踪", sortOrder: 2 },
-      { id: "6", menuCode: "Ai", routePath: "/ai", menuName: "AI 只读助手", detail: "订单与库存智能查询", sortOrder: 3 },
+      { id: "6", menuCode: "Ai", routePath: "/ai", menuName: "智能只读助手", detail: "订单与库存智能查询", sortOrder: 3 },
     ],
   },
   "buyer.chen": {
@@ -161,7 +161,7 @@ export const ROLE_PRESETS: Record<
     menus: [
       { id: "1", menuCode: "Overview", routePath: "/", menuName: "一期总览", detail: "一条黄金业务闭环", sortOrder: 1 },
       { id: "2", menuCode: "ErpWms", routePath: "/erp-wms", menuName: "供需与仓储", detail: "采购订单与供应商管理", sortOrder: 2 },
-      { id: "6", menuCode: "Ai", routePath: "/ai", menuName: "AI 只读助手", detail: "采购与到货审计查询", sortOrder: 3 },
+      { id: "6", menuCode: "Ai", routePath: "/ai", menuName: "智能只读助手", detail: "采购与到货审计查询", sortOrder: 3 },
     ],
   },
   "wh.operator": {
@@ -204,7 +204,7 @@ export const ROLE_PRESETS: Record<
     ],
   },
   "iot.engineer": {
-    roleName: "IoT人员",
+    roleName: "物联人员",
     realName: "孙工程师",
     redirect: "/iot",
     jti: "jti_8842bc11df33",

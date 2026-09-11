@@ -134,52 +134,58 @@ defineEmits<{
 
 <style scoped>
 .summary-card-container {
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  padding: 16px 18px;
+  background: rgba(8, 16, 33, 0.84);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(56, 189, 248, 0.26);
+  border-radius: 14px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(56, 189, 248, 0.04);
   position: relative;
   overflow: hidden;
 }
 
 .summary-card-container:hover {
-  border-color: rgba(56, 189, 248, 0.35);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  border-color: #38bdf8;
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.25), 0 16px 45px rgba(0, 0, 0, 0.85);
   transform: translateY(-2px);
 }
 
 /* 陈旧数据卡片高亮边缘 */
 .summary-card-container.is-stale {
-  border-color: rgba(245, 158, 11, 0.45);
-  background: rgba(28, 22, 16, 0.85);
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(24, 18, 12, 0.88);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.15), 0 10px 30px rgba(0, 0, 0, 0.7);
 }
 
 /* 告警卡片特殊呼吸边缘 */
 .summary-card-container.is-alarm-card {
-  border-color: rgba(239, 68, 68, 0.3);
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.12), 0 10px 30px rgba(0, 0, 0, 0.7);
 }
 
 .card-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.12);
+  padding-bottom: 12px;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .card-icon {
-  font-size: 24px;
+  font-size: 26px;
   line-height: 1;
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.3));
 }
 
 .title-meta {
@@ -189,15 +195,16 @@ defineEmits<{
 }
 
 .card-title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
-  color: #f1f5f9;
+  color: #ffffff;
   margin: 0;
+  letter-spacing: 0.3px;
 }
 
 .card-time-range {
   font-size: 11px;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .header-right {
@@ -207,48 +214,50 @@ defineEmits<{
 }
 
 .live-badge {
-  font-size: 10px;
+  font-size: 11px;
   color: #34d399;
-  background: rgba(52, 211, 153, 0.1);
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid rgba(52, 211, 153, 0.25);
+  background: rgba(16, 185, 129, 0.15);
+  padding: 3px 8px;
+  border-radius: 9999px;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.2);
+  font-weight: 600;
 }
 
 .stale-badge {
-  font-size: 10px;
+  font-size: 11px;
   color: #fbbf24;
-  background: rgba(245, 158, 11, 0.15);
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.16);
+  padding: 3px 8px;
+  border-radius: 9999px;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
   font-weight: 600;
 }
 
 .unavailable-badge {
-  font-size: 10px;
-  color: #fca5a5;
-  background: rgba(239, 68, 68, 0.14);
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  font-size: 11px;
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.16);
+  padding: 3px 8px;
+  border-radius: 9999px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.2);
   font-weight: 600;
 }
 
 .btn-card-refresh {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  font-size: 13px;
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(56, 189, 248, 0.25) !important;
+  color: #94a3b8 !important;
   transition: all 0.2s;
 }
 
 .btn-card-refresh:hover {
-  color: #38bdf8;
-  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff !important;
+  border-color: #38bdf8 !important;
+  background: rgba(14, 165, 233, 0.25) !important;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
 }
 
 .is-spinning {
@@ -264,10 +273,13 @@ defineEmits<{
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  background: rgba(239, 68, 68, 0.06);
+  border-radius: 8px;
+  margin-bottom: 12px;
 }
 
 .err-icon {
-  font-size: 24px;
+  font-size: 26px;
 }
 
 .err-msg {
@@ -284,13 +296,19 @@ defineEmits<{
 }
 
 .btn-card-retry {
-  padding: 4px 12px;
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  color: #fca5a5;
-  border-radius: 4px;
-  font-size: 11px;
+  padding: 5px 14px;
+  background: rgba(239, 68, 68, 0.25) !important;
+  border: 1px solid rgba(239, 68, 68, 0.5) !important;
+  color: #fca5a5 !important;
+  border-radius: 6px;
+  font-size: 12px;
   cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-card-retry:hover {
+  background: rgba(239, 68, 68, 0.4) !important;
+  color: #ffffff !important;
 }
 
 /* 核心指标栅格 */
@@ -303,23 +321,29 @@ defineEmits<{
 }
 
 .metric-box {
-  background: rgba(30, 41, 59, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.16);
+  border-radius: 8px;
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.metric-box:hover {
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(14, 165, 233, 0.1);
 }
 
 .metric-box.status-warning {
-  border-color: rgba(251, 191, 36, 0.25);
-  background: rgba(251, 191, 36, 0.06);
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.08);
 }
 
 .metric-box.status-danger {
-  border-color: rgba(248, 113, 113, 0.3);
-  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.1);
 }
 
 .metric-label {
@@ -336,22 +360,26 @@ defineEmits<{
 
 .metric-num {
   font-family: var(--font-mono, monospace);
-  font-size: 18px;
-  font-weight: 700;
-  color: #f1f5f9;
+  font-size: 20px;
+  font-weight: 800;
+  color: #f8fafc;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
 }
 
 .status-warning .metric-num {
   color: #fbbf24;
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
 }
 
 .status-danger .metric-num {
   color: #f87171;
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.35);
 }
 
 .metric-unit {
   font-size: 11px;
-  color: #94a3b8;
+  color: #64748b;
+  font-weight: 500;
 }
 
 .metric-sub {
@@ -364,15 +392,15 @@ defineEmits<{
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 12px;
+  border-top: 1px solid rgba(56, 189, 248, 0.12);
   font-size: 11px;
 }
 
 .source-info {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   max-width: 75%;
 }
 
@@ -393,24 +421,26 @@ defineEmits<{
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: transparent;
-  border: 1px solid rgba(56, 189, 248, 0.25);
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
   color: #38bdf8;
-  padding: 3px 8px;
-  border-radius: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
   font-size: 11px;
   cursor: pointer;
   transition: all 0.2s;
+  font-weight: 600;
 }
 
 .btn-jump-domain:hover {
-  background: rgba(56, 189, 248, 0.15);
+  background: #0284c7;
   border-color: #38bdf8;
-  color: #fff;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
 }
 
 .jump-arrow {
-  font-size: 9px;
+  font-size: 10px;
   transition: transform 0.2s;
 }
 

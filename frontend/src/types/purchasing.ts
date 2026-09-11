@@ -236,6 +236,7 @@ export interface PurchaseQualityInspection extends BaseEntity {
   unqualifiedQty: string;    // 质检不合格数量
   unqualifiedReason?: string;
   inspectedBy?: string;
+  inspectedByName?: string;
   inspectedAt: string;
   inspectionRemark?: string;
   status: "PendingDecision" | string;
@@ -269,8 +270,10 @@ export interface PurchaseQualityDisposition extends BaseEntity {
   reason?: string;
   status: QualityDispositionStatus;
   decidedBy?: string;
+  decidedByName?: string;
   decidedAt?: string;
   executedBy?: string;
+  executedByName?: string;
   executedAt?: string;
   fromLocationId?: string;
   fromLocationCode?: string;

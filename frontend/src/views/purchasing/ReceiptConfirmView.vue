@@ -1,127 +1,138 @@
 <template>
-  <div v-if="visible && order" class="dialog-mask" @click.self="handleClose">
-    <div class="dialog-panel">
-      <div class="dialog-header">
-        <div class="header-left">
-          <h3 class="dialog-title">仓库到货外观验收与接收</h3>
-          <span class="mono-no">{{ order.poNo }}</span>
-        </div>
-        <button type="button" class="btn-close" @click="handleClose">✕</button>
+  <el-dialog
+    :model-value="visible && !!order"
+    width="960px"
+    destroy-on-close
+    @close="handleClose"
+  >
+    <template #header>
+      <div v-if="order" style="display: flex; align-items: center; gap: 12px">
+        <span style="font-weight: 600; font-size: 16px">仓库到货外观验收与接收</span>
+        <span class="mono-no" style="color: #67d2ff; font-family: monospace">{{ order.poNo }}</span>
       </div>
+    </template>
 
-      <div class="dialog-body">
-        <div class="contract-alert" role="status">
-          <strong>收货事实 ID由服务端分配：</strong>
-          本页面只提交采购订单、数量和真实库位；服务端按本次幂等键创建独立收货事实并在响应中返回
-          <code>receiptId</code>，页面不会用订单号、订单行 ID或随机 UUID代替。
-        </div>
+    <div v-if="order" class="dialog-body">
+      <el-alert
+        type="info"
+        show-icon
+        style="margin-bottom: 12px"
+        title="收货事实 ID 由服务端分配"
+        description="本页面只提交采购订单、数量和真实库位；服务端按本次幂等键创建独立收货事实并在响应中返回 receiptId，页面不会用订单号、订单行 ID 或随机 UUID 代替。"
+      />
 
-        <!-- 业务规则提示框 -->
-        <div class="rule-alert">
-          <div class="alert-icon">ℹ️</div>
-          <div class="alert-text">
-            <strong>业务规则约束：</strong>
-            <span>到货数量 = 拒收数量 + 实际接收数量 (arrived_qty = rejected_qty + received_qty)。外观破损拒收数量不入库并保留为采购待收余量；实际接收货物全部进入 QualityHold（质量隔离位），质检放行前严禁上架或领料。</span>
+      <!-- 业务规则提示框 -->
+      <el-alert
+        type="warning"
+        show-icon
+        style="margin-bottom: 16px"
+        title="业务规则约束：到货数量 = 拒收数量 + 实际接收数量 (arrived_qty = rejected_qty + received_qty)"
+        description="外观破损拒收数量不入库并保留为采购待收余量；实际接收货物全部进入 QualityHold（质量隔离位），质检放行前严禁上架或领料。"
+      />
+
+      <el-row :gutter="16" style="margin-bottom: 12px">
+        <el-col :span="12">
+          <div class="form-item">
+            <label style="display: block; font-size: 13px; margin-bottom: 6px; color: #cbd5e1">
+              到货验收时间 <span style="color: #ff7d7d">*</span>
+            </label>
+            <el-date-picker
+              v-model="receiptTime"
+              type="datetime"
+              placeholder="选择到货验收时间"
+              value-format="YYYY-MM-DD HH:mm:ss"
+              style="width: 100%"
+            />
           </div>
-        </div>
-
-        <div class="meta-inputs">
-          <div class="input-item">
-            <label>到货验收时间 <span class="req">*</span></label>
-            <input v-model="receiptTime" type="datetime-local" class="form-input" required />
+        </el-col>
+        <el-col :span="12">
+          <div class="form-item">
+            <label style="display: block; font-size: 13px; margin-bottom: 6px; color: #cbd5e1">
+              入库隔离库位 (QualityHold) <span style="color: #ff7d7d">*</span>
+            </label>
+            <el-select v-model="qualityHoldLocationId" placeholder="请选择质量隔离库位" style="width: 100%">
+              <el-option
+                v-for="location in qualityHoldLocations"
+                :key="location.id"
+                :label="`${location.code} - ${location.name}`"
+                :value="location.id"
+              />
+            </el-select>
           </div>
-          <div class="input-item">
-            <label>入库隔离库位 (QualityHold) <span class="req">*</span></label>
-            <select v-model="qualityHoldLocationId" class="form-input" required>
-              <option value="">请选择质量隔离库位</option>
-              <option v-for="location in qualityHoldLocations" :key="location.id" :value="location.id">
-                {{ location.code }} - {{ location.name }}
-              </option>
-            </select>
-          </div>
-        </div>
+        </el-col>
+      </el-row>
 
-        <div class="lines-box">
-          <h4>到货明细数量录入</h4>
-          <div class="table-scroll">
-            <table class="receipt-table">
-              <thead>
-                <tr>
-                  <th>物料 SKU / 名称</th>
-                  <th style="text-align: right;">订单总需求</th>
-                  <th style="text-align: right;">当前待收余量</th>
-                  <th style="text-align: right; width: 100px;">本次到货量 <span class="req">*</span></th>
-                  <th style="text-align: right; width: 100px;">外观拒收量</th>
-                  <th style="text-align: right; width: 100px;">实际接收量</th>
-                  <th style="width: 130px;">批次编号</th>
-                  <th style="min-width: 140px;">拒收原因 (拒收>0必填)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="line in receiptLines" :key="line.poLineId">
-                  <td>
-                    <div class="sku-cell">
-                      <span class="sku-text">{{ line.sku }}</span>
-                      <span class="prod-text">{{ line.productName }}</span>
-                    </div>
-                  </td>
-                  <td style="text-align: right;">
-                    <QuantityText :value="line.orderedQty" :unit="line.uom" />
-                  </td>
-                  <td style="text-align: right;">
-                    <QuantityText :value="line.pendingQty" :unit="line.uom" />
-                  </td>
-                  <td>
-                    <input
-                      v-model="line.arrivedQty"
-                      type="text"
-                      class="qty-input"
-                      @input="onArrivedOrRejectedChange(line)"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      v-model="line.rejectedQty"
-                      type="text"
-                      class="qty-input text-danger"
-                      @input="onArrivedOrRejectedChange(line)"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      v-model="line.receivedQty"
-                      type="text"
-                      class="qty-input text-success"
-                      disabled
-                    />
-                  </td>
-                  <td>
-                    <input v-model="line.lotNo" type="text" class="text-input mono-text" placeholder="LOT-..." />
-                  </td>
-                  <td>
-                    <input
-                      v-model="line.rejectionReason"
-                      type="text"
-                      class="text-input"
-                      :placeholder="parseFloat(line.rejectedQty || '0') > 0 ? '必填拒收原因' : '无拒收可留空'"
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <div class="dialog-footer">
-        <button type="button" class="btn btn-secondary" @click="handleClose">取消</button>
-        <button type="button" class="btn btn-primary" :disabled="submitting" @click="handleSubmit">
-          <span v-if="submitting">⏳ 提交中...</span>
-          <span v-else>确认接收进质量隔离位</span>
-        </button>
+      <div class="lines-box" style="margin-top: 16px">
+        <h4 style="margin-bottom: 10px; color: #f1f5f9">到货明细数量录入</h4>
+        <el-table :data="receiptLines" stripe border style="width: 100%">
+          <el-table-column label="物料 SKU / 名称" min-width="150">
+            <template #default="{ row }">
+              <div class="sku-cell">
+                <span class="sku-text" style="font-family: monospace; color: #67d2ff">{{ row.sku }}</span>
+                <span class="prod-text" style="display: block; font-size: 12px; color: #cbd5e1">{{ row.productName }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="订单总需求" width="90" align="right">
+            <template #default="{ row }">
+              <QuantityText :value="row.orderedQty" :unit="row.uom" />
+            </template>
+          </el-table-column>
+          <el-table-column label="当前待收余量" width="100" align="right">
+            <template #default="{ row }">
+              <QuantityText :value="row.pendingQty" :unit="row.uom" />
+            </template>
+          </el-table-column>
+          <el-table-column label="本次到货量" width="110" align="right">
+            <template #default="{ row }">
+              <el-input
+                v-model="row.arrivedQty"
+                size="small"
+                @input="onArrivedOrRejectedChange(row)"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="外观拒收量" width="110" align="right">
+            <template #default="{ row }">
+              <el-input
+                v-model="row.rejectedQty"
+                size="small"
+                @input="onArrivedOrRejectedChange(row)"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="实际接收量" width="100" align="right">
+            <template #default="{ row }">
+              <span style="color: #6fe1a6; font-weight: 600">
+                <QuantityText :value="row.receivedQty" :unit="row.uom" />
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="批次编号" width="130">
+            <template #default="{ row }">
+              <el-input v-model="row.lotNo" size="small" placeholder="LOT-..." />
+            </template>
+          </el-table-column>
+          <el-table-column label="拒收原因 (拒收>0必填)" min-width="150">
+            <template #default="{ row }">
+              <el-input
+                v-model="row.rejectionReason"
+                size="small"
+                :placeholder="parseFloat(row.rejectedQty || '0') > 0 ? '必填拒收原因' : '无拒收可留空'"
+              />
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
     </div>
-  </div>
+
+    <template #footer>
+      <el-button @click="handleClose">取消</el-button>
+      <el-button type="primary" :loading="submitting" @click="handleSubmit">
+        确认接收进质量隔离位
+      </el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -131,11 +142,13 @@
  * 数量恒等式：arrived_qty = rejected_qty + received_qty
  */
 import { computed, ref, watch } from "vue";
+import { ElMessage } from "element-plus";
 import QuantityText from "@/components/common/QuantityText.vue";
 import { type PurchaseOrder } from "@/types/purchasing";
 import { type Location } from "@/types/inventory";
 import { stringSub } from "@/types/inventory";
 import { getLocations } from "@/api/masterData";
+import { currentLocalDateTimeValue } from "@/utils/dateTime";
 
 interface EditableReceiptLine {
   poLineId: string | number;
@@ -190,7 +203,7 @@ const emit = defineEmits<{
   (e: "close"): void;
 }>();
 
-const receiptTime = ref(new Date().toISOString().slice(0, 16));
+const receiptTime = ref(currentLocalDateTimeValue());
 const receiptLines = ref<EditableReceiptLine[]>([]);
 const receiptNo = ref("");
 const qualityHoldLocationId = ref("");
@@ -241,7 +254,10 @@ async function loadQualityHoldLocations() {
 watch(
   () => props.visible,
   (visible) => {
-    if (visible) void loadQualityHoldLocations();
+    if (visible) {
+      receiptTime.value = currentLocalDateTimeValue();
+      void loadQualityHoldLocations();
+    }
   },
   { immediate: true },
 );
@@ -263,7 +279,7 @@ function handleClose() {
 function handleSubmit() {
   if (!props.order) return;
   if (!qualityHoldLocationId.value) {
-    alert("请选择真实的 QualityHold 库位。");
+    ElMessage.warning("请选择真实的 QualityHold 库位。");
     return;
   }
 
@@ -273,18 +289,18 @@ function handleSubmit() {
     const received = parseFloat(l.receivedQty || "0");
 
     if (!Number.isFinite(arrived) || arrived <= 0) {
-      alert(`物料 ${l.sku} 的到货数量必须大于0`);
+      ElMessage.warning(`物料 ${l.sku} 的到货数量必须大于0`);
       return;
     }
 
     if (!Number.isFinite(rejected) || !Number.isFinite(received) || rejected < 0 || received < 0
       || Math.abs(arrived - rejected - received) > 0.000001) {
-      alert(`行项数量不守恒：到货数量必须等于拒收数量 + 实际接收数量`);
+      ElMessage.warning(`行项数量不守恒：到货数量必须等于拒收数量 + 实际接收数量`);
       return;
     }
 
     if (rejected > 0 && (!l.rejectionReason || !l.rejectionReason.trim())) {
-      alert(`物料 ${l.sku} 存在拒收数量 (${l.rejectedQty})，必须填写拒收原因！`);
+      ElMessage.warning(`物料 ${l.sku} 存在拒收数量 (${l.rejectedQty})，必须填写拒收原因！`);
       return;
     }
   }

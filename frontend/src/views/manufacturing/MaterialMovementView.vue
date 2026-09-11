@@ -8,14 +8,22 @@
       description="连接制造执行与仓储库存的物料交接业务。领料确认触发实物库存扣减；退料确认增加退回库位库存并生成流水软引用。"
     >
       <template #actions>
-        <button v-if="activeTab === 'issue'" type="button" class="btn btn-primary" @click="openCreateIssueModal">
-          <span class="btn-icon">＋</span>
-          <span>新建领料申请单</span>
-        </button>
-        <button v-else type="button" class="btn btn-primary" @click="openCreateReturnModal">
-          <span class="btn-icon">＋</span>
-          <span>新建生产退料单</span>
-        </button>
+        <el-button
+          v-if="activeTab === 'issue'"
+          type="primary"
+          :icon="Plus"
+          @click="openCreateIssueModal"
+        >
+          新建领料申请单
+        </el-button>
+        <el-button
+          v-else
+          type="primary"
+          :icon="Plus"
+          @click="openCreateReturnModal"
+        >
+          新建生产退料单
+        </el-button>
       </template>
     </PageHeader>
 
@@ -50,11 +58,17 @@
     >
       <div class="filter-select-group">
         <label class="filter-label">状态：</label>
-        <select v-model="statusFilter" class="filter-select" @change="handleSearch">
-          <option value="">全部状态</option>
-          <option value="Draft">草稿待确认 (Draft)</option>
-          <option value="Confirmed">已出入库确认 (Confirmed)</option>
-        </select>
+        <el-select
+          v-model="statusFilter"
+          placeholder="全部状态"
+          clearable
+          style="width: 170px"
+          @change="handleSearch"
+        >
+          <el-option label="全部状态" value="" />
+          <el-option label="草稿待确认 (Draft)" value="Draft" />
+          <el-option label="已出入库确认 (Confirmed)" value="Confirmed" />
+        </el-select>
       </div>
     </FilterBar>
 
@@ -116,16 +130,16 @@
       <!-- 操作 (受 allowedActions 约束) -->
       <template #actions="{ row }">
         <div class="action-btn-group">
-          <button
+          <el-button
             v-if="row.status === 'Draft'"
-            type="button"
-            class="btn-text text-primary"
+            link
+            type="primary"
             :disabled="!isActionAllowed(row, 'confirm')"
             :title="getActionDisabledReason(row, 'confirm') || '确认领料出库'"
             @click="promptConfirmIssue(row)"
           >
             出库确认
-          </button>
+          </el-button>
           <span v-else class="text-muted font-xs">已完成扣减</span>
         </div>
       </template>
@@ -181,217 +195,298 @@
       <!-- 操作 (受 allowedActions 约束) -->
       <template #actions="{ row }">
         <div class="action-btn-group">
-          <button
+          <el-button
             v-if="row.status === 'Draft'"
-            type="button"
-            class="btn-text text-primary"
+            link
+            type="primary"
             :disabled="!isActionAllowed(row, 'confirm')"
             :title="getActionDisabledReason(row, 'confirm') || '确认退料入库'"
             @click="promptConfirmReturn(row)"
           >
             退库确认
-          </button>
+          </el-button>
           <span v-else class="text-muted font-xs">已完成退入</span>
         </div>
       </template>
     </DataTable>
 
     <!-- 弹窗 1：新建领料单 -->
-    <div v-if="createIssueModalVisible" class="modal-mask" @click.self="createIssueModalVisible = false">
-      <div class="modal-card modal-large">
-        <div class="modal-header">
-          <h3 class="modal-title">新建生产领料申请单</h3>
-          <button type="button" class="btn-close" @click="createIssueModalVisible = false">✕</button>
+    <el-dialog
+      v-model="createIssueModalVisible"
+      title="新建生产领料申请单"
+      width="680px"
+      append-to-body
+      destroy-on-close
+    >
+      <div class="dialog-content-wrapper">
+        <div class="options-search-row">
+          <label for="issue-option-keyword">目录搜索</label>
+          <el-input
+            id="issue-option-keyword"
+            v-model="movementOptionsKeyword"
+            clearable
+            placeholder="输入工单、物料或仓库编码/名称后回车搜索"
+            @keyup.enter="loadMovementOptions"
+          >
+            <template #append>
+              <el-button :icon="Search" @click="loadMovementOptions">搜索</el-button>
+            </template>
+          </el-input>
         </div>
-        <form class="modal-body" @submit.prevent="submitCreateIssue">
-          <div class="options-search-row">
-            <label for="issue-option-keyword">目录搜索</label>
-            <input
-              id="issue-option-keyword"
-              v-model="movementOptionsKeyword"
-              type="search"
-              class="form-input"
-              placeholder="输入工单、物料或仓库编码/名称后回车搜索"
-              @keyup.enter="loadMovementOptions"
-            />
-            <button type="button" class="btn-text text-primary" @click="loadMovementOptions">搜索</button>
-          </div>
-          <div v-if="isMovementOptionsLoading" class="options-hint text-muted">⏳ 正在加载真实主数据目录...</div>
-          <div v-else-if="movementOptionsError" class="options-hint text-warning">⚠️ {{ movementOptionsError }}</div>
-          <div class="form-item">
-            <label>关联生产工单 <span class="req">*</span></label>
-            <select v-model="issueForm.workOrderId" class="form-select" required>
-              <option value="">请选择关联生产工单</option>
-              <option v-for="wo in availableWorkOrders" :key="wo.id" :value="wo.id">
-                {{ wo.workOrderNo || wo.woNo }} - {{ wo.productName || '工单' }} (计划: {{ wo.plannedQty }}件, {{ wo.status }})
-              </option>
-            </select>
-          </div>
+        <div v-if="isMovementOptionsLoading" class="options-hint text-muted">⏳ 正在加载真实主数据目录...</div>
+        <div v-else-if="movementOptionsError" class="options-hint text-warning">⚠️ {{ movementOptionsError }}</div>
+
+        <el-form label-position="top" class="custom-el-form">
+          <el-form-item label="关联生产工单" required>
+            <el-select
+              v-model="issueForm.workOrderId"
+              placeholder="请选择关联生产工单"
+              filterable
+              style="width: 100%"
+            >
+              <el-option
+                v-for="wo in availableWorkOrders"
+                :key="wo.id"
+                :label="`${wo.workOrderNo || wo.woNo} - ${wo.productName || '工单'} (计划: ${wo.plannedQty}件, ${wo.status})`"
+                :value="String(wo.id)"
+              />
+            </el-select>
+          </el-form-item>
 
           <div class="form-section">
-            <label class="section-title">领料明细项（消除手填 UUID，级联选择）</label>
-            <div class="form-grid two-col" style="margin-bottom: 10px;">
-              <div class="form-item">
-                <label>领用物料 <span class="req">*</span></label>
-                <select v-model="issueForm.productId" class="form-select" required>
-                  <option value="">请选择领用物料</option>
-                  <option v-for="p in availableProducts" :key="p.id" :value="p.id">
-                    {{ p.sku }} - {{ p.name }} ({{ p.uom }})
-                  </option>
-                </select>
-              </div>
-              <div class="form-item">
-                <label>领料数量 <span class="req">*</span></label>
-                <input
-                  v-model="issueForm.issueQty"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  class="form-input font-mono"
-                  placeholder="领料数量 (如 100.00)"
-                  required
-                />
-              </div>
-            </div>
+            <div class="section-title">领料明细项（消除手填 UUID，级联选择）</div>
+            <el-row :gutter="16">
+              <el-col :span="12">
+                <el-form-item label="领用物料" required>
+                  <el-select
+                    v-model="issueForm.productId"
+                    placeholder="请选择领用物料"
+                    filterable
+                    style="width: 100%"
+                  >
+                    <el-option
+                      v-for="p in availableProducts"
+                      :key="p.id"
+                      :label="`${p.sku} - ${p.name} (${p.uom})`"
+                      :value="String(p.id)"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="领料数量" required>
+                  <el-input
+                    v-model="issueForm.issueQty"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    placeholder="领料数量 (如 100.00)"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
 
-            <div class="form-grid two-col">
-              <div class="form-item">
-                <label>出库仓库 <span class="req">*</span></label>
-                <select v-model="issueForm.warehouseId" class="form-select" required @change="handleIssueWarehouseChange">
-                  <option value="">请选择出库仓库</option>
-                  <option v-for="w in availableWarehouses" :key="w.id" :value="w.id">
-                    {{ w.code }} - {{ w.name }}
-                  </option>
-                </select>
-              </div>
-              <div class="form-item">
-                <label>出库库位 <span class="req">*</span></label>
-                <select v-model="issueForm.locationId" class="form-select font-mono" required :disabled="!issueForm.warehouseId">
-                  <option value="">{{ !issueForm.warehouseId ? '请先选择出库仓库' : '请选择库位' }}</option>
-                  <option v-for="l in filteredIssueLocations" :key="l.id" :value="l.id">
-                    {{ l.code }} - {{ l.name }} ({{ l.type }})
-                  </option>
-                </select>
-              </div>
-            </div>
+            <el-row :gutter="16">
+              <el-col :span="12">
+                <el-form-item label="出库仓库" required>
+                  <el-select
+                    v-model="issueForm.warehouseId"
+                    placeholder="请选择出库仓库"
+                    filterable
+                    style="width: 100%"
+                    @change="handleIssueWarehouseChange"
+                  >
+                    <el-option
+                      v-for="w in availableWarehouses"
+                      :key="w.id"
+                      :label="`${w.code} - ${w.name}`"
+                      :value="String(w.id)"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="出库库位" required>
+                  <el-select
+                    v-model="issueForm.locationId"
+                    :placeholder="!issueForm.warehouseId ? '请先选择出库仓库' : '请选择库位'"
+                    :disabled="!issueForm.warehouseId"
+                    filterable
+                    style="width: 100%"
+                  >
+                    <el-option
+                      v-for="l in filteredIssueLocations"
+                      :key="l.id"
+                      :label="`${l.code} - ${l.name} (${l.type})`"
+                      :value="String(l.id)"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
 
-            <div class="form-item" style="margin-top: 10px;">
-              <label>超领原因 (可选，超出定额时必填说明)</label>
-              <input
+            <el-form-item label="超领原因 (可选，超出定额时必填说明)">
+              <el-input
                 v-model="issueForm.overageReason"
-                type="text"
-                class="form-input"
                 placeholder="如: 原料损耗补料、工艺调整追加领料..."
               />
-            </div>
+            </el-form-item>
           </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="createIssueModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting">保存领料单 (草稿)</button>
-          </div>
-        </form>
+        </el-form>
       </div>
-    </div>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="createIssueModalVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="isSubmitting"
+            @click="submitCreateIssue"
+          >
+            保存领料单 (草稿)
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
 
     <!-- 弹窗 2：新建退料单 -->
-    <div v-if="createReturnModalVisible" class="modal-mask" @click.self="createReturnModalVisible = false">
-      <div class="modal-card modal-large">
-        <div class="modal-header">
-          <h3 class="modal-title">新建生产退料单</h3>
-          <button type="button" class="btn-close" @click="createReturnModalVisible = false">✕</button>
+    <el-dialog
+      v-model="createReturnModalVisible"
+      title="新建生产退料单"
+      width="680px"
+      append-to-body
+      destroy-on-close
+    >
+      <div class="dialog-content-wrapper">
+        <div class="options-search-row">
+          <label for="return-option-keyword">目录搜索</label>
+          <el-input
+            id="return-option-keyword"
+            v-model="movementOptionsKeyword"
+            clearable
+            placeholder="输入工单、物料或仓库编码/名称后回车搜索"
+            @keyup.enter="loadMovementOptions"
+          >
+            <template #append>
+              <el-button :icon="Search" @click="loadMovementOptions">搜索</el-button>
+            </template>
+          </el-input>
         </div>
-        <form class="modal-body" @submit.prevent="submitCreateReturn">
-          <div class="options-search-row">
-            <label for="return-option-keyword">目录搜索</label>
-            <input
-              id="return-option-keyword"
-              v-model="movementOptionsKeyword"
-              type="search"
-              class="form-input"
-              placeholder="输入工单、物料或仓库编码/名称后回车搜索"
-              @keyup.enter="loadMovementOptions"
-            />
-            <button type="button" class="btn-text text-primary" @click="loadMovementOptions">搜索</button>
-          </div>
-          <div v-if="isMovementOptionsLoading" class="options-hint text-muted">⏳ 正在加载真实主数据目录...</div>
-          <div v-else-if="movementOptionsError" class="options-hint text-warning">⚠️ {{ movementOptionsError }}</div>
-          <div class="form-item">
-            <label>关联生产工单 <span class="req">*</span></label>
-            <select v-model="returnForm.workOrderId" class="form-select" required>
-              <option value="">请选择关联生产工单</option>
-              <option v-for="wo in availableWorkOrders" :key="wo.id" :value="wo.id">
-                {{ wo.workOrderNo || wo.woNo }} - {{ wo.productName || '工单' }} (计划: {{ wo.plannedQty }}件, {{ wo.status }})
-              </option>
-            </select>
-          </div>
+        <div v-if="isMovementOptionsLoading" class="options-hint text-muted">⏳ 正在加载真实主数据目录...</div>
+        <div v-else-if="movementOptionsError" class="options-hint text-warning">⚠️ {{ movementOptionsError }}</div>
+
+        <el-form label-position="top" class="custom-el-form">
+          <el-form-item label="关联生产工单" required>
+            <el-select
+              v-model="returnForm.workOrderId"
+              placeholder="请选择关联生产工单"
+              filterable
+              style="width: 100%"
+            >
+              <el-option
+                v-for="wo in availableWorkOrders"
+                :key="wo.id"
+                :label="`${wo.workOrderNo || wo.woNo} - ${wo.productName || '工单'} (计划: ${wo.plannedQty}件, ${wo.status})`"
+                :value="String(wo.id)"
+              />
+            </el-select>
+          </el-form-item>
 
           <div class="form-section">
-            <label class="section-title">退料明细项（消除手填 UUID，级联选择）</label>
-            <div class="form-grid two-col" style="margin-bottom: 10px;">
-              <div class="form-item">
-                <label>退回物料 <span class="req">*</span></label>
-                <select v-model="returnForm.productId" class="form-select" required>
-                  <option value="">请选择退回物料</option>
-                  <option v-for="p in availableProducts" :key="p.id" :value="p.id">
-                    {{ p.sku }} - {{ p.name }} ({{ p.uom }})
-                  </option>
-                </select>
-              </div>
-              <div class="form-item">
-                <label>退料数量 <span class="req">*</span></label>
-                <input
-                  v-model="returnForm.returnQty"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  class="form-input font-mono"
-                  placeholder="退料数量 (如 2.00)"
-                  required
-                />
-              </div>
-            </div>
+            <div class="section-title">退料明细项（消除手填 UUID，级联选择）</div>
+            <el-row :gutter="16">
+              <el-col :span="12">
+                <el-form-item label="退回物料" required>
+                  <el-select
+                    v-model="returnForm.productId"
+                    placeholder="请选择退回物料"
+                    filterable
+                    style="width: 100%"
+                  >
+                    <el-option
+                      v-for="p in availableProducts"
+                      :key="p.id"
+                      :label="`${p.sku} - ${p.name} (${p.uom})`"
+                      :value="String(p.id)"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="退料数量" required>
+                  <el-input
+                    v-model="returnForm.returnQty"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    placeholder="退料数量 (如 2.00)"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
 
-            <div class="form-grid two-col">
-              <div class="form-item">
-                <label>退入仓库 <span class="req">*</span></label>
-                <select v-model="returnForm.warehouseId" class="form-select" required @change="handleReturnWarehouseChange">
-                  <option value="">请选择退入仓库</option>
-                  <option v-for="w in availableWarehouses" :key="w.id" :value="w.id">
-                    {{ w.code }} - {{ w.name }}
-                  </option>
-                </select>
-              </div>
-              <div class="form-item">
-                <label>退入库位 <span class="req">*</span></label>
-                <select v-model="returnForm.locationId" class="form-select font-mono" required :disabled="!returnForm.warehouseId">
-                  <option value="">{{ !returnForm.warehouseId ? '请先选择退入仓库' : '请选择库位' }}</option>
-                  <option v-for="l in filteredReturnLocations" :key="l.id" :value="l.id">
-                    {{ l.code }} - {{ l.name }} ({{ l.type }})
-                  </option>
-                </select>
-              </div>
-            </div>
+            <el-row :gutter="16">
+              <el-col :span="12">
+                <el-form-item label="退入仓库" required>
+                  <el-select
+                    v-model="returnForm.warehouseId"
+                    placeholder="请选择退入仓库"
+                    filterable
+                    style="width: 100%"
+                    @change="handleReturnWarehouseChange"
+                  >
+                    <el-option
+                      v-for="w in availableWarehouses"
+                      :key="w.id"
+                      :label="`${w.code} - ${w.name}`"
+                      :value="String(w.id)"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="退入库位" required>
+                  <el-select
+                    v-model="returnForm.locationId"
+                    :placeholder="!returnForm.warehouseId ? '请先选择退入仓库' : '请选择库位'"
+                    :disabled="!returnForm.warehouseId"
+                    filterable
+                    style="width: 100%"
+                  >
+                    <el-option
+                      v-for="l in filteredReturnLocations"
+                      :key="l.id"
+                      :label="`${l.code} - ${l.name} (${l.type})`"
+                      :value="String(l.id)"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
 
-            <div class="form-item" style="margin-top: 10px;">
-              <label>退料原因 <span class="req">*</span></label>
-              <input
+            <el-form-item label="退料原因" required>
+              <el-input
                 v-model="returnForm.reason"
-                type="text"
-                class="form-input"
                 placeholder="如: 工单完工余料退回、来料不良退库..."
-                required
               />
-            </div>
+            </el-form-item>
           </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="createReturnModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting">保存退料单 (草稿)</button>
-          </div>
-        </form>
+        </el-form>
       </div>
-    </div>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="createReturnModalVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="isSubmitting"
+            @click="submitCreateReturn"
+          >
+            保存退料单 (草稿)
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
 
     <!-- 二次确认对话框 -->
     <ConfirmDialog
@@ -406,6 +501,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from "vue";
+import { Plus, Search } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import { useCommand } from "@/composables/useCommand";
 import CommandFeedback from "@/components/common/CommandFeedback.vue";
 import { useRoute } from "vue-router";
@@ -549,16 +646,17 @@ const confirmDialog = reactive({
   targetId: "",
 });
 
-// 替换为调用 actionGuard 的版本
+/** 检查指定操作是否被后端或状态机允许 */
 function isActionAllowed(item: { allowedActions?: AllowedAction[] | null }, action: string): boolean {
   return checkAction(item.allowedActions, action);
 }
 
-// 替换为调用 actionGuard 的版本
+/** 获取指定操作被禁用的原因提示 */
 function getActionDisabledReason(item: { allowedActions?: AllowedAction[] | null }, action: string): string | undefined {
   return getDisabledReason(item.allowedActions, action);
 }
 
+/** 加载领料与退料单据列表 */
 async function loadData() {
   viewState.value = "loading";
   errorMessage.value = "";
@@ -592,6 +690,7 @@ async function loadData() {
   }
 }
 
+/** 搜索主数据基础选项（工单、物料、仓库、库位） */
 async function loadMovementOptions() {
   isMovementOptionsLoading.value = true;
   movementOptionsError.value = "";
@@ -656,19 +755,23 @@ async function handleReturnWarehouseChange() {
   await loadMovementOptions();
 }
 
+/** 切换领料/退料视图 Tab */
 function switchTab(tab: "issue" | "return") {
   activeTab.value = tab;
 }
 
+/** 触发列表搜索 */
 function handleSearch() {
   // filtered by computed
 }
 
+/** 重置搜索条件 */
 function handleReset() {
   keyword.value = "";
   statusFilter.value = "";
 }
 
+/** 打开新建领料申请单对话框并初始化选项 */
 function openCreateIssueModal() {
   if (!issueForm.workOrderId && availableWorkOrders.value.length > 0) {
     issueForm.workOrderId = String(availableWorkOrders.value[0].id);
@@ -683,8 +786,12 @@ function openCreateIssueModal() {
   createIssueModalVisible.value = true;
 }
 
+/** 提交创建领料申请单 */
 async function submitCreateIssue() {
-  if (!issueForm.workOrderId || !issueForm.productId || !issueForm.issueQty || !issueForm.warehouseId || !issueForm.locationId) return;
+  if (!issueForm.workOrderId || !issueForm.productId || !issueForm.issueQty || !issueForm.warehouseId || !issueForm.locationId) {
+    ElMessage.warning("请填写完整的领料信息");
+    return;
+  }
   try {
     const created = await execute((key) => createMaterialIssue({
       workOrderId: issueForm.workOrderId,
@@ -702,13 +809,14 @@ async function submitCreateIssue() {
       throw new Error("服务端未返回 materialIssueId，已阻止继续确认领料");
     }
     createIssueModalVisible.value = false;
-    alert("领料单已成功创建！可在领料单列表中执行出库确认。");
+    ElMessage.success("领料单已成功创建！可在领料单列表中执行出库确认。");
     await loadData();
   } catch (err: any) {
-    alert(`创建领料单失败：${err.message}`);
-  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
+    ElMessage.error(`创建领料单失败：${err.message}`);
+  }
 }
 
+/** 打开新建生产退料单对话框并初始化选项 */
 function openCreateReturnModal() {
   if (!returnForm.workOrderId && availableWorkOrders.value.length > 0) {
     returnForm.workOrderId = String(availableWorkOrders.value[0].id);
@@ -723,8 +831,12 @@ function openCreateReturnModal() {
   createReturnModalVisible.value = true;
 }
 
+/** 提交创建生产退料单 */
 async function submitCreateReturn() {
-  if (!returnForm.workOrderId || !returnForm.productId || !returnForm.returnQty || !returnForm.warehouseId || !returnForm.locationId) return;
+  if (!returnForm.workOrderId || !returnForm.productId || !returnForm.returnQty || !returnForm.warehouseId || !returnForm.locationId) {
+    ElMessage.warning("请填写完整的退料信息");
+    return;
+  }
   try {
     const created = await execute((key) => createMaterialReturn({
       workOrderId: returnForm.workOrderId,
@@ -742,13 +854,14 @@ async function submitCreateReturn() {
       throw new Error("服务端未返回 materialReturnId，已阻止继续确认退料");
     }
     createReturnModalVisible.value = false;
-    alert("退料单已成功创建！可在退料单列表中执行退库确认。");
+    ElMessage.success("退料单已成功创建！可在退料单列表中执行退库确认。");
     await loadData();
   } catch (err: any) {
-    alert(`创建退料单失败：${err.message}`);
-  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
+    ElMessage.error(`创建退料单失败：${err.message}`);
+  }
 }
 
+/** 提示领料出库确认对话框 */
 function promptConfirmIssue(item: MaterialIssueItem) {
   confirmDialog.title = "确认生产领料出库";
   confirmDialog.message = `确认领料单【${item.issueNo}】出库？库存服务将真实扣减原料库位库存并生成流水软引用。`;
@@ -757,6 +870,7 @@ function promptConfirmIssue(item: MaterialIssueItem) {
   confirmDialog.visible = true;
 }
 
+/** 提示退料入库确认对话框 */
 function promptConfirmReturn(item: MaterialReturnItem) {
   confirmDialog.title = "确认生产退料入库";
   confirmDialog.message = `确认退料单【${item.returnNo}】入库？将增加目标库位实物库存并生成流水软引用。`;
@@ -765,6 +879,7 @@ function promptConfirmReturn(item: MaterialReturnItem) {
   confirmDialog.visible = true;
 }
 
+/** 执行出库/退库确认指令 */
 async function handleExecuteConfirm() {
   confirmDialog.loading = true;
   try {
@@ -774,9 +889,10 @@ async function handleExecuteConfirm() {
       await execute((key) => confirmMaterialReturn(confirmDialog.targetId, key), { onConflict: loadData });
     }
     confirmDialog.visible = false;
+    ElMessage.success("确认操作已成功完成！");
     await loadData();
   } catch (err: any) {
-    alert(`确认失败：${err.message}`);
+    ElMessage.error(`确认失败：${err.message}`);
   } finally {
     confirmDialog.loading = false;
   }
@@ -860,16 +976,6 @@ onMounted(async () => {
   color: #94a3b8;
 }
 
-.filter-select {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  outline: none;
-}
-
 .highlight-code {
   color: #38bdf8;
   font-weight: 600;
@@ -902,151 +1008,57 @@ onMounted(async () => {
   justify-content: center;
 }
 
-.btn-text {
-  background: none;
-  border: none;
-  font-size: 12px;
-  cursor: pointer;
-  padding: 2px 6px;
-}
-
-.btn-text:hover:not(:disabled) {
-  text-decoration: underline;
-}
-
-.btn-text:disabled {
-  color: #64748b;
-  cursor: not-allowed;
-  text-decoration: none;
-}
-
 .text-primary { color: #38bdf8 !important; }
 .font-xs { font-size: 11px; }
 
-/* 模态框 */
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
-.modal-card {
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
-  width: 100%;
-  max-width: 520px;
-  box-shadow: 0 20px 30px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-}
-
-.modal-large { max-width: 680px; }
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.modal-title {
-  margin: 0;
-  font-size: 16px;
-  color: #f8fafc;
-}
-
-.modal-body {
-  padding: 20px;
+/* 模态框内部样式 */
+.dialog-content-wrapper {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.form-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-item label, .section-title {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
 .options-search-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 12px;
+  padding: 8px 12px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 6px;
+  background: rgba(15, 23, 42, 0.4);
 }
 
 .options-search-row label {
   flex: 0 0 auto;
-}
-
-.options-search-row .form-input {
-  flex: 1;
+  font-size: 13px;
+  color: #94a3b8;
 }
 
 .options-hint {
-  padding: 8px 10px;
+  padding: 8px 12px;
   border-radius: 6px;
   background: rgba(30, 41, 59, 0.6);
   font-size: 12px;
 }
 
-.req { color: #f87171; }
-
-.form-input {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  outline: none;
-}
-
-.form-input:focus { border-color: #38bdf8; }
-
 .form-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  border-top: 1px dashed rgba(255, 255, 255, 0.1);
-  padding-top: 12px;
-}
-
-.grid-form-row {
-  display: grid;
-  grid-template-columns: 2fr 1.5fr 1.5fr 1.5fr;
-  gap: 8px;
-}
-
-.modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
   gap: 12px;
-  padding: 16px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  padding-top: 14px;
+  margin-top: 8px;
 }
 
-.btn-close {
-  background: none;
-  border: none;
+.section-title {
+  font-size: 13px;
+  color: #38bdf8;
+  font-weight: 500;
+}
+
+.custom-el-form :deep(.el-form-item__label) {
   color: #94a3b8;
-  font-size: 16px;
-  cursor: pointer;
+  font-size: 13px;
+  padding-bottom: 4px;
 }
 </style>

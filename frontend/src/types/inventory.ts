@@ -332,6 +332,7 @@ export interface InventoryTransaction extends BaseEntity {
   transactionType: InventoryTransactionType | string;
   sourceType: string;
   sourceId: string;
+  sourceNo?: string;
   sourceLineId?: string;
   fromDimension?: InventoryDimension | null;
   toDimension?: InventoryDimension | null;

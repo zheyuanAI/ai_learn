@@ -52,13 +52,13 @@
       <!-- 操作列插槽 -->
       <template #actions="{ row }">
         <div class="action-buttons">
-          <button
-            type="button"
-            class="btn-action"
+          <el-button
+            link
+            type="primary"
             @click="$emit('edit', row)"
           >
             编辑
-          </button>
+          </el-button>
         </div>
       </template>
     </DataTable>

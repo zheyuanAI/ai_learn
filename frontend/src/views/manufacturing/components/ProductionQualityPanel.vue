@@ -50,13 +50,14 @@
               <td class="font-mono text-muted text-xs">{{ wr.reportTime ? wr.reportTime.substring(0, 19).replace('T', ' ') : '-' }}</td>
               <td class="text-muted text-xs">{{ wr.remark || '-' }}</td>
               <td style="text-align: center;">
-                <button
-                  type="button"
-                  class="btn-act-primary"
+                <el-button
+                  size="small"
+                  type="primary"
+                  plain
                   @click="openCreateInspection(wr)"
                 >
                   发起质检
-                </button>
+                </el-button>
               </td>
             </tr>
           </tbody>
@@ -124,24 +125,26 @@
               <td style="text-align: center;">
                 <div class="action-cell">
                   <!-- 录入质检结果 (Draft -> Passed/Failed) -->
-                  <button
+                  <el-button
                     v-if="ins.status === 'Draft' || !ins.result"
-                    type="button"
-                    class="btn-act-cyan"
+                    size="small"
+                    type="primary"
+                    plain
                     @click="openSubmitModal(ins)"
                   >
                     录入结果
-                  </button>
+                  </el-button>
 
                   <!-- 关闭 Failed 质检 (disposition) -->
-                  <button
+                  <el-button
                     v-if="ins.result === 'Failed' && !ins.disposition"
-                    type="button"
-                    class="btn-act-warning"
+                    size="small"
+                    type="warning"
+                    plain
                     @click="openCloseModal(ins)"
                   >
                     不良处置
-                  </button>
+                  </el-button>
                   <span v-if="ins.result === 'Passed' || ins.disposition" class="text-muted font-xs">已完结</span>
                 </div>
               </td>
@@ -152,99 +155,126 @@
     </div>
 
     <!-- 模态框 1：新建质检单 Draft -->
-    <div v-if="createModalVisible" class="modal-mask" @click.self="createModalVisible = false">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">发起生产质检</h3>
-          <button type="button" class="btn-close" @click="createModalVisible = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitCreateInspection">
-          <div class="form-item">
-            <label>关联报工单</label>
-            <input :value="selectedReport?.reportNo" class="form-input font-mono" disabled />
-          </div>
-          <div class="form-item">
-            <label>质检编号</label>
-            <input v-model="createForm.inspectionNo" class="form-input font-mono" required />
-          </div>
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>检验类型 <span class="req">*</span></label>
-              <select v-model="createForm.inspectionType" class="form-select" required>
-                <option value="FIRST_ARTICLE">首件检验 (First Article)</option>
-                <option value="ROUTING_INSPECTION">过程巡检 (In Process)</option>
-                <option value="FINAL_INSPECTION">完工总检 (Final Inspection)</option>
-              </select>
-            </div>
-            <div class="form-item">
-              <label>抽样数量 <span class="req">*</span></label>
-              <input v-model="createForm.sampleQty" type="number" min="1" class="form-input font-mono" required />
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="createModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="submitting">保存质检单 (Draft)</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog
+      v-model="createModalVisible"
+      title="发起生产质检"
+      width="520px"
+      append-to-body
+      destroy-on-close
+    >
+      <el-form label-position="top" class="custom-el-form">
+        <el-form-item label="关联报工单">
+          <el-input :value="selectedReport?.reportNo" disabled class="font-mono" />
+        </el-form-item>
+        <el-form-item label="质检编号" required>
+          <el-input v-model="createForm.inspectionNo" class="font-mono" />
+        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="检验类型" required>
+              <el-select v-model="createForm.inspectionType" style="width: 100%">
+                <el-option label="首件检验 (First Article)" value="FIRST_ARTICLE" />
+                <el-option label="过程巡检 (In Process)" value="ROUTING_INSPECTION" />
+                <el-option label="完工总检 (Final Inspection)" value="FINAL_INSPECTION" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="抽样数量" required>
+              <el-input v-model="createForm.sampleQty" type="number" min="1" class="font-mono" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="createModalVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="submitting"
+            @click="submitCreateInspection"
+          >
+            保存质检单 (Draft)
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
 
     <!-- 模态框 2：提交检验结果 -->
-    <div v-if="submitModalVisible" class="modal-mask" @click.self="submitModalVisible = false">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">评定质检结论 — {{ selectedInspection?.inspectionNo }}</h3>
-          <button type="button" class="btn-close" @click="submitModalVisible = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitResult">
-          <div class="form-item">
-            <label>检验结论判定 <span class="req">*</span></label>
-            <select v-model="submitForm.result" class="form-select" required>
-              <option value="Passed">合格放行 (Passed)</option>
-              <option value="Failed">不合格超差 (Failed)</option>
-            </select>
-          </div>
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>合格数量 <span class="req">*</span></label>
-              <input v-model="submitForm.qualifiedQty" type="number" step="0.01" class="form-input font-mono" required />
-            </div>
-            <div class="form-item">
-              <label>不良品数量 <span class="req">*</span></label>
-              <input v-model="submitForm.defectQty" type="number" step="0.01" class="form-input font-mono" required />
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="submitModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="submitting">提交结论</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog
+      v-model="submitModalVisible"
+      :title="`评定质检结论 — ${selectedInspection?.inspectionNo || ''}`"
+      width="520px"
+      append-to-body
+      destroy-on-close
+    >
+      <el-form label-position="top" class="custom-el-form">
+        <el-form-item label="检验结论判定" required>
+          <el-select v-model="submitForm.result" style="width: 100%">
+            <el-option label="合格放行 (Passed)" value="Passed" />
+            <el-option label="不合格超差 (Failed)" value="Failed" />
+          </el-select>
+        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="合格数量" required>
+              <el-input v-model="submitForm.qualifiedQty" type="number" step="0.01" class="font-mono" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="不良品数量" required>
+              <el-input v-model="submitForm.defectQty" type="number" step="0.01" class="font-mono" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="submitModalVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="submitting"
+            @click="submitResult"
+          >
+            提交结论
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
 
     <!-- 模态框 3：不良品处置关闭 -->
-    <div v-if="closeModalVisible" class="modal-mask" @click.self="closeModalVisible = false">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">不良品处置闭环 — {{ selectedInspection?.inspectionNo }}</h3>
-          <button type="button" class="btn-close" @click="closeModalVisible = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitClose">
-          <div class="form-item">
-            <label>处置方式 <span class="req">*</span></label>
-            <select v-model="closeDisposition" class="form-select" required>
-              <option value="ISOLATE">隔离审查 (ISOLATE) - 移至 QualityHold 隔离区</option>
-              <option value="SCRAP">直接报废 (SCRAP) - 扣减制造在制品并计入损耗</option>
-              <option value="CLOSE">特采放行 (CLOSE) - 经工程评审特采让步接收</option>
-            </select>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="closeModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="submitting">确认处置闭环</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog
+      v-model="closeModalVisible"
+      :title="`不良品处置闭环 — ${selectedInspection?.inspectionNo || ''}`"
+      width="520px"
+      append-to-body
+      destroy-on-close
+    >
+      <el-form label-position="top" class="custom-el-form">
+        <el-form-item label="处置方式" required>
+          <el-select v-model="closeDisposition" style="width: 100%">
+            <el-option label="隔离审查 (ISOLATE) - 移至 QualityHold 隔离区" value="ISOLATE" />
+            <el-option label="直接报废 (SCRAP) - 扣减制造在制品并计入损耗" value="SCRAP" />
+            <el-option label="特采放行 (CLOSE) - 经工程评审特采让步接收" value="CLOSE" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="closeModalVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="submitting"
+            @click="submitClose"
+          >
+            确认处置闭环
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -254,6 +284,7 @@
  * 职责：展示工单报工记录，录入生产质检事实，对不合格进行隔离/报废/特采处置闭环
  */
 import { ref, reactive, computed, watch, onMounted } from "vue";
+import { ElMessage } from "element-plus";
 import { useCommand } from "@/composables/useCommand";
 import CommandFeedback from "@/components/common/CommandFeedback.vue";
 import StatusBadge from "@/components/common/StatusBadge.vue";
@@ -310,6 +341,7 @@ const allPassed = computed(() =>
   inspections.value.length > 0 && inspections.value.every((ins) => ins.result === "Passed" || ins.disposition)
 );
 
+/** 转换检验类型文本 */
 function inspectionTypeText(type: string): string {
   const map: Record<string, string> = {
     FIRST_ARTICLE: "首件检验",
@@ -319,6 +351,7 @@ function inspectionTypeText(type: string): string {
   return map[type] || type;
 }
 
+/** 加载当前工单的报工记录与质检单列表 */
 async function loadData() {
   if (!props.workOrderId) return;
   loadingReports.value = true;
@@ -342,6 +375,7 @@ async function loadData() {
   }
 }
 
+/** 打开新建质检单对话框 */
 function openCreateInspection(report: any) {
   selectedReport.value = report;
   createForm.inspectionNo = `INS-${Date.now().toString().slice(-6)}`;
@@ -350,6 +384,7 @@ function openCreateInspection(report: any) {
   createModalVisible.value = true;
 }
 
+/** 提交创建质检单 */
 async function submitCreateInspection() {
   if (!selectedReport.value) return;
   const report = selectedReport.value;
@@ -365,15 +400,17 @@ async function submitCreateInspection() {
       throw new Error("服务端未返回 inspection_id，已阻止继续办理质检结果");
     }
     createModalVisible.value = false;
+    ElMessage.success("质检单创建成功！");
     await loadData();
     emit("refresh");
   } catch (err: any) {
-    alert(`创建质检单失败：${err?.message || err}`);
+    ElMessage.error(`创建质检单失败：${err?.message || err}`);
   } finally {
     submitting.value = false;
   }
 }
 
+/** 打开评定质检结论对话框 */
 function openSubmitModal(ins: any) {
   selectedInspection.value = ins;
   submitForm.result = "Passed";
@@ -382,6 +419,7 @@ function openSubmitModal(ins: any) {
   submitModalVisible.value = true;
 }
 
+/** 提交质检评定结论 */
 async function submitResult() {
   if (!selectedInspection.value) return;
   const inspection = selectedInspection.value;
@@ -393,21 +431,24 @@ async function submitResult() {
       defectQty: submitForm.defectQty,
     }, key), { onConflict: loadData });
     submitModalVisible.value = false;
+    ElMessage.success("质检结论评定成功！");
     await loadData();
     emit("refresh");
   } catch (err: any) {
-    alert(`提交质检结论失败：${err?.message || err}`);
+    ElMessage.error(`提交质检结论失败：${err?.message || err}`);
   } finally {
     submitting.value = false;
   }
 }
 
+/** 打开不良品处置对话框 */
 function openCloseModal(ins: any) {
   selectedInspection.value = ins;
   closeDisposition.value = "ISOLATE";
   closeModalVisible.value = true;
 }
 
+/** 提交不良品处置闭环 */
 async function submitClose() {
   if (!selectedInspection.value) return;
   const inspection = selectedInspection.value;
@@ -415,10 +456,11 @@ async function submitClose() {
   try {
     await execute((key) => closeQualityInspection(inspection.id, closeDisposition.value, key), { onConflict: loadData });
     closeModalVisible.value = false;
+    ElMessage.success("不良品处置闭环已完成！");
     await loadData();
     emit("refresh");
   } catch (err: any) {
-    alert(`关闭处置失败：${err?.message || err}`);
+    ElMessage.error(`关闭处置失败：${err?.message || err}`);
   } finally {
     submitting.value = false;
   }
@@ -559,135 +601,9 @@ onMounted(() => {
   gap: 6px;
 }
 
-.btn-act-primary, .btn-act-cyan, .btn-act-warning {
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  cursor: pointer;
-  border: 1px solid transparent;
-}
-
-.btn-act-primary {
-  background: rgba(56, 189, 248, 0.15);
-  border-color: rgba(56, 189, 248, 0.3);
-  color: #38bdf8;
-}
-
-.btn-act-primary:hover {
-  background: #0284c7;
-  color: #ffffff;
-}
-
-.btn-act-cyan {
-  background: rgba(34, 211, 238, 0.15);
-  border-color: rgba(34, 211, 238, 0.3);
-  color: #22d3ee;
-}
-
-.btn-act-cyan:hover {
-  background: #0891b2;
-  color: #ffffff;
-}
-
-.btn-act-warning {
-  background: rgba(245, 158, 11, 0.15);
-  border-color: rgba(245, 158, 11, 0.3);
-  color: #fbbf24;
-}
-
-.btn-act-warning:hover {
-  background: #d97706;
-  color: #ffffff;
-}
-
-/* 模态弹窗 */
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
-.modal-card {
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
-  width: 100%;
-  max-width: 480px;
-  box-shadow: 0 20px 30px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.modal-title {
-  margin: 0;
-  font-size: 15px;
-  color: #f8fafc;
-}
-
-.btn-close {
-  background: none;
-  border: none;
+.custom-el-form :deep(.el-form-item__label) {
   color: #94a3b8;
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.modal-body {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.form-grid.two-col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.form-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-item label {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-.req { color: #f87171; }
-
-.form-input, .form-select {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  padding: 7px 10px;
-  border-radius: 6px;
   font-size: 13px;
-  outline: none;
-}
-
-.modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 14px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.2);
+  padding-bottom: 4px;
 }
 </style>

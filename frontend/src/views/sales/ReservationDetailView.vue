@@ -1,96 +1,105 @@
 <template>
-  <div v-if="visible && order" class="dialog-mask" @click.self="handleClose">
-    <div class="dialog-panel">
-      <div class="dialog-header">
-        <div class="header-left">
-          <h3 class="dialog-title">销售订单预留与库位分配详情</h3>
-          <span class="mono-no">{{ order.soNo }}</span>
-        </div>
-        <button type="button" class="btn-close" @click="handleClose">✕</button>
+  <el-dialog
+    :model-value="visible"
+    width="760px"
+    destroy-on-close
+    append-to-body
+    @close="handleClose"
+  >
+    <template #header>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="font-weight: 600; font-size: 16px; color: #f1f5f9">销售订单预留与库位分配详情</span>
+        <el-tag v-if="order" type="info" size="small">{{ order.soNo }}</el-tag>
       </div>
+    </template>
 
-      <div class="dialog-body">
-        <!-- 业务规则提示 -->
-        <div class="rule-box">
-          <div class="rule-icon">💡</div>
-          <div class="rule-text">
-            <strong>底层预留逻辑事实：</strong>
-            <span>在当前业务规范下，“直接拣货”在同一事务内优先使用未拣预留，不足部分在来源库位自动预留，再随实物同步迁移至发货暂存位（ShippingStaging）；发货出库时正式释放预留。本视图展示底层预留事实支撑审计追溯。</span>
+    <div v-if="order" class="dialog-body">
+      <!-- 业务规则提示 -->
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px"
+        title="底层预留逻辑事实"
+        description="在当前业务规范下，“直接拣货”在同一事务内优先使用未拣预留，不足部分在来源库位自动预留，再随实物同步迁移至发货暂存位（ShippingStaging）；发货出库时正式释放预留。本视图展示底层预留事实支撑审计追溯。"
+      />
+
+      <!-- 预留概览卡片 -->
+      <div class="overview-grid" style="display: flex; flex-direction: column; gap: 12px">
+        <el-card
+          v-for="line in order.lines"
+          :key="line.id"
+          shadow="never"
+          style="background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(140, 162, 184, 0.2)"
+        >
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px">
+            <span style="font-weight: 600; color: #f1f5f9">{{ line.productName }} ({{ line.sku }})</span>
+            <el-tag size="small" type="primary">行项: {{ line.lineNo }}</el-tag>
           </div>
-        </div>
-
-        <!-- 预留概览卡片 -->
-        <div class="overview-grid">
-          <div v-for="line in order.lines" :key="line.id" class="line-res-card">
-            <div class="card-top">
-              <span class="sku-name">{{ line.productName }} ({{ line.sku }})</span>
-              <span class="line-tag">行项: {{ line.lineNo }}</span>
+          <div class="card-nums">
+            <div class="num-item">
+              <span class="num-lbl">要求订购量</span>
+              <QuantityText :value="line.orderedQty" :unit="line.uom" />
             </div>
-            <div class="card-nums">
-              <div class="num-item">
-                <span class="num-lbl">要求订购量</span>
-                <QuantityText :value="line.orderedQty" :unit="line.uom" />
-              </div>
-              <div class="num-item">
-                <span class="num-lbl">累计预留量</span>
-                <QuantityText :value="line.reservedQty" :unit="line.uom" />
-              </div>
-              <div class="num-item">
-                <span class="num-lbl">已预留未拣</span>
-                <span :class="parseFloat(line.unpickedQty) > 0 ? 'text-amber' : ''">
-                  <QuantityText :value="line.unpickedQty" :unit="line.uom" />
-                </span>
-              </div>
-              <div class="num-item">
-                <span class="num-lbl">发货暂存占用</span>
-                <span :class="parseFloat(line.shippingStagedQty) > 0 ? 'text-cyan' : ''">
-                  <QuantityText :value="line.shippingStagedQty" :unit="line.uom" />
-                </span>
-              </div>
-              <div class="num-item">
-                <span class="num-lbl">库内有效预留</span>
-                <span class="text-success font-bold">
-                  <QuantityText :value="line.activeReservedQty" :unit="line.uom" />
-                </span>
-              </div>
+            <div class="num-item">
+              <span class="num-lbl">累计预留量</span>
+              <QuantityText :value="line.reservedQty" :unit="line.uom" />
             </div>
-
-            <!-- 异常释放按钮 -->
-            <div v-if="canRelease && parseFloat(line.unpickedQty) > 0" class="release-action-bar">
-              <span class="hint">存在已预留但未拣货数量，若终止履约可在此异常释放：</span>
-              <button
-                type="button"
-                class="btn-release-sm"
-                :disabled="releasing"
-                @click="openReleaseLine(line)"
-              >
-                释放未拣预留 ({{ line.unpickedQty }})
-              </button>
+            <div class="num-item">
+              <span class="num-lbl">已预留未拣</span>
+              <span :class="parseFloat(line.unpickedQty) > 0 ? 'text-amber' : ''">
+                <QuantityText :value="line.unpickedQty" :unit="line.uom" />
+              </span>
+            </div>
+            <div class="num-item">
+              <span class="num-lbl">发货暂存占用</span>
+              <span :class="parseFloat(line.shippingStagedQty) > 0 ? 'text-cyan' : ''">
+                <QuantityText :value="line.shippingStagedQty" :unit="line.uom" />
+              </span>
+            </div>
+            <div class="num-item">
+              <span class="num-lbl">库内有效预留</span>
+              <span class="text-success font-bold">
+                <QuantityText :value="line.activeReservedQty" :unit="line.uom" />
+              </span>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div class="dialog-footer">
-        <button type="button" class="btn btn-secondary" @click="handleClose">关闭</button>
+          <!-- 异常释放按钮 -->
+          <div v-if="canRelease && parseFloat(line.unpickedQty) > 0" class="release-action-bar" style="margin-top: 12px; display: flex; align-items: center; justify-content: space-between; padding-top: 10px; border-top: 1px dashed rgba(140, 162, 184, 0.2)">
+            <span class="hint" style="font-size: 12px; color: #8ca2b8">存在已预留但未拣货数量，若终止履约可在此异常释放：</span>
+            <el-button
+              type="danger"
+              size="small"
+              :disabled="releasing"
+              @click="openReleaseLine(line)"
+            >
+              释放未拣预留 ({{ line.unpickedQty }})
+            </el-button>
+          </div>
+        </el-card>
       </div>
     </div>
 
-    <!-- 释放预留对话框 -->
-    <ConfirmDialog
-      v-model:visible="isReleaseDialogOpen"
-      title="异常释放未拣预留"
-      :message="releaseDialogMessage"
-      danger
-      :loading="releasing"
-      @confirm="executeRelease"
-    >
-      <div class="release-reason-box">
-        <label>释放原因说明 <span class="req">*</span></label>
-        <input v-model="releaseReason" type="text" class="form-input" placeholder="如: 客户调减需求或人工完成前清理..." />
-      </div>
-    </ConfirmDialog>
-  </div>
+    <template #footer>
+      <el-button @click="handleClose">关闭</el-button>
+    </template>
+  </el-dialog>
+
+  <!-- 释放预留对话框 -->
+  <ConfirmDialog
+    v-model:visible="isReleaseDialogOpen"
+    title="异常释放未拣预留"
+    :message="releaseDialogMessage"
+    danger
+    :loading="releasing"
+    @confirm="executeRelease"
+  >
+    <div class="release-reason-box" style="margin-top: 12px">
+      <div style="font-size: 13px; margin-bottom: 6px; color: #cbd5e1">释放原因说明 <span style="color: #f43f5e">*</span></div>
+      <el-input v-model="releaseReason" placeholder="如: 客户调减需求或人工完成前清理..." />
+    </div>
+  </ConfirmDialog>
 </template>
 
 <script setup lang="ts">
@@ -99,6 +108,7 @@
  * 职责：展示订单各行项有效预留、发货暂存占用量，并支持异常释放未拣预留
  */
 import { ref, computed } from "vue";
+import { ElMessage } from "element-plus";
 import QuantityText from "@/components/common/QuantityText.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import type { SalesOrder, SalesOrderLine } from "@/types/sales";
@@ -147,7 +157,7 @@ function openReleaseLine(line: SalesOrderLine) {
 function executeRelease() {
   if (!props.order || !activeLineToRelease.value) return;
   if (!releaseReason.value.trim()) {
-    alert("必须填写释放原因！");
+    ElMessage.warning("必须填写释放原因！");
     return;
   }
   isReleaseDialogOpen.value = false;

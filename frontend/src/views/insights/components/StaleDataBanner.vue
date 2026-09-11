@@ -12,10 +12,14 @@
       </p>
     </div>
     <div class="banner-actions">
-      <button type="button" class="btn-sync-retry" :disabled="loading" @click="$emit('retry')">
-        <span v-if="loading" class="spinner">⏳</span>
-        <span>立即重试同步</span>
-      </button>
+      <el-button
+        type="warning"
+        size="small"
+        :loading="loading"
+        @click="$emit('retry')"
+      >
+        立即重试同步
+      </el-button>
     </div>
   </div>
 </template>
@@ -112,29 +116,6 @@ defineEmits<{
 .banner-actions {
   display: flex;
   align-items: center;
-}
-
-.btn-sync-retry {
-  padding: 7px 16px;
-  border-radius: 6px;
-  background: rgba(245, 158, 11, 0.2);
-  border: 1px solid rgba(245, 158, 11, 0.5);
-  color: #fbbf24;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s;
-}
-
-.btn-sync-retry:hover:not(:disabled) {
-  background: #f59e0b;
-  color: #0f172a;
-}
-
-.btn-sync-retry:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 @keyframes banner-fade-in {

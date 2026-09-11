@@ -1,117 +1,131 @@
 <template>
-  <div v-if="visible" class="modal-mask" @click.self="handleClose">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3 class="modal-title">设备 MQTT 接入凭证</h3>
-        <button type="button" class="btn-close" @click="handleClose">✕</button>
-      </div>
+  <el-dialog
+    :model-value="visible"
+    title="设备 MQTT 接入凭证"
+    width="580px"
+    append-to-body
+    destroy-on-close
+    @close="handleClose"
+  >
+    <div class="credential-dialog-body">
+      <!-- 步骤 1：尚未签发，确认生成 -->
+      <div v-if="!credentialResult" class="issue-confirm-pane">
+        <p class="desc-text">
+          正在为设备 <strong>{{ deviceName || deviceCode }}</strong> ({{ deviceCode }}) 申请签发新的 MQTT 接入身份凭证。
+        </p>
 
-      <div class="modal-body">
-        <!-- 步骤 1：尚未签发，确认生成 -->
-        <div v-if="!credentialResult" class="issue-confirm-pane">
-          <p class="desc-text">
-            正在为设备 <strong>{{ deviceName || deviceCode }}</strong> ({{ deviceCode }}) 申请签发新的 MQTT 接入身份凭证。
-          </p>
-
-          <div class="security-alert-box warning-theme">
-            <span class="alert-icon">⚠️</span>
-            <div class="alert-text">
-              <strong>安全接入规范：</strong>
-              <span>
-                接入凭证明文密匙将在创建成功后<strong>仅展示一次</strong>。关闭本对话框后，服务端仅保留哈希/引用标识，明文将不可再次回显或恢复。
-              </span>
-            </div>
-          </div>
-
-          <div class="issue-action-row">
-            <button
-              type="button"
-              class="btn btn-primary"
-              :disabled="loading"
-              @click="handleIssueCredential"
-            >
-              <span v-if="loading" class="spinner">⏳ </span>
-              <span>{{ loading ? "正在签发接入凭证..." : "立即签发设备接入凭证" }}</span>
-            </button>
+        <div class="security-alert-box warning-theme">
+          <span class="alert-icon">⚠️</span>
+          <div class="alert-text">
+            <strong>安全接入规范：</strong>
+            <span>
+              接入凭证明文密匙将在创建成功后<strong>仅展示一次</strong>。关闭本对话框后，服务端仅保留哈希/引用标识，明文将不可再次回显或恢复。
+            </span>
           </div>
         </div>
 
-        <!-- 步骤 2：签发成功，一次性明文展示 -->
-        <div v-else class="credential-display-pane">
-          <div class="security-alert-box danger-theme">
-            <span class="alert-icon">🔒</span>
-            <div class="alert-text">
-              <strong>一次性安全凭证（仅此展示一次）：</strong>
-              <span>
-                请立即复制并妥善保管以下设备接入参数。关闭此窗口后将永久无法再次查看明文！
-              </span>
-            </div>
-          </div>
-
-          <div class="credential-info-list">
-            <!-- 凭证引用标识 -->
-            <div class="info-row">
-              <span class="info-label">凭证引用标识:</span>
-              <span class="info-value font-mono">{{ credentialResult.credentialReference }}</span>
-            </div>
-
-            <!-- MQTT ClientId -->
-            <div class="info-row">
-              <span class="info-label">MQTT Client ID:</span>
-              <div class="copyable-box">
-                <span class="info-value font-mono">{{ credentialResult.mqttClientId }}</span>
-                <button type="button" class="btn-copy" @click="copyText(credentialResult.mqttClientId, 'clientId')">
-                  {{ copiedField === 'clientId' ? '已复制✓' : '复制' }}
-                </button>
-              </div>
-            </div>
-
-            <!-- MQTT Username -->
-            <div class="info-row">
-              <span class="info-label">MQTT 用户名:</span>
-              <div class="copyable-box">
-                <span class="info-value font-mono">{{ credentialResult.mqttUsername }}</span>
-                <button type="button" class="btn-copy" @click="copyText(credentialResult.mqttUsername, 'username')">
-                  {{ copiedField === 'username' ? '已复制✓' : '复制' }}
-                </button>
-              </div>
-            </div>
-
-            <!-- 明文 Secret Token -->
-            <div class="info-row highlight-secret-row">
-              <span class="info-label">明文接入密匙 (Secret):</span>
-              <div class="copyable-box">
-                <span class="info-value font-mono secret-text">{{ credentialResult.credentialSecret }}</span>
-                <button type="button" class="btn-copy btn-copy-primary" @click="copyText(credentialResult.credentialSecret, 'secret')">
-                  {{ copiedField === 'secret' ? '已复制✓' : '复制密匙' }}
-                </button>
-              </div>
-            </div>
-
-            <!-- 签发时间 -->
-            <div class="info-row">
-              <span class="info-label">签发有效时间:</span>
-              <span class="info-value font-mono text-muted">{{ credentialResult.createdAt }}</span>
-            </div>
-          </div>
+        <div class="issue-action-row">
+          <el-button
+            type="primary"
+            :loading="loading"
+            @click="handleIssueCredential"
+          >
+            {{ loading ? "正在签发接入凭证..." : "立即签发设备接入凭证" }}
+          </el-button>
         </div>
       </div>
 
-      <div class="modal-footer">
-        <button
-          type="button"
-          class="btn btn-secondary"
+      <!-- 步骤 2：签发成功，一次性明文展示 -->
+      <div v-else class="credential-display-pane">
+        <div class="security-alert-box danger-theme">
+          <span class="alert-icon">🔒</span>
+          <div class="alert-text">
+            <strong>一次性安全凭证（仅此展示一次）：</strong>
+            <span>
+              请立即复制并妥善保管以下设备接入参数。关闭此窗口后将永久无法再次查看明文！
+            </span>
+          </div>
+        </div>
+
+        <div class="credential-info-list">
+          <!-- 凭证引用标识 -->
+          <div class="info-row">
+            <span class="info-label">凭证引用标识:</span>
+            <span class="info-value font-mono">{{ credentialResult.credentialReference }}</span>
+          </div>
+
+          <!-- MQTT ClientId -->
+          <div class="info-row">
+            <span class="info-label">MQTT Client ID:</span>
+            <div class="copyable-box">
+              <span class="info-value font-mono">{{ credentialResult.mqttClientId }}</span>
+              <el-button
+                size="small"
+                type="primary"
+                plain
+                @click="copyText(credentialResult.mqttClientId, 'clientId')"
+              >
+                {{ copiedField === 'clientId' ? '已复制✓' : '复制' }}
+              </el-button>
+            </div>
+          </div>
+
+          <!-- MQTT Username -->
+          <div class="info-row">
+            <span class="info-label">MQTT 用户名:</span>
+            <div class="copyable-box">
+              <span class="info-value font-mono">{{ credentialResult.mqttUsername }}</span>
+              <el-button
+                size="small"
+                type="primary"
+                plain
+                @click="copyText(credentialResult.mqttUsername, 'username')"
+              >
+                {{ copiedField === 'username' ? '已复制✓' : '复制' }}
+              </el-button>
+            </div>
+          </div>
+
+          <!-- 明文 Secret Token -->
+          <div class="info-row highlight-secret-row">
+            <span class="info-label">明文接入密匙 (Secret):</span>
+            <div class="copyable-box">
+              <span class="info-value font-mono secret-text">{{ credentialResult.credentialSecret }}</span>
+              <el-button
+                size="small"
+                type="primary"
+                @click="copyText(credentialResult.credentialSecret, 'secret')"
+              >
+                {{ copiedField === 'secret' ? '已复制✓' : '复制密匙' }}
+              </el-button>
+            </div>
+          </div>
+
+          <!-- 签发时间 -->
+          <div class="info-row">
+            <span class="info-label">签发有效时间:</span>
+            <span class="info-value font-mono text-muted">{{ credentialResult.createdAt }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button
+          :type="credentialResult ? 'primary' : 'default'"
           @click="handleClose"
         >
           {{ credentialResult ? "我已保存完毕，安全关闭" : "取消" }}
-        </button>
-      </div>
-    </div>
-  </div>
+        </el-button>
+      </span>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref } from "vue";
+import { ElMessage } from "element-plus";
 import type { DeviceCredentialCreateResult } from "../../types/iot";
 import { createDeviceCredential } from "../../api/iot";
 
@@ -145,10 +159,11 @@ async function handleIssueCredential() {
     const res = await createDeviceCredential(props.deviceId);
     if (res.data) {
       credentialResult.value = res.data;
+      ElMessage.success("凭证已成功签发！请立即保存明文密匙。");
       emit("issued", res.data);
     }
   } catch (err: any) {
-    alert(`签发凭证失败：${err.message}`);
+    ElMessage.error(`签发凭证失败：${err.message}`);
   } finally {
     loading.value = false;
   }
@@ -170,11 +185,12 @@ async function copyText(text: string, field: string) {
       document.body.removeChild(input);
     }
     copiedField.value = field;
+    ElMessage.success("已复制到剪贴板");
     setTimeout(() => {
       if (copiedField.value === field) copiedField.value = "";
     }, 2000);
   } catch (err) {
-    console.warn("复制文本失败:", err);
+    ElMessage.error("复制文本失败，请手动选择复制");
   }
 }
 
@@ -189,52 +205,7 @@ function handleClose() {
 </script>
 
 <style scoped>
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(4px);
-  z-index: 1100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
-.modal-card {
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
-  width: 100%;
-  max-width: 580px;
-  box-shadow: 0 25px 35px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.modal-title {
-  margin: 0;
-  font-size: 16px;
-  color: #f8fafc;
-}
-
-.btn-close {
-  background: none;
-  border: none;
-  color: #94a3b8;
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.modal-body {
-  padding: 20px;
+.credential-dialog-body {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -332,41 +303,5 @@ function handleClose() {
   color: #38bdf8;
   font-weight: 700;
   letter-spacing: 0.5px;
-}
-
-.btn-copy {
-  background: rgba(51, 65, 85, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #cbd5e1;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s;
-}
-
-.btn-copy:hover {
-  background: rgba(71, 85, 105, 1);
-  color: #ffffff;
-}
-
-.btn-copy-primary {
-  background: #0284c7;
-  border-color: #0369a1;
-  color: #ffffff;
-}
-
-.btn-copy-primary:hover {
-  background: #0369a1;
-}
-
-.modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 14px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.2);
 }
 </style>

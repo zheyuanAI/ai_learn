@@ -9,9 +9,14 @@
     >
       <template #actions>
         <!-- 修改用途：只有具备采购订单创建权限的角色才显示新建入口。 -->
-        <button v-if="!isReceiptMode && hasPermission('pur:order:create')" type="button" class="btn-primary" @click="isCreateModalOpen = true">
-          <span>＋ 新建采购订单</span>
-        </button>
+        <el-button
+          v-if="!isReceiptMode && hasPermission('pur:order:create')"
+          type="primary"
+          :icon="Plus"
+          @click="isCreateModalOpen = true"
+        >
+          新建采购订单
+        </el-button>
       </template>
     </PageHeader>
 
@@ -25,17 +30,18 @@
     </div>
 
     <!-- 顶层状态快速筛选标签条 -->
-    <div class="status-tabs-row">
-      <button
-        v-for="st in statusFilters"
-        :key="st.value"
-        type="button"
-        class="status-tab-btn"
-        :class="{ 'is-active': queryParams.status === st.value }"
-        @click="switchStatusFilter(st.value)"
+    <div class="status-tabs-row" style="margin-bottom: 14px">
+      <el-radio-group
+        v-model="queryParams.status"
+        @change="(val) => switchStatusFilter(String(val || ''))"
       >
-        <span>{{ st.label }}</span>
-      </button>
+        <el-radio-button
+          v-for="st in statusFilters"
+          :key="st.value"
+          :value="st.value"
+          :label="st.label"
+        />
+      </el-radio-group>
     </div>
 
     <!-- 筛选搜索栏 -->
@@ -61,9 +67,15 @@
     >
       <template #action>
         <!-- 修改用途：避免仓库/质检角色看到无权执行的采购订单创建入口。 -->
-        <button v-if="hasPermission('pur:order:create')" type="button" class="btn-create-sm" @click="isCreateModalOpen = true">
+        <el-button
+          v-if="hasPermission('pur:order:create')"
+          type="primary"
+          size="small"
+          :icon="Plus"
+          @click="isCreateModalOpen = true"
+        >
           立即新建采购单
-        </button>
+        </el-button>
       </template>
     </EmptyState>
 
@@ -113,19 +125,18 @@
 
       <!-- 操作列 -->
       <template #actions="{ row }">
-        <div class="table-actions">
-          <button type="button" class="btn-link" @click="openOrderDetail(row)">
-            详情
-          </button>
-          <button
-            v-if="hasPermission('pur:receipt:confirm') && (row.status === 'Approved' || row.status === 'PartiallyReceived')"
-            type="button"
-            class="btn-link act-receive"
-            @click="openReceiptConfirm(row)"
-          >
-            验收接收
-          </button>
-        </div>
+        <el-button type="primary" link size="small" @click="openOrderDetail(row)">
+          详情
+        </el-button>
+        <el-button
+          v-if="hasPermission('pur:receipt:confirm') && (row.status === 'Approved' || row.status === 'PartiallyReceived')"
+          type="success"
+          link
+          size="small"
+          @click="openReceiptConfirm(row)"
+        >
+          验收接收
+        </el-button>
       </template>
     </DataTable>
 
@@ -147,87 +158,104 @@
     />
 
     <!-- 新建采购单弹窗 -->
-    <div v-if="isCreateModalOpen" class="modal-mask" @click.self="isCreateModalOpen = false">
-      <div class="modal-panel">
-        <div class="modal-header">
-          <h3 class="modal-title">新建采购订单</h3>
-          <button type="button" class="btn-close" @click="isCreateModalOpen = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitCreateOrder">
-          <div v-if="isOptionsLoading" class="options-hint text-muted text-sm">
-            ⏳ 正在校验并拉取基础主数据...
-          </div>
-          <div v-else-if="optionsErrorMessage" class="options-hint text-warning text-sm flex-between">
-            <span>⚠️ {{ optionsErrorMessage }}</span>
-            <button type="button" class="btn-retry-link" @click="loadCreateOptions">重试拉取</button>
-          </div>
-          <div class="options-search-row">
-            <label for="purchase-option-keyword">主数据搜索</label>
-            <input
-              id="purchase-option-keyword"
-              v-model="createOptionKeyword"
-              type="search"
-              class="form-input"
-              placeholder="输入供应商、仓库或物料编码/名称后回车搜索"
-              @keyup.enter="loadCreateOptions"
+    <el-dialog
+      v-model="isCreateModalOpen"
+      title="新建采购订单"
+      width="620px"
+      destroy-on-close
+    >
+      <el-form label-width="120px" @submit.prevent="submitCreateOrder">
+        <el-alert
+          v-if="optionsErrorMessage"
+          type="warning"
+          :title="optionsErrorMessage"
+          show-icon
+          style="margin-bottom: 14px"
+        >
+          <template #default>
+            <el-button type="primary" link size="small" @click="loadCreateOptions">重试拉取</el-button>
+          </template>
+        </el-alert>
+
+        <el-form-item label="主数据搜索">
+          <el-input
+            v-model="createOptionKeyword"
+            placeholder="输入供应商、仓库或物料编码/名称后回车搜索"
+            clearable
+            @keyup.enter="loadCreateOptions"
+          >
+            <template #append>
+              <el-button :icon="Search" @click="loadCreateOptions" />
+            </template>
+          </el-input>
+        </el-form-item>
+
+        <el-form-item label="供应商" required>
+          <el-select v-model="createForm.supplierId" placeholder="请选择供应商" filterable style="width: 100%">
+            <el-option
+              v-for="supplier in suppliers"
+              :key="supplier.id"
+              :label="`${supplier.supplierCode} - ${supplier.supplierName}`"
+              :value="supplier.id"
             />
-            <button type="button" class="btn-retry-link" @click="loadCreateOptions">搜索</button>
-          </div>
-          <div class="form-item">
-            <label>供应商 <span class="req">*</span></label>
-            <select v-model="createForm.supplierId" class="form-select" required>
-              <option value="">请选择供应商</option>
-              <option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">
-                {{ supplier.supplierCode }} - {{ supplier.supplierName }}
-              </option>
-            </select>
-          </div>
-          <div class="form-row">
-            <div class="form-item">
-              <label>目标仓库 <span class="req">*</span></label>
-              <select v-model="createForm.targetWarehouseId" class="form-select" required>
-                <option value="">请选择目标仓库</option>
-                <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">
-                  {{ warehouse.code }} - {{ warehouse.name }}
-                </option>
-              </select>
-            </div>
-            <div class="form-item">
-              <label>计划到货日期 <span class="req">*</span></label>
-              <input v-model="createForm.expectedArrivalDate" type="date" class="form-input" required />
-            </div>
-          </div>
-          <div class="form-item">
-            <label>采购商品物料 <span class="req">*</span></label>
-            <select v-model="createForm.productId" class="form-select" required>
-              <option value="">请选择物料</option>
-              <option v-for="product in products" :key="product.id" :value="product.id">
-                {{ product.sku }} - {{ product.name }}
-              </option>
-            </select>
-          </div>
-          <div class="form-item">
-            <label>采购数量 <span class="req">*</span></label>
-            <input v-model="createForm.orderedQty" type="text" class="form-input" required placeholder="如: 80" />
-          </div>
-          <div class="form-item">
-            <label>关联来源工单 (可选，用于追溯)</label>
-            <select v-model="createForm.sourceWorkOrderId" class="form-select">
-              <option value="">不关联来源工单</option>
-              <option v-for="workOrder in workOrders" :key="workOrder.id" :value="workOrder.id">
-                {{ workOrder.workOrderNo }}
-              </option>
-            </select>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn-secondary" @click="isCreateModalOpen = false">取消</button>
-            <button type="submit" class="btn-primary" :disabled="isCreating">
-              {{ isCreating ? '创建中...' : '确认生成采购单' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="目标仓库" required>
+          <el-select v-model="createForm.targetWarehouseId" placeholder="请选择目标仓库" style="width: 100%">
+            <el-option
+              v-for="warehouse in warehouses"
+              :key="warehouse.id"
+              :label="`${warehouse.code} - ${warehouse.name}`"
+              :value="warehouse.id"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="计划到货日期" required>
+          <el-date-picker
+            v-model="createForm.expectedArrivalDate"
+            type="date"
+            placeholder="选择日期"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+          />
+        </el-form-item>
+
+        <el-form-item label="采购商品物料" required>
+          <el-select v-model="createForm.productId" placeholder="请选择物料" filterable style="width: 100%">
+            <el-option
+              v-for="product in products"
+              :key="product.id"
+              :label="`${product.sku} - ${product.name}`"
+              :value="product.id"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="采购数量" required>
+          <el-input v-model="createForm.orderedQty" placeholder="如: 80" />
+        </el-form-item>
+
+        <el-form-item label="关联来源工单">
+          <el-select v-model="createForm.sourceWorkOrderId" placeholder="不关联来源工单 (可选，用于追溯)" clearable style="width: 100%">
+            <el-option label="不关联来源工单" value="" />
+            <el-option
+              v-for="workOrder in workOrders"
+              :key="workOrder.id"
+              :label="workOrder.workOrderNo"
+              :value="workOrder.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="isCreateModalOpen = false">取消</el-button>
+        <el-button type="primary" :loading="isCreating" @click="submitCreateOrder">
+          {{ isCreating ? '创建中...' : '确认生成采购单' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -237,6 +265,8 @@
  * 职责：展示采购订单队列，支持生命周期状态筛选、新建采购单与快速验收入库
  */
 import { ref, reactive, computed, onMounted } from "vue";
+import { Plus, Search } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { useCommand } from "@/composables/useCommand";
 import CommandFeedback from "@/components/common/CommandFeedback.vue";
 import { useRoute, useRouter } from "vue-router";
@@ -357,7 +387,30 @@ async function fetchOrders() {
       keyword: queryParams.keyword,
       status: queryParams.status,
     });
-    orderList.value = res.data.records;
+    const supplierMap = new Map(suppliers.value.map((item) => [String(item.id), item]));
+    const productMap = new Map(products.value.map((item) => [String(item.id), item]));
+    const warehouseMap = new Map(warehouses.value.map((item) => [String(item.id), item]));
+    orderList.value = (res.data.records || []).map((order) => {
+      const supplier = supplierMap.get(String(order.supplierId));
+      const lines = (order.lines || []).map((line) => {
+        const product = productMap.get(String(line.productId));
+        const warehouse = warehouseMap.get(String(line.targetWarehouseId));
+        return {
+          ...line,
+          sku: line.sku || product?.sku || String(line.productId),
+          productName: line.productName || product?.name || String(line.productId),
+          spec: line.spec || product?.spec,
+          targetWarehouseName: line.targetWarehouseName || warehouse?.name || String(line.targetWarehouseId),
+        };
+      });
+      return {
+        ...order,
+        supplierCode: order.supplierCode || supplier?.supplierCode || String(order.supplierId),
+        supplierName: order.supplierName || supplier?.supplierName || String(order.supplierId),
+        warehouseName: order.warehouseName || lines[0]?.targetWarehouseName,
+        lines,
+      };
+    });
     totalCount.value = res.data.total;
     viewState.value = orderList.value.length === 0 ? "empty" : "ready";
   } catch (err: any) {
@@ -414,11 +467,20 @@ async function handleConfirmReceipt(payload: any) {
       throw new Error("收货接口未返回 receiptId 或收货行 ID，已停止进入质检流程。");
     }
 
-    // 成功提示并引导进入质检（修复 F04）
+    // 成功提示并引导进入质检（使用 ElMessageBox 替代原生 confirm）
     const poNo = selectedOrderForReceipt.value?.poNo || "";
     // 修改用途：质检上下文的采购订单 ID 必须以服务端返回的收货事实为准，避免列表行缓存或旧数据把错误订单 ID 带入后续流程。
     const orderId = String(persistedReceipt?.purchaseOrderId || selectedOrderForReceipt.value?.id || "");
-    if (confirm(`采购到货验收成功！实收货物已送入 QualityHold 质量隔离位。\n\n订单号: ${poNo}\n收货凭证号: ${payload.receiptNo || returnedReceiptId}\n\n是否立即前往【采购到货质检】录入检验事实？`)) {
+    try {
+      await ElMessageBox.confirm(
+        `采购到货验收成功！实收货物已送入 QualityHold 质量隔离位。\n\n订单号: ${poNo}\n收货凭证号: ${payload.receiptNo || returnedReceiptId}\n\n是否立即前往【采购到货质检】录入检验事实？`,
+        "到货验收成功",
+        {
+          confirmButtonText: "前往质检",
+          cancelButtonText: "留在列表",
+          type: "success",
+        }
+      );
       router.push({
         path: "/purchasing/quality",
         query: {
@@ -432,9 +494,11 @@ async function handleConfirmReceipt(payload: any) {
           productId: String(persistedReceipt.lines[0].productId || ""),
         },
       });
+    } catch {
+      // 用户留在当前列表
     }
   } catch (err: any) {
-    alert(err?.message || "收货失败");
+    ElMessage.error(err?.message || "收货失败");
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
@@ -464,9 +528,10 @@ async function submitCreateOrder() {
       ],
     }, key), { onConflict: fetchOrders });
     isCreateModalOpen.value = false;
+    ElMessage.success("采购订单创建成功！");
     await fetchOrders();
   } catch (err: any) {
-    alert(err?.message || "创建采购单失败");
+    ElMessage.error(err?.message || "创建采购单失败");
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
@@ -538,12 +603,13 @@ async function loadCreateOptions() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   // 若从 /purchasing/receipts 路由进入，默认筛选已审核可收货状态
   if (isReceiptMode.value && !queryParams.status) {
     queryParams.status = "Approved";
   }
-  fetchOrders();
+  await loadCreateOptions();
+  await fetchOrders();
   loadCreateOptions();
 });
 </script>

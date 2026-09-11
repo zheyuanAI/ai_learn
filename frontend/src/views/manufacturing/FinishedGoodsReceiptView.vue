@@ -8,15 +8,14 @@
       description="将车间已检验合格且尚未入库的产成品办理成品入库。入库确认后通过库存应用服务真实增加成品库位实物库存。"
     >
       <template #actions>
-        <button
+        <el-button
           v-if="hasPermission('mes:finished:receipt')"
-          type="button"
-          class="btn btn-primary"
+          type="primary"
+          :icon="Plus"
           @click="openCreateModal"
         >
-          <span class="btn-icon">＋</span>
-          <span>新建成品入库单</span>
-        </button>
+          新建成品入库单
+        </el-button>
       </template>
     </PageHeader>
 
@@ -29,20 +28,36 @@
     >
       <div class="filter-select-group">
         <label class="filter-label">所属工单：</label>
-        <select v-model="selectedWorkOrderId" class="filter-select" @change="handleWorkOrderFilterChange">
-          <option value="">请选择生产工单</option>
-          <option v-for="wo in workOrders" :key="wo.id" :value="String(wo.id)">
-            {{ wo.workOrderNo }} - {{ wo.productName || '工单' }} ({{ wo.status }})
-          </option>
-        </select>
+        <el-select
+          v-model="selectedWorkOrderId"
+          placeholder="请选择生产工单"
+          filterable
+          clearable
+          style="width: 260px"
+          @change="handleWorkOrderFilterChange"
+        >
+          <el-option label="全部工单" value="" />
+          <el-option
+            v-for="wo in workOrders"
+            :key="wo.id"
+            :label="`${wo.workOrderNo} - ${wo.productName || '工单'} (${wo.status})`"
+            :value="String(wo.id)"
+          />
+        </el-select>
       </div>
       <div class="filter-select-group">
         <label class="filter-label">状态：</label>
-        <select v-model="queryParams.status" class="filter-select" @change="handleSearch">
-          <option value="">全部状态</option>
-          <option value="Draft">草稿待入库 (Draft)</option>
-          <option value="Confirmed">已确认入库 (Confirmed)</option>
-        </select>
+        <el-select
+          v-model="queryParams.status"
+          placeholder="全部状态"
+          clearable
+          style="width: 170px"
+          @change="handleSearch"
+        >
+          <el-option label="全部状态" value="" />
+          <el-option label="草稿待入库 (Draft)" value="Draft" />
+          <el-option label="已确认入库 (Confirmed)" value="Confirmed" />
+        </el-select>
       </div>
     </FilterBar>
 
@@ -112,112 +127,145 @@
       <template #actions="{ row }">
         <div class="action-btn-group">
           <!-- 确认入库 (Draft -> Confirmed) -->
-          <button
+          <el-button
             v-if="row.status === 'Draft'"
-            type="button"
-            class="btn-text text-primary"
+            link
+            type="primary"
             :disabled="!isActionAllowed(row, 'confirm')"
             :title="getActionDisabledReason(row, 'confirm') || '确认成品入库'"
             @click="promptConfirm(row)"
           >
             确认入库
-          </button>
+          </el-button>
           <span v-else class="text-muted font-xs">已完成增加</span>
         </div>
       </template>
     </DataTable>
 
     <!-- 新建成品入库单对话框 -->
-    <div v-if="createModalVisible" class="modal-mask" @click.self="createModalVisible = false">
-      <div class="modal-card modal-large">
-        <div class="modal-header">
-          <h3 class="modal-title">新建成品入库申请单</h3>
-          <button type="button" class="btn-close" @click="createModalVisible = false">✕</button>
+    <el-dialog
+      v-model="createModalVisible"
+      title="新建成品入库申请单"
+      width="640px"
+      append-to-body
+      destroy-on-close
+    >
+      <div class="dialog-content-wrapper">
+        <div class="options-search-row">
+          <label for="receipt-option-keyword">目录搜索</label>
+          <el-input
+            id="receipt-option-keyword"
+            v-model="masterDataKeyword"
+            clearable
+            placeholder="输入工单、仓库或库位编码/名称后回车搜索"
+            @keyup.enter="loadMasterData"
+          >
+            <template #append>
+              <el-button :icon="Search" @click="loadMasterData">搜索</el-button>
+            </template>
+          </el-input>
         </div>
+        <div v-if="masterDataLoading" class="options-hint text-muted">⏳ 正在加载真实主数据目录...</div>
+        <div v-else-if="masterDataError" class="options-hint text-warning">⚠️ {{ masterDataError }}</div>
 
-        <form class="modal-body" @submit.prevent="submitCreateReceipt">
-          <div class="options-search-row">
-            <label for="receipt-option-keyword">目录搜索</label>
-            <input
-              id="receipt-option-keyword"
-              v-model="masterDataKeyword"
-              type="search"
-              class="form-input"
-              placeholder="输入工单、仓库或库位编码/名称后回车搜索"
-              @keyup.enter="loadMasterData"
-            />
-            <button type="button" class="btn-text text-primary" @click="loadMasterData">搜索</button>
-          </div>
-          <div v-if="masterDataLoading" class="options-hint text-muted">⏳ 正在加载真实主数据目录...</div>
-          <div v-else-if="masterDataError" class="options-hint text-warning">⚠️ {{ masterDataError }}</div>
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>生产工单 <span class="req">*</span></label>
-              <select v-model="createForm.workOrderId" class="form-input" required @change="onModalWorkOrderChange">
-                <option value="">请选择真实工单</option>
-                <option v-for="workOrder in workOrders" :key="workOrder.id" :value="String(workOrder.id)">
-                  {{ workOrder.workOrderNo }} - {{ workOrder.productName || '工单' }}
-                </option>
-              </select>
-            </div>
-            <div class="form-item">
-              <label>成品入库数量 <span class="req">*</span></label>
-              <input
-                v-model="createForm.receiptQty"
-                type="number"
-                min="0.01"
-                step="0.01"
-                :max="maxEligibleQuantity > 0 ? maxEligibleQuantity : undefined"
-                class="form-input font-mono"
-                placeholder="例如 100.00"
-                required
-              />
-            </div>
-          </div>
+        <el-form label-position="top" class="custom-el-form">
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="生产工单" required>
+                <el-select
+                  v-model="createForm.workOrderId"
+                  placeholder="请选择真实工单"
+                  filterable
+                  style="width: 100%"
+                  @change="onModalWorkOrderChange"
+                >
+                  <el-option
+                    v-for="workOrder in workOrders"
+                    :key="workOrder.id"
+                    :label="`${workOrder.workOrderNo} - ${workOrder.productName || '工单'}`"
+                    :value="String(workOrder.id)"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="成品入库数量" required>
+                <el-input
+                  v-model="createForm.receiptQty"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  :max="maxEligibleQuantity > 0 ? maxEligibleQuantity : undefined"
+                  placeholder="例如 100.00"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
 
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>目标入库仓库 <span class="req">*</span></label>
-              <select v-model="createForm.warehouseId" class="form-input" required @change="loadLocations">
-                <option value="">请选择真实仓库</option>
-                <option v-for="warehouse in warehouses" :key="warehouse.id" :value="String(warehouse.id)">
-                  {{ warehouse.name }} ({{ warehouse.code }})
-                </option>
-              </select>
-            </div>
-            <div class="form-item">
-              <label>目标货架库位 <span class="req">*</span></label>
-              <select v-model="createForm.locationId" class="form-input" required :disabled="!createForm.warehouseId">
-                <option value="">{{ !createForm.warehouseId ? '请先选择仓库' : '请选择库位' }}</option>
-                <option v-for="location in locations" :key="location.id" :value="String(location.id)">
-                  {{ location.code }} ({{ location.name }}) - {{ location.type }}
-                </option>
-              </select>
-            </div>
-          </div>
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="目标入库仓库" required>
+                <el-select
+                  v-model="createForm.warehouseId"
+                  placeholder="请选择真实仓库"
+                  filterable
+                  style="width: 100%"
+                  @change="loadLocations"
+                >
+                  <el-option
+                    v-for="warehouse in warehouses"
+                    :key="warehouse.id"
+                    :label="`${warehouse.name} (${warehouse.code})`"
+                    :value="String(warehouse.id)"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="目标货架库位" required>
+                <el-select
+                  v-model="createForm.locationId"
+                  :placeholder="!createForm.warehouseId ? '请先选择仓库' : '请选择库位'"
+                  :disabled="!createForm.warehouseId"
+                  filterable
+                  style="width: 100%"
+                >
+                  <el-option
+                    v-for="location in locations"
+                    :key="location.id"
+                    :label="`${location.code} (${location.name}) - ${location.type}`"
+                    :value="String(location.id)"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
 
           <div v-if="createForm.warehouseId && !masterDataLoading && !masterDataError && locations.length === 0" class="options-hint text-warning">
             当前仓库没有启用的 Storage 类型库位，请先在库位管理中创建或启用 Storage 库位。
           </div>
 
-          <p class="modal-hint">
+          <div class="modal-hint">
             {{ maxEligibleHint }}
-          </p>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="createModalVisible = false">取消</button>
-            <button
-              type="submit"
-              class="btn btn-primary"
-              :disabled="isSubmitting || !receiptQuantityValid || !createForm.locationId || locations.length === 0"
-              :title="receiptQuantityValid ? '保存入库单 (草稿)' : '入库数量必须在已检验合格且未入库余额内'"
-            >
-              保存入库单 (草稿)
-            </button>
           </div>
-        </form>
+        </el-form>
       </div>
-    </div>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="createModalVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="isSubmitting"
+            :disabled="!receiptQuantityValid || !createForm.locationId || locations.length === 0"
+            :title="receiptQuantityValid ? '保存入库单 (草稿)' : '入库数量必须在已检验合格且未入库余额内'"
+            @click="submitCreateReceipt"
+          >
+            保存入库单 (草稿)
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
 
     <!-- 确认入库二次确认 -->
     <ConfirmDialog
@@ -234,6 +282,8 @@
 import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
 import type { AllowedAction } from "../../types/common";
 import { ref, reactive, computed, onMounted } from "vue";
+import { Plus, Search } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import { useCommand } from "@/composables/useCommand";
 import CommandFeedback from "@/components/common/CommandFeedback.vue";
 import { useRoute, useRouter } from "vue-router";
@@ -339,16 +389,17 @@ const maxEligibleHint = computed(() => {
   return `工单 ${wo.workOrderNo}：累计质检合格 ${wo.qualifiedQty || "0"} 件，已完工入库 ${wo.receivedQty || "0"} 件；当前最大可申报入库量为 ${maxEligibleQuantity.value} 件。`;
 });
 
-// 替换为调用 actionGuard 的版本
+/** 检查指定操作是否被后端或状态机允许 */
 function isActionAllowed(item: { allowedActions?: AllowedAction[] | null }, action: string): boolean {
   return checkAction(item.allowedActions, action);
 }
 
-// 替换为调用 actionGuard 的版本
+/** 获取指定操作被禁用的原因提示 */
 function getActionDisabledReason(item: { allowedActions?: AllowedAction[] | null }, action: string): string | undefined {
   return getDisabledReason(item.allowedActions, action);
 }
 
+/** 分页获取指定工单的成品入库记录 */
 async function fetchReceiptList() {
   if (!selectedWorkOrderId.value) {
     receiptList.value = [];
@@ -384,15 +435,18 @@ async function fetchReceiptList() {
   }
 }
 
+/** 切换所属工单筛选 */
 function handleWorkOrderFilterChange() {
   fetchReceiptList();
 }
 
+/** 筛选查询 */
 function handleSearch() {
   queryParams.page = 1;
   fetchReceiptList();
 }
 
+/** 重置筛选条件 */
 function handleReset() {
   queryParams.keyword = "";
   queryParams.status = "";
@@ -400,11 +454,13 @@ function handleReset() {
   fetchReceiptList();
 }
 
+/** 分页改变处理 */
 function handlePageChange(page: number) {
   queryParams.page = page;
   fetchReceiptList();
 }
 
+/** 打开新建成品入库申请单对话框 */
 async function openCreateModal() {
   createForm.workOrderId = selectedWorkOrderId.value || (workOrders.value[0] ? String(workOrders.value[0].id) : "");
   if (warehouses.value.length > 0) {
@@ -415,6 +471,7 @@ async function openCreateModal() {
   createModalVisible.value = true;
 }
 
+/** 弹窗内工单变更处理，自动带入合格未入库数量 */
 function onModalWorkOrderChange() {
   if (!createForm.workOrderId) return;
   const wo = workOrders.value.find((w) => String(w.id) === String(createForm.workOrderId));
@@ -427,8 +484,12 @@ function onModalWorkOrderChange() {
   }
 }
 
+/** 提交新建成品入库申请单 */
 async function submitCreateReceipt() {
-  if (!createForm.workOrderId || !receiptQuantityValid.value || !createForm.warehouseId || !createForm.locationId) return;
+  if (!createForm.workOrderId || !receiptQuantityValid.value || !createForm.warehouseId || !createForm.locationId) {
+    ElMessage.warning("请完整填写合格的入库信息");
+    return;
+  }
   // 修改用途：成品入库单号是服务端事实的必填标识，由页面一次生成并在幂等执行期间复用。
   const receiptNo = `FGR-${crypto.randomUUID()}`;
   try {
@@ -437,28 +498,31 @@ async function submitCreateReceipt() {
       throw new Error("服务端未返回成品入库单 ID，已阻止继续确认");
     }
     createModalVisible.value = false;
-    alert("成品入库申请单创建成功！请在列表点击【确认入库】将货物正式移入库位。");
+    ElMessage.success("成品入库申请单创建成功！请在列表点击【确认入库】将货物正式移入库位。");
     selectedWorkOrderId.value = createForm.workOrderId;
     await fetchReceiptList();
   } catch (err: any) {
-    alert(`创建入库单失败：${err.message}`);
-  } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
+    ElMessage.error(`创建入库单失败：${err.message}`);
+  }
 }
 
+/** 提示确认成品入库对话框 */
 function promptConfirm(item: FinishedGoodsReceiptItem) {
   confirmDialog.item = item;
   confirmDialog.visible = true;
 }
 
+/** 执行成品入库确认 */
 async function handleExecuteConfirm() {
   if (!confirmDialog.item) return;
   confirmDialog.loading = true;
   try {
     await execute((key) => confirmFinishedGoodsReceipt(confirmDialog.item!.id as string, key), { onConflict: fetchReceiptList });
     confirmDialog.visible = false;
+    ElMessage.success("成品入库确认已成功完成！");
     await fetchReceiptList();
   } catch (err: any) {
-    alert(`确认入库失败：${err.message}`);
+    ElMessage.error(`确认入库失败：${err.message}`);
   } finally {
     confirmDialog.loading = false;
   }
@@ -545,16 +609,6 @@ async function loadLocations() {
   color: #94a3b8;
 }
 
-.filter-select {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  outline: none;
-}
-
 .highlight-code {
   color: #38bdf8;
   font-weight: 600;
@@ -580,71 +634,37 @@ async function loadLocations() {
   justify-content: center;
 }
 
-.btn-text {
-  background: none;
-  border: none;
-  font-size: 12px;
-  cursor: pointer;
-  padding: 2px 6px;
-}
-
-.btn-text:hover:not(:disabled) {
-  text-decoration: underline;
-}
-
-.btn-text:disabled {
-  color: #64748b;
-  cursor: not-allowed;
-  text-decoration: none;
-}
-
 .text-primary { color: #38bdf8 !important; }
 .font-xs { font-size: 11px; }
 
-/* 模态框 */
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
-.modal-card {
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
-  width: 100%;
-  max-width: 520px;
-  box-shadow: 0 20px 30px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-}
-
-.modal-large { max-width: 620px; }
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.modal-title {
-  margin: 0;
-  font-size: 16px;
-  color: #f8fafc;
-}
-
-.modal-body {
-  padding: 20px;
+/* 模态框内部样式 */
+.dialog-content-wrapper {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.options-search-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.options-search-row label {
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.options-hint {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(30, 41, 59, 0.6);
+  font-size: 12px;
 }
 
 .modal-hint {
@@ -652,80 +672,14 @@ async function loadLocations() {
   font-size: 12px;
   color: #94a3b8;
   background: rgba(30, 41, 59, 0.5);
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.form-grid.two-col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.form-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-item label {
-  font-size: 12px;
+.custom-el-form :deep(.el-form-item__label) {
   color: #94a3b8;
-}
-
-.options-search-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 6px;
-}
-
-.options-search-row label {
-  flex: 0 0 auto;
-}
-
-.options-search-row .form-input {
-  flex: 1;
-}
-
-.options-hint {
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: rgba(30, 41, 59, 0.6);
-  font-size: 12px;
-}
-
-.req { color: #f87171; }
-
-.form-input {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  padding: 8px 12px;
-  border-radius: 6px;
   font-size: 13px;
-  outline: none;
-}
-
-.form-input:focus { border-color: #38bdf8; }
-
-.modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 16px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.btn-close {
-  background: none;
-  border: none;
-  color: #94a3b8;
-  font-size: 16px;
-  cursor: pointer;
+  padding-bottom: 4px;
 }
 </style>

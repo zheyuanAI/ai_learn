@@ -7,14 +7,14 @@
       description="由仓储库存、生产制造与 IoT 设备告警实时事实派生的跨域异常集中监控视图，不建立第二份事实表。"
     >
       <template #actions>
-        <button
-          type="button"
-          class="btn-refresh"
-          :disabled="viewState === 'loading'"
+        <el-button
+          type="primary"
+          :icon="Refresh"
+          :loading="viewState === 'loading'"
           @click="loadExceptions"
         >
-          <span>🔄 刷新异常</span>
-        </button>
+          刷新异常
+        </el-button>
       </template>
     </PageHeader>
 
@@ -28,33 +28,48 @@
       <!-- 统计时间范围筛选 -->
       <div class="filter-group">
         <label class="filter-label">时间范围</label>
-        <select v-model="selectedTimeRange" class="filter-select" @change="handleSearch">
-          <option value="">全部时间</option>
-          <option value="today">今日</option>
-          <option value="7d">近 7 天</option>
-          <option value="30d">近 30 天</option>
-        </select>
+        <el-select
+          v-model="selectedTimeRange"
+          placeholder="全部时间"
+          style="width: 140px"
+          @change="handleSearch"
+        >
+          <el-option label="全部时间" value="" />
+          <el-option label="今日" value="today" />
+          <el-option label="近 7 天" value="7d" />
+          <el-option label="近 30 天" value="30d" />
+        </el-select>
       </div>
 
       <!-- 异常来源筛选 -->
       <div class="filter-group">
         <label class="filter-label">事实来源域</label>
-        <select v-model="selectedSource" class="filter-select" @change="handleSearch">
-          <option value="">全部来源</option>
-          <option value="inventory">仓储库存 (Inventory)</option>
-          <option value="production">生产制造 (Production)</option>
-          <option value="device_alarm">IoT 设备告警 (Device Alarm)</option>
-        </select>
+        <el-select
+          v-model="selectedSource"
+          placeholder="全部来源"
+          style="width: 190px"
+          @change="handleSearch"
+        >
+          <el-option label="全部来源" value="" />
+          <el-option label="仓储库存 (Inventory)" value="inventory" />
+          <el-option label="生产制造 (Production)" value="production" />
+          <el-option label="IoT 设备告警 (Device Alarm)" value="device_alarm" />
+        </el-select>
       </div>
 
       <!-- 严重级别筛选 -->
       <div class="filter-group">
         <label class="filter-label">严重级别</label>
-        <select v-model="selectedSeverity" class="filter-select" @change="handleSearch">
-          <option value="">全部级别</option>
-          <option value="HIGH">高 (HIGH)</option>
-          <option value="MEDIUM">中 (MEDIUM)</option>
-        </select>
+        <el-select
+          v-model="selectedSeverity"
+          placeholder="全部级别"
+          style="width: 140px"
+          @change="handleSearch"
+        >
+          <el-option label="全部级别" value="" />
+          <el-option label="高 (HIGH)" value="HIGH" />
+          <el-option label="中 (MEDIUM)" value="MEDIUM" />
+        </el-select>
       </div>
     </FilterBar>
 
@@ -62,7 +77,7 @@
     <div class="exception-content-card">
       <!-- 1. 加载态 -->
       <div v-if="viewState === 'loading'" class="loading-state-box">
-        <span class="spinner">⏳</span>
+        <el-icon class="is-loading spinner"><Loading /></el-icon>
         <p>正在从跨域事实源派生聚合异常数据...</p>
       </div>
 
@@ -100,64 +115,51 @@
           </span>
         </div>
 
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th style="width: 130px;">事实来源域</th>
-              <th style="width: 160px;">异常类型</th>
-              <th style="width: 100px; text-align: center;">严重级别</th>
-              <th style="width: 120px; text-align: right;">异常指标值</th>
-              <th>异常描述与上下文</th>
-              <th style="width: 180px; text-align: center;">发生时间</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(rec, idx) in records" :key="idx">
-              <td>
-                <span class="source-tag" :class="`source-${rec.source?.toLowerCase()}`">
-                  {{ formatSource(rec.source) }}
-                </span>
-              </td>
-              <td class="type-cell font-mono">{{ rec.exception_type }}</td>
-              <td style="text-align: center;">
-                <StatusBadge
-                  :type="getSeverityBadgeType(rec.severity)"
-                  :text="rec.severity"
-                />
-              </td>
-              <td style="text-align: right;" class="value-cell font-mono">
-                {{ rec.value !== undefined ? rec.value : "-" }}
-              </td>
-              <td class="message-cell">{{ rec.message }}</td>
-              <td style="text-align: center;" class="time-cell font-mono">
-                {{ formatTime(rec.occurredAt) }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <DataTable
+          :columns="tableColumns"
+          :data="records"
+          :page="currentPage"
+          :size="pageSize"
+          :total="total"
+          :show-pagination="true"
+          :row-key="(row: any) => String(row.id || row.exception_type || Math.random())"
+          @page-change="handlePageChange"
+        >
+          <!-- 事实来源域 -->
+          <template #source="{ value }">
+            <el-tag :type="getSourceTagType(value)" size="small">
+              {{ formatSource(value) }}
+            </el-tag>
+          </template>
 
-        <!-- 分页控制器 -->
-        <div class="pagination-bar">
-          <span class="page-info">第 {{ currentPage }} / {{ totalPages || 1 }} 页</span>
-          <div class="page-buttons">
-            <button
-              type="button"
-              class="btn-page"
-              :disabled="currentPage <= 1"
-              @click="handlePageChange(currentPage - 1)"
-            >
-              上一页
-            </button>
-            <button
-              type="button"
-              class="btn-page"
-              :disabled="currentPage >= totalPages"
-              @click="handlePageChange(currentPage + 1)"
-            >
-              下一页
-            </button>
-          </div>
-        </div>
+          <!-- 异常类型 -->
+          <template #exception_type="{ value }">
+            <span class="font-mono text-cyan">{{ value }}</span>
+          </template>
+
+          <!-- 严重级别 -->
+          <template #severity="{ value }">
+            <StatusBadge
+              :type="getSeverityBadgeType(value)"
+              :text="value"
+            />
+          </template>
+
+          <!-- 异常指标值 -->
+          <template #value="{ value }">
+            <span class="font-mono value-num">{{ value !== undefined ? value : "-" }}</span>
+          </template>
+
+          <!-- 异常描述与上下文 -->
+          <template #message="{ value }">
+            <span class="message-cell">{{ value }}</span>
+          </template>
+
+          <!-- 发生时间 -->
+          <template #occurredAt="{ value }">
+            <span class="font-mono time-cell">{{ formatTime(value) }}</span>
+          </template>
+        </DataTable>
       </div>
     </div>
   </div>
@@ -171,8 +173,10 @@
  */
 
 import { ref, reactive, onMounted } from "vue";
+import { Refresh, Loading } from "@element-plus/icons-vue";
 import PageHeader from "@/components/common/PageHeader.vue";
 import FilterBar from "@/components/common/FilterBar.vue";
+import DataTable, { type TableColumn } from "@/components/common/DataTable.vue";
 import StatusBadge from "@/components/common/StatusBadge.vue";
 import EmptyState from "@/components/common/EmptyState.vue";
 import ErrorState from "@/components/common/ErrorState.vue";
@@ -200,6 +204,18 @@ const pageMeta = reactive({
 });
 
 /**
+ * 异常中心数据列配置
+ */
+const tableColumns: TableColumn[] = [
+  { key: "source", label: "事实来源域", width: "150px" },
+  { key: "exception_type", label: "异常类型", minWidth: "160px" },
+  { key: "severity", label: "严重级别", width: "110px", align: "center" },
+  { key: "value", label: "异常指标值", width: "120px", align: "right" },
+  { key: "message", label: "异常描述与上下文", minWidth: "260px" },
+  { key: "occurredAt", label: "发生时间", width: "180px", align: "center" },
+];
+
+/**
  * 格式化来源域显示名称
  * @param source 来源代码
  */
@@ -210,6 +226,18 @@ function formatSource(source: string): string {
   if (s === "production") return "生产制造";
   if (s === "device_alarm") return "IoT 设备告警";
   return source;
+}
+
+/**
+ * 来源域 Tag 颜色映射
+ */
+function getSourceTagType(source: string): "primary" | "success" | "warning" | "info" {
+  if (!source) return "info";
+  const s = source.toLowerCase();
+  if (s.includes("inventory")) return "primary";
+  if (s === "production") return "success";
+  if (s === "device_alarm") return "warning";
+  return "info";
 }
 
 /**
@@ -307,48 +335,21 @@ onMounted(() => {
   gap: 16px;
 }
 
-.btn-refresh {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  background: var(--color-surface, #ffffff);
-  border: 1px solid var(--color-border, #d9d9d9);
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.btn-refresh:hover:not(:disabled) {
-  border-color: var(--color-primary, #1890ff);
-  color: var(--color-primary, #1890ff);
-}
-
 .filter-group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .filter-label {
-  font-size: 13px;
-  color: var(--color-text-secondary, #666666);
-}
-
-.filter-select {
-  padding: 6px 10px;
-  border: 1px solid var(--color-border, #d9d9d9);
-  border-radius: 4px;
-  background: var(--color-surface, #ffffff);
-  font-size: 13px;
-  color: var(--color-text, #333333);
+  font-size: 12px;
+  color: #94a3b8;
+  white-space: nowrap;
 }
 
 .exception-content-card {
-  background: var(--color-surface, #ffffff);
-  border: 1px solid var(--color-border, #e8e8e8);
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   padding: 16px;
   min-height: 400px;
@@ -359,67 +360,38 @@ onMounted(() => {
   gap: 16px;
   align-items: center;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--color-border-light, #f0f0f0);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   margin-bottom: 12px;
   font-size: 12px;
-  color: var(--color-text-secondary, #888888);
+  color: #94a3b8;
 }
 
 .total-tag {
   margin-left: auto;
   font-weight: 600;
-  color: var(--color-text, #333333);
+  color: #f1f5f9;
 }
 
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
+.text-cyan {
+  color: #38bdf8;
 }
 
-.data-table th,
-.data-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--color-border-light, #f0f0f0);
-}
-
-.data-table th {
-  background: var(--color-bg-light, #fafafa);
+.value-num {
+  color: #f8fafc;
   font-weight: 600;
-  color: var(--color-text, #333333);
-  text-align: left;
-}
-
-.source-tag {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.source-inventory {
-  background: #e6f7ff;
-  color: #096dd9;
-}
-
-.source-manufacturing {
-  background: #f6ffed;
-  color: #389e0d;
-}
-
-.source-iot {
-  background: #fff7e6;
-  color: #d46b08;
 }
 
 .message-cell {
-  color: var(--color-text, #333333);
-  line-height: 1.4;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.time-cell {
+  color: #94a3b8;
 }
 
 .font-mono {
-  font-family: Consolas, Monaco, "Courier New", monospace;
+  font-family: var(--font-mono, Consolas, Monaco, monospace);
 }
 
 .loading-state-box,
@@ -431,53 +403,11 @@ onMounted(() => {
   justify-content: center;
   padding: 60px 20px;
   gap: 12px;
+  color: #94a3b8;
 }
 
 .spinner {
   font-size: 28px;
-  animation: spin 1.5s infinite linear;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.pagination-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--color-border-light, #f0f0f0);
-}
-
-.page-info {
-  font-size: 13px;
-  color: var(--color-text-secondary, #666666);
-}
-
-.page-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-.btn-page {
-  padding: 6px 14px;
-  border: 1px solid var(--color-border, #d9d9d9);
-  background: #ffffff;
-  border-radius: 4px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.btn-page:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.btn-page:hover:not(:disabled) {
-  border-color: var(--color-primary, #1890ff);
-  color: var(--color-primary, #1890ff);
+  color: #38bdf8;
 }
 </style>

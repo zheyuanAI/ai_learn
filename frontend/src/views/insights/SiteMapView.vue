@@ -19,13 +19,13 @@
           </button>
         </div>
 
-        <button type="button" class="btn-back-list" @click="handleBackList">
-          <span>☰ 地图列表</span>
-        </button>
+        <el-button @click="handleBackList">
+          ☰ 地图列表
+        </el-button>
 
-        <button type="button" class="btn-go-editor" @click="handleGoEditor">
-          <span>✏️ 编辑点位</span>
-        </button>
+        <el-button type="primary" @click="handleGoEditor">
+          ✏️ 编辑点位
+        </el-button>
       </template>
     </PageHeader>
 
@@ -33,40 +33,17 @@
     <div class="map-control-bar">
       <div class="filter-group">
         <span class="control-label">图层过滤：</span>
-        <div class="scenario-tabs">
-          <button
-            type="button"
-            class="tab-pill"
-            :class="{ 'is-active': activeFilter === 'all' }"
-            @click="setFilter('all')"
-          >
-            全部点位 ({{ totalPointsCount }})
-          </button>
-          <button
-            type="button"
-            class="tab-pill alarm-pill"
-            :class="{ 'is-active': activeFilter === 'alarm' }"
-            @click="setFilter('alarm')"
-          >
-            🚨 仅看告警 ({{ alarmPointsCount }})
-          </button>
-          <button
-            type="button"
-            class="tab-pill"
-            :class="{ 'is-active': activeFilter === 'device' }"
-            @click="setFilter('device')"
-          >
-            🏭 生产设备
-          </button>
-          <button
-            type="button"
-            class="tab-pill"
-            :class="{ 'is-active': activeFilter === 'warehouse' }"
-            @click="setFilter('warehouse')"
-          >
-            📦 仓库库区
-          </button>
-        </div>
+        <el-radio-group
+          v-model="activeFilter"
+          size="small"
+          class="custom-el-radio-group"
+          @change="(val: any) => setFilter(val)"
+        >
+          <el-radio-button value="all">全部点位 ({{ totalPointsCount }})</el-radio-button>
+          <el-radio-button value="alarm">🚨 仅看告警 ({{ alarmPointsCount }})</el-radio-button>
+          <el-radio-button value="device">🏭 生产设备</el-radio-button>
+          <el-radio-button value="warehouse">📦 仓库库区</el-radio-button>
+        </el-radio-group>
       </div>
 
       <!-- 状态指示图例 -->
@@ -137,7 +114,7 @@
 
           <!-- 加载中遮罩 -->
           <div v-if="viewState === 'loading'" class="canvas-loading-overlay">
-            <span class="spinner">⏳</span>
+            <el-icon class="is-loading spinner"><Loading /></el-icon>
             <span>正在装载空间投影点位...</span>
           </div>
 
@@ -236,24 +213,23 @@
           </div>
 
           <div class="detail-footer">
-            <button
+            <el-button
               v-if="selectedPoint.entityType === 'DEVICE' || selectedPoint.alarmMarker"
-              type="button"
-              class="btn-trace"
+              type="warning"
+              size="small"
               title="穿透至全链路全闭环追溯中心"
               @click="handleGoTrace(selectedPoint)"
             >
-              <span>🔍 全链路追溯</span>
-            </button>
-            <button
+              🔍 全链路追溯
+            </el-button>
+            <el-button
               v-if="selectedPoint.linkedPage"
-              type="button"
-              class="btn-penetrate"
+              type="primary"
+              size="small"
               @click="handlePenetrate(selectedPoint.linkedPage)"
             >
-              <span>直达业务控制台</span>
-              <span>➔</span>
-            </button>
+              直达业务控制台 ➔
+            </el-button>
             <span v-else class="text-muted-tip">该点位暂未配置穿透路由</span>
           </div>
         </template>
@@ -281,6 +257,7 @@
 
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
+import { Loading } from "@element-plus/icons-vue";
 import type {
   SiteMapProjection,
   MapPoint,

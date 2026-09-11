@@ -7,16 +7,15 @@
       description="配置与标定厂区空间底图点位。在画布上点击可快速捕获相对百分比坐标 (x%, y%)；点位修改严格保存展示参数，不修改源业务事实。"
     >
       <template #actions>
-        <button type="button" class="btn-return" @click="handleBackMap">
-          <span>🖥️ 返回地图监控</span>
-        </button>
-        <button type="button" class="btn-return-list" @click="handleBackList">
-          <span>☰ 地图列表</span>
-        </button>
-        <button type="button" class="btn-save-all" :disabled="isSaving" @click="handleSaveCurrentPoint">
-          <span v-if="isSaving" class="spinner">⏳</span>
-          <span>{{ editingPointId ? "保存点位变更" : "＋ 新增当前点位" }}</span>
-        </button>
+        <el-button @click="handleBackMap">
+          🖥️ 返回地图监控
+        </el-button>
+        <el-button @click="handleBackList">
+          ☰ 地图列表
+        </el-button>
+        <el-button type="primary" :loading="isSaving" @click="handleSaveCurrentPoint">
+          {{ editingPointId ? "保存点位变更" : "＋ 新增当前点位" }}
+        </el-button>
       </template>
     </PageHeader>
 
@@ -102,18 +101,16 @@
           <h3 class="form-title">
             {{ editingPointId ? "编辑现有点位属性" : "配置新空间点位" }}
           </h3>
-          <button v-if="editingPointId" type="button" class="btn-clear-edit" @click="resetToNew">
+          <el-button v-if="editingPointId" size="small" @click="resetToNew">
             重置为新建
-          </button>
+          </el-button>
         </div>
 
         <div class="editor-form">
           <div class="form-row">
             <label class="form-label required">点位展示名称 (Point Name)</label>
-            <input
+            <el-input
               v-model="activeForm.pointName"
-              type="text"
-              class="form-input"
               placeholder="例如: 伺服冲压机 DEV-A01"
             />
           </div>
@@ -121,63 +118,57 @@
           <div class="form-grid-two">
             <div class="form-row">
               <label class="form-label required">实体类型</label>
-              <select v-model="activeForm.entityType" class="form-select" @change="handleEntityTypeChange">
-                <option value="DEVICE">生产设备 (DEVICE)</option>
-                <option value="WAREHOUSE">仓库库区 (WAREHOUSE)</option>
-                <option value="PRODUCTION_AREA">车间区域 (AREA)</option>
-              </select>
+              <el-select v-model="activeForm.entityType" @change="handleEntityTypeChange">
+                <el-option label="生产设备 (DEVICE)" value="DEVICE" />
+                <el-option label="仓库库区 (WAREHOUSE)" value="WAREHOUSE" />
+                <el-option label="车间区域 (AREA)" value="PRODUCTION_AREA" />
+              </el-select>
             </div>
 
             <!-- 设备实体选择器 -->
             <div v-if="activeForm.entityType === 'DEVICE'" class="form-row">
               <label class="form-label required">选择生产设备</label>
-              <select
-                :value="activeForm.entityId"
-                class="form-select"
+              <el-select
+                :model-value="activeForm.entityId"
                 :disabled="loadingEntities"
-                @change="(e) => handleDeviceSelect((e.target as HTMLSelectElement).value)"
+                placeholder="-- 请选择生产设备 --"
+                @change="(val: any) => handleDeviceSelect(val)"
               >
-                <option value="">{{ loadingEntities ? "正在加载设备..." : "-- 请选择生产设备 --" }}</option>
-                <option
+                <el-option
                   v-for="dev in deviceOptions"
                   :key="dev.id"
+                  :label="`${dev.deviceCode} - ${dev.deviceName}`"
                   :value="dev.id"
-                >
-                  {{ dev.deviceCode }} - {{ dev.deviceName }}
-                </option>
-              </select>
+                />
+              </el-select>
               <span v-if="activeForm.entityId" class="selected-uuid-hint font-mono">UUID: {{ activeForm.entityId }}</span>
             </div>
 
             <!-- 仓库实体选择器 -->
             <div v-else-if="activeForm.entityType === 'WAREHOUSE'" class="form-row">
               <label class="form-label required">选择仓库库区</label>
-              <select
-                :value="activeForm.entityId"
-                class="form-select"
+              <el-select
+                :model-value="activeForm.entityId"
                 :disabled="loadingEntities"
-                @change="(e) => handleWarehouseSelect((e.target as HTMLSelectElement).value)"
+                placeholder="-- 请选择仓库库区 --"
+                @change="(val: any) => handleWarehouseSelect(val)"
               >
-                <option value="">{{ loadingEntities ? "正在加载仓库..." : "-- 请选择仓库库区 --" }}</option>
-                <option
+                <el-option
                   v-for="wh in warehouseOptions"
                   :key="wh.id"
+                  :label="`${wh.code} - ${wh.name}`"
                   :value="wh.id"
-                >
-                  {{ wh.code }} - {{ wh.name }}
-                </option>
-              </select>
+                />
+              </el-select>
               <span v-if="activeForm.entityId" class="selected-uuid-hint font-mono">UUID: {{ activeForm.entityId }}</span>
             </div>
 
             <!-- 生产区域实体：事实缺失声明 -->
             <div v-else class="form-row">
               <label class="form-label required">车间区域实体</label>
-              <input
-                type="text"
-                class="form-input text-muted"
+              <el-input
                 disabled
-                value="未提供事实源（禁止手填）"
+                model-value="未提供事实源（禁止手填）"
               />
             </div>
           </div>
@@ -194,25 +185,23 @@
           <div class="form-grid-two">
             <div class="form-row">
               <label class="form-label required">水平坐标 X (0-100%)</label>
-              <input
-                v-model.number="activeForm.xPercent"
-                type="number"
-                min="0"
-                max="100"
-                step="0.5"
-                class="form-input font-mono"
+              <el-input-number
+                v-model="activeForm.xPercent"
+                :min="0"
+                :max="100"
+                :step="0.5"
+                style="width: 100%"
               />
             </div>
 
             <div class="form-row">
               <label class="form-label required">垂直坐标 Y (0-100%)</label>
-              <input
-                v-model.number="activeForm.yPercent"
-                type="number"
-                min="0"
-                max="100"
-                step="0.5"
-                class="form-input font-mono"
+              <el-input-number
+                v-model="activeForm.yPercent"
+                :min="0"
+                :max="100"
+                :step="0.5"
+                style="width: 100%"
               />
             </div>
           </div>
@@ -220,20 +209,18 @@
           <div class="form-grid-two">
             <div class="form-row">
               <label class="form-label">旋转角度 (°)</label>
-              <select v-model.number="activeForm.rotation" class="form-select font-mono">
-                <option :value="0">0° (正向)</option>
-                <option :value="90">90°</option>
-                <option :value="180">180°</option>
-                <option :value="270">270°</option>
-              </select>
+              <el-select v-model="activeForm.rotation">
+                <el-option label="0° (正向)" :value="0" />
+                <el-option label="90°" :value="90" />
+                <el-option label="180°" :value="180" />
+                <el-option label="270°" :value="270" />
+              </el-select>
             </div>
 
             <div class="form-row">
               <label class="form-label">穿透业务路由</label>
-              <input
+              <el-input
                 v-model="activeForm.linkedPage"
-                type="text"
-                class="form-input font-mono"
                 placeholder="例如: /iot, /erp-wms, /mes"
               />
             </div>
@@ -241,12 +228,12 @@
 
           <div class="form-row">
             <label class="form-label">业务实体描述说明</label>
-            <textarea
+            <el-input
               v-model="activeForm.detail"
-              class="form-textarea"
-              rows="3"
+              type="textarea"
+              :rows="3"
               placeholder="说明该点位所承载的工艺工序、物料品类或设备职能..."
-            ></textarea>
+            />
           </div>
 
           <p v-if="validationError" class="validation-error">
@@ -258,14 +245,15 @@
           </p>
 
           <div class="form-actions">
-            <button
-              type="button"
-              class="btn-submit"
-              :disabled="isSaving"
+            <el-button
+              type="primary"
+              size="large"
+              style="width: 100%"
+              :loading="isSaving"
               @click="handleSaveCurrentPoint"
             >
-              <span>{{ editingPointId ? "确认更新点位" : "保存并添加到地图" }}</span>
-            </button>
+              {{ editingPointId ? "确认更新点位" : "保存并添加到地图" }}
+            </el-button>
           </div>
         </div>
       </div>
@@ -305,12 +293,12 @@
 
         <template #actions="{ row }">
           <div class="table-actions">
-            <button type="button" class="btn-tbl-edit" @click="loadPointToEdit(row)">
+            <el-button link type="primary" @click="loadPointToEdit(row)">
               编辑
-            </button>
-            <button type="button" class="btn-tbl-del" @click="askDeletePoint(row)">
+            </el-button>
+            <el-button link type="danger" @click="askDeletePoint(row)">
               删除
-            </button>
+            </el-button>
           </div>
         </template>
       </DataTable>

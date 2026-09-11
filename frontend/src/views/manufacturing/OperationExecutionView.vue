@@ -8,10 +8,9 @@
       description="工序执行记录现场真实的加工动作生命周期。只有在此处触发【开始】执行后，对应工单才正式推进为【生产中】。"
     >
       <template #actions>
-        <button type="button" class="btn btn-primary" @click="openCreateModal">
-          <span class="btn-icon">＋</span>
-          <span>发起工序执行</span>
-        </button>
+        <el-button type="primary" :icon="Plus" @click="openCreateModal">
+          发起工序执行
+        </el-button>
       </template>
     </PageHeader>
 
@@ -22,16 +21,18 @@
       @search="handleSearch"
       @reset="handleReset"
     >
-      <div class="filter-select-group">
-        <label class="filter-label">状态：</label>
-        <select v-model="queryParams.status" class="filter-select" @change="handleSearch">
-          <option value="">全部状态</option>
-          <option value="NotStarted">未开始 (NotStarted)</option>
-          <option value="Running">正在加工 (Running)</option>
-          <option value="Paused">已暂停 (Paused)</option>
-          <option value="Completed">已完成 (Completed)</option>
-        </select>
-      </div>
+      <el-select
+        v-model="queryParams.status"
+        placeholder="全部状态"
+        clearable
+        style="width: 180px"
+        @change="handleSearch"
+      >
+        <el-option label="未开始 (NotStarted)" value="NotStarted" />
+        <el-option label="正在加工 (Running)" value="Running" />
+        <el-option label="已暂停 (Paused)" value="Paused" />
+        <el-option label="已完成 (Completed)" value="Completed" />
+      </el-select>
     </FilterBar>
 
     <!-- 错误异常提示 -->
@@ -107,193 +108,188 @@
 
       <!-- 实时动作操作入口 (受 allowedActions 约束) -->
       <template #actions="{ row }">
-        <div class="action-btn-group">
+        <div style="display: flex; gap: 6px; justify-content: center; flex-wrap: wrap">
           <!-- 开始 (NotStarted -> Running) -->
-          <button
+          <el-button
             v-if="row.status === 'NotStarted'"
-            type="button"
-            class="btn-text text-success"
+            type="success"
+            link
+            size="small"
             :disabled="!isActionAllowed(row, 'start')"
             :title="getActionDisabledReason(row, 'start') || '开始该工序执行'"
             @click="handleStart(row)"
           >
             开始
-          </button>
+          </el-button>
 
           <!-- 暂停 (Running -> Paused) -->
-          <button
+          <el-button
             v-if="row.status === 'Running'"
-            type="button"
-            class="btn-text text-warning"
+            type="warning"
+            link
+            size="small"
             :disabled="!isActionAllowed(row, 'pause')"
             :title="getActionDisabledReason(row, 'pause') || '暂停工序'"
             @click="openPauseModal(row)"
           >
             暂停
-          </button>
+          </el-button>
 
           <!-- 恢复 (Paused -> Running) -->
-          <button
+          <el-button
             v-if="row.status === 'Paused'"
-            type="button"
-            class="btn-text text-primary"
+            type="primary"
+            link
+            size="small"
             :disabled="!isActionAllowed(row, 'resume')"
             :title="getActionDisabledReason(row, 'resume') || '恢复工序执行'"
             @click="handleResume(row)"
           >
             恢复
-          </button>
+          </el-button>
 
           <!-- 完成 (Running -> Completed) -->
-          <button
+          <el-button
             v-if="row.status === 'Running'"
-            type="button"
-            class="btn-text text-success"
+            type="success"
+            link
+            size="small"
             :disabled="!isActionAllowed(row, 'complete')"
             :title="getActionDisabledReason(row, 'complete') || '工序完工'"
             @click="handleComplete(row)"
           >
             完成
-          </button>
+          </el-button>
 
           <!-- 报工 (仅 Completed，和后端 MES_FACT_001 规则一致) -->
-          <button
+          <el-button
             v-if="row.status === 'Completed'"
-            type="button"
-            class="btn-text text-cyan"
+            type="primary"
+            link
+            size="small"
             :disabled="!isActionAllowed(row, 'report')"
             :title="getActionDisabledReason(row, 'report') || '现场报工录入'"
             @click="openReportModal(row)"
           >
             报工
-          </button>
+          </el-button>
         </div>
       </template>
     </DataTable>
 
     <!-- 弹窗 1：创建工序执行实例 -->
-    <div v-if="createModalVisible" class="modal-mask" @click.self="createModalVisible = false">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">创建工序实际执行实例</h3>
-          <button type="button" class="btn-close" @click="createModalVisible = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitCreateExecution">
-          <div class="form-item">
-            <label>关联已下达派工单 (Released) <span class="req">*</span></label>
-            <select v-model="createForm.dispatchOrderId" class="form-select font-mono" required>
-              <option value="">请选择已下达派工单</option>
-              <option v-for="d in releasedDispatches" :key="d.id" :value="d.id">
-                {{ d.dispatchNo }} - {{ d.operationName }} (工单: {{ d.workOrderNo || d.workOrderId }})
-              </option>
-              <option v-if="createForm.dispatchOrderId && !releasedDispatches.some(d => String(d.id) === String(createForm.dispatchOrderId))" :value="createForm.dispatchOrderId">
-                当前派工单: {{ createForm.dispatchOrderId }}
-              </option>
-            </select>
-          </div>
-          <div class="form-item">
-            <label>机台设备 ID (可选)</label>
-            <input
-              v-model="createForm.deviceId"
-              type="text"
-              class="form-input font-mono"
-              placeholder="输入真实设备 UUID（可选）"
+    <el-dialog
+      v-model="createModalVisible"
+      title="创建工序实际执行实例"
+      width="560px"
+      destroy-on-close
+      append-to-body
+    >
+      <el-form label-width="120px" @submit.prevent="submitCreateExecution">
+        <el-form-item label="关联派工单" required>
+          <el-select
+            v-model="createForm.dispatchOrderId"
+            placeholder="请选择已下达派工单"
+            filterable
+            style="width: 100%"
+          >
+            <el-option
+              v-for="d in releasedDispatches"
+              :key="d.id"
+              :value="d.id"
+              :label="`${d.dispatchNo} - ${d.operationName} (工单: ${d.workOrderNo || d.workOrderId})`"
             />
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="createModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
-              {{ isSubmitting ? "创建中..." : "保存执行实例" }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+            <el-option
+              v-if="createForm.dispatchOrderId && !releasedDispatches.some(d => String(d.id) === String(createForm.dispatchOrderId))"
+              :value="createForm.dispatchOrderId"
+              :label="`当前派工单: ${createForm.dispatchOrderId}`"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="执行机台">
+          <el-select
+            v-model="createForm.deviceId"
+            placeholder="请选择设备（可选，留空表示手工工位）"
+            filterable
+            clearable
+            style="width: 100%"
+          >
+            <el-option
+              v-for="device in deviceOptions"
+              :key="device.id"
+              :value="String(device.id)"
+              :label="`${device.deviceName} (${device.deviceCode})`"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createModalVisible = false">取消</el-button>
+        <el-button type="primary" :loading="isSubmitting" @click="submitCreateExecution">
+          {{ isSubmitting ? "创建中..." : "保存执行实例" }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 弹窗 2：暂停原因弹窗 -->
-    <div v-if="pauseModalVisible" class="modal-mask" @click.self="pauseModalVisible = false">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">工序暂停确认</h3>
-          <button type="button" class="btn-close" @click="pauseModalVisible = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitPause">
-          <div class="form-item">
-            <label>暂停原因 (如换料、设备维护、交接班) <span class="req">*</span></label>
-            <input
-              v-model="pauseReason"
-              type="text"
-              class="form-input"
-              placeholder="请简要说明暂停原因"
-              required
-            />
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="pauseModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-warning" :disabled="isSubmitting">确认暂停</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog
+      v-model="pauseModalVisible"
+      title="工序暂停确认"
+      width="520px"
+      destroy-on-close
+      append-to-body
+    >
+      <el-form label-width="110px" @submit.prevent="submitPause">
+        <el-form-item label="暂停原因" required>
+          <el-input
+            v-model="pauseReason"
+            placeholder="请简要说明暂停原因 (如换料、设备维护、交接班)"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="pauseModalVisible = false">取消</el-button>
+        <el-button type="warning" :loading="isSubmitting" @click="submitPause">确认暂停</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 弹窗 3：现场报工录入 -->
-    <div v-if="reportModalVisible" class="modal-mask" @click.self="reportModalVisible = false">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">工序报工录入 — {{ activeExec?.operationName }}</h3>
-          <button type="button" class="btn-close" @click="reportModalVisible = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitWorkReport">
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>申报合格数量 <span class="req">*</span></label>
-              <input
-                v-model="reportForm.qualifiedQty"
-                type="text"
-                class="form-input font-mono"
-                placeholder="例如 20.00"
-                required
-              />
-            </div>
-            <div class="form-item">
-              <label>申报不良数量 <span class="req">*</span></label>
-              <input
-                v-model="reportForm.defectQty"
-                type="text"
-                class="form-input font-mono"
-                placeholder="例如 0.00"
-                required
-              />
-            </div>
-          </div>
-
-          <div class="form-item">
-            <label>报工时间</label>
-            <input
-              v-model="reportForm.reportTime"
-              type="text"
-              class="form-input font-mono"
-              placeholder="默认当前时间"
-            />
-          </div>
-
-          <div class="form-item">
-            <label>备注说明</label>
-            <input
-              v-model="reportForm.remark"
-              type="text"
-              class="form-input"
-              placeholder="例如 首批试切合格"
-            />
-          </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="reportModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting">提交报工</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog
+      v-model="reportModalVisible"
+      :title="`工序报工录入 — ${activeExec?.operationName || ''}`"
+      width="600px"
+      destroy-on-close
+      append-to-body
+    >
+      <el-form label-width="110px" @submit.prevent="submitWorkReport">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="合格数量" required>
+              <el-input v-model="reportForm.qualifiedQty" placeholder="例如 20.00" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="不良数量" required>
+              <el-input v-model="reportForm.defectQty" placeholder="例如 0.00" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="报工时间">
+              <el-input v-model="reportForm.reportTime" placeholder="默认当前时间" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="备注说明">
+              <el-input v-model="reportForm.remark" placeholder="例如 首批试切合格" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+      <template #footer>
+        <el-button @click="reportModalVisible = false">取消</el-button>
+        <el-button type="primary" :loading="isSubmitting" @click="submitWorkReport">提交报工</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 二次确认对话框 -->
     <ConfirmDialog
@@ -308,6 +304,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
+import { Plus } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { useCommand } from "@/composables/useCommand";
 import CommandFeedback from "@/components/common/CommandFeedback.vue";
 import { useRoute, useRouter } from "vue-router";
@@ -341,7 +339,15 @@ import {
   resumeOperationExecution,
   completeOperationExecution,
   createWorkReport,
+  getWorkOrders,
+  getRoutings,
+  getWorkReports,
 } from "../../api/manufacturing";
+import { getProducts } from "../../api/masterData";
+import { getDevices } from "../../api/iot";
+import { getOperatorDirectory } from "../../api/auth";
+import { stringAdd } from "../../types/inventory";
+import { currentLocalDateTimeValue } from "../../utils/dateTime";
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
@@ -349,6 +355,7 @@ const errorMessage = ref("");
 const executionList = ref<OperationExecutionItem[]>([]);
 const total = ref(0);
 const releasedDispatches = ref<any[]>([]);
+const deviceOptions = ref<any[]>([]);
 const queryParams = reactive({
   page: 1,
   size: 10,
@@ -416,7 +423,59 @@ async function fetchExecutionList() {
       status: queryParams.status || undefined,
     });
     if (res.data) {
-      let list = res.data.records || [];
+      const rawList = res.data.records || [];
+      const [dispatchResult, workOrderResult, routingResult, productResult, deviceResult, operatorResult]
+        = await Promise.allSettled([
+          getDispatchOrders({ page: 1, size: 1000 }),
+          getWorkOrders({ page: 1, size: 1000 }),
+          getRoutings({ page: 1, size: 1000 }),
+          getProducts({ page: 1, size: 1000, status: "ACTIVE" }),
+          getDevices({ page: 1, size: 1000 }),
+          getOperatorDirectory({ page: 1, size: 1000 }),
+        ]);
+      const records = <T>(result: PromiseSettledResult<any>): T[] =>
+        result.status === "fulfilled" ? result.value.data?.records || [] : [];
+      const dispatches = records<any>(dispatchResult);
+      const workOrders = records<any>(workOrderResult);
+      const routings = records<any>(routingResult);
+      const products = records<any>(productResult);
+      const devices = records<any>(deviceResult);
+      deviceOptions.value = devices;
+      const operators = records<any>(operatorResult);
+      const reportResults = await Promise.allSettled(
+        [...new Set(rawList.map((item) => String(item.workOrderId)))].map((id) => getWorkReports(id)),
+      );
+      const reports = reportResults.flatMap((result) =>
+        result.status === "fulfilled" ? result.value.data || [] : [],
+      );
+      let list = rawList.map((execution) => {
+        const dispatch = dispatches.find((item) => String(item.id) === String(execution.dispatchOrderId));
+        const workOrder = workOrders.find((item) => String(item.id) === String(execution.workOrderId));
+        const routing = routings.find((item) => String(item.id) === String(workOrder?.routingId));
+        const operation = routing?.operations?.find((item: any) => String(item.id) === String(execution.operationId));
+        const product = products.find((item) => String(item.id) === String(workOrder?.productId));
+        const operatorId = execution.operatorId || dispatch?.operatorId;
+        const deviceId = execution.deviceId || dispatch?.deviceId;
+        const operator = operators.find((item) => String(item.id) === String(operatorId));
+        const device = devices.find((item) => String(item.id) === String(deviceId));
+        const reportedQty = reports
+          .filter((item: any) => String(item.operationExecutionId) === String(execution.id))
+          .reduce((totalQty: string, item: any) => stringAdd(totalQty, item.reportQty || "0"), "0");
+        return {
+          ...execution,
+          dispatchNo: execution.dispatchNo || dispatch?.dispatchNo || `DISP-${execution.dispatchOrderId}`,
+          workOrderNo: execution.workOrderNo || workOrder?.workOrderNo || String(execution.workOrderId),
+          productName: execution.productName || product?.name || String(workOrder?.productId || ""),
+          operationNo: execution.operationNo || operation?.operationNo,
+          operationName: execution.operationName || operation?.operationName || String(execution.operationId),
+          operatorId,
+          operatorName: execution.operatorName || operator?.realName || operator?.username || String(operatorId || ""),
+          deviceId,
+          deviceName: execution.deviceName || device?.deviceName,
+          deviceCode: execution.deviceCode || device?.deviceCode,
+          reportedQty,
+        };
+      });
       if (queryParams.keyword.trim()) {
         const kw = queryParams.keyword.toLowerCase();
         list = list.filter(
@@ -465,10 +524,21 @@ async function loadReleasedDispatches() {
   }
 }
 
+/** 加载当前租户设备目录，供执行实例通过业务名称选择真实设备。 */
+async function loadDeviceOptions() {
+  try {
+    const res = await getDevices({ page: 1, size: 1000 });
+    deviceOptions.value = res.data?.records || [];
+  } catch (err) {
+    console.warn("[OperationExecutionView] 加载设备目录失败", err);
+    deviceOptions.value = [];
+  }
+}
+
 async function openCreateModal() {
   createForm.dispatchOrderId = "";
   createForm.deviceId = "";
-  await loadReleasedDispatches();
+  await Promise.all([loadReleasedDispatches(), loadDeviceOptions()]);
   createModalVisible.value = true;
 }
 
@@ -481,10 +551,11 @@ async function submitCreateExecution() {
         throw new Error("服务端未返回 operationExecutionId，已阻止继续报工");
       }
       createModalVisible.value = false;
+      ElMessage.success("工序执行创建成功！");
       await fetchExecutionList();
     }, { onConflict: fetchExecutionList });
   } catch (err: any) {
-    alert(`创建执行失败：${err.message}`);
+    ElMessage.error(`创建执行失败：${err.message}`);
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
@@ -508,10 +579,11 @@ async function submitPause() {
     await execute(async (key) => {
       await pauseOperationExecution(activeExec.value!.id as string, pauseReason.value, key);
       pauseModalVisible.value = false;
+      ElMessage.success("工序已暂停！");
       await fetchExecutionList();
     }, { onConflict: fetchExecutionList });
   } catch (err: any) {
-    alert(`暂停失败：${err.message}`);
+    ElMessage.error(`暂停失败：${err.message}`);
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
@@ -546,7 +618,7 @@ async function executeConfirmAction() {
     confirmState.visible = false;
     await fetchExecutionList();
   } catch (err: any) {
-    alert(`操作失败：${err.message}`);
+    ElMessage.error(`操作失败：${err.message}`);
   } finally {
     confirmState.loading = false;
   }
@@ -556,7 +628,7 @@ function openReportModal(item: OperationExecutionItem) {
   activeExec.value = item;
   reportForm.qualifiedQty = "10.00";
   reportForm.defectQty = "0.00";
-  reportForm.reportTime = new Date().toLocaleString();
+  reportForm.reportTime = currentLocalDateTimeValue();
   reportForm.remark = "";
   reportModalVisible.value = true;
 }
@@ -583,15 +655,22 @@ async function submitWorkReport() {
     }
     reportModalVisible.value = false;
     await fetchExecutionList();
-    if (confirm("工序报工已提交成功！是否前往生产工单详情办理【生产质检】与成品入库？")) {
-      router.push({
+    try {
+      await ElMessageBox.confirm("工序报工已提交成功！是否前往生产工单详情办理【生产质检】与成品入库？", "报工成功", {
+        confirmButtonText: "前往办理",
+        cancelButtonText: "留在此页",
+        type: "success",
+      });
+      await router.push({
         // 报工完成后直接进入真实工单详情，避免列表页丢失 openQuality 导航意图。
         path: `/mes/work-orders/${encodeURIComponent(String(woId))}`,
         query: { openQuality: "true" },
       });
+    } catch {
+      // 用户选择留在此页
     }
   } catch (err: any) {
-    alert(`报工提交失败：${err.message}`);
+    ElMessage.error(`报工提交失败：${err.message}`);
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 

@@ -2,31 +2,29 @@
   <div class="alarm-detail-container">
     <!-- 头部返回与导航 -->
     <div class="detail-top-nav">
-      <button type="button" class="btn-back" @click="handleBack">
-        ‹ 返回告警列表
-      </button>
+      <el-button :icon="ArrowLeft" @click="handleBack">
+        返回告警列表
+      </el-button>
       <div class="top-nav-actions">
         <!-- 穿透全链路追溯中心 -->
-        <button
+        <el-button
           v-if="alarm"
-          type="button"
-          class="btn btn-secondary"
+          :icon="Search"
           title="穿透前往全链路全闭环追溯中心"
           @click="goToTraceability"
         >
-          <span>🔍 全链路追溯</span>
-        </button>
+          全链路追溯
+        </el-button>
 
         <!-- 确认告警 (受 allowedActions 约束) -->
-        <button
+        <el-button
           v-if="alarm && (alarm.status === 'Triggered' || alarm.status === 'RecoveredUnacked')"
-          type="button"
-          class="btn btn-warning"
+          type="warning"
           :disabled="!isActionAllowed('ack')"
           @click="ackModalVisible = true"
         >
-          <span>人工确认此告警</span>
-        </button>
+          人工确认此告警
+        </el-button>
       </div>
     </div>
 
@@ -152,14 +150,14 @@
         <section class="context-binding-card">
           <div class="binding-header">
             <h3 class="card-section-title">生产业务上下文软引用 (Business Context)</h3>
-            <button
+            <el-button
               v-if="alarm.status !== 'Recovered'"
-              type="button"
-              class="btn-text text-primary"
+              link
+              type="primary"
               @click="openContextModal"
             >
               更正/补充上下文
-            </button>
+            </el-button>
           </div>
 
           <p class="context-desc text-muted">
@@ -197,64 +195,76 @@
     </div>
 
     <!-- 弹窗 1：告警确认 -->
-    <div v-if="ackModalVisible" class="modal-mask" @click.self="ackModalVisible = false">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">人工确认告警事实</h3>
-          <button type="button" class="btn-close" @click="ackModalVisible = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitAck">
-          <div class="form-item">
-            <label>现场排查记录说明 <span class="req">*</span></label>
-            <textarea
-              v-model="ackComment"
-              class="form-input"
-              rows="3"
-              placeholder="请输入处理现场情况..."
-              required
-            ></textarea>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="ackModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-warning" :disabled="isSubmitting">提交确认</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog
+      v-model="ackModalVisible"
+      title="人工确认告警事实"
+      width="520px"
+      append-to-body
+      destroy-on-close
+    >
+      <el-form label-position="top" class="custom-el-form" @submit.prevent="submitAck">
+        <el-form-item label="现场排查记录说明" required>
+          <el-input
+            v-model="ackComment"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入处理现场情况..."
+          />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="ackModalVisible = false">取消</el-button>
+          <el-button
+            type="warning"
+            :loading="isSubmitting"
+            @click="submitAck"
+          >
+            提交确认
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
 
     <!-- 弹窗 2：更正上下文 -->
-    <div v-if="contextModalVisible" class="modal-mask" @click.self="contextModalVisible = false">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">更正/补充生产业务上下文</h3>
-          <button type="button" class="btn-close" @click="contextModalVisible = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitContext">
-          <div class="form-item">
-            <label>受影响生产工单编号/ID</label>
-            <input
-              v-model="contextForm.workOrderId"
-              type="text"
-              class="form-input font-mono"
-              placeholder="请输入工单 UUID"
-            />
-          </div>
-          <div class="form-item">
-            <label>受影响工序执行编号/ID</label>
-            <input
-              v-model="contextForm.operationExecutionId"
-              type="text"
-              class="form-input font-mono"
-              placeholder="请输入工序执行 UUID"
-            />
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="contextModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting">保存软引用</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog
+      v-model="contextModalVisible"
+      title="更正/补充生产业务上下文"
+      width="520px"
+      append-to-body
+      destroy-on-close
+    >
+      <el-form label-position="top" class="custom-el-form" @submit.prevent="submitContext">
+        <el-form-item label="受影响生产工单编号/ID">
+          <el-input
+            v-model="contextForm.workOrderId"
+            placeholder="请输入工单 UUID"
+            class="font-mono"
+          />
+        </el-form-item>
+        <el-form-item label="受影响工序执行编号/ID">
+          <el-input
+            v-model="contextForm.operationExecutionId"
+            placeholder="请输入工序执行 UUID"
+            class="font-mono"
+          />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="contextModalVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="isSubmitting"
+            @click="submitContext"
+          >
+            保存软引用
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -262,6 +272,8 @@
 import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
 import type { AllowedAction } from "../../types/common";
 import { ref, reactive, onMounted, watch } from "vue";
+import { ArrowLeft, Search } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import { useRouter } from "vue-router";
 import {
   StatusBadge,
@@ -288,11 +300,13 @@ const emit = defineEmits<{
 
 const router = useRouter();
 
+/** 返回告警列表 */
 function handleBack() {
   emit("back");
   router.push("/iot/alarms");
 }
 
+/** 穿透跳转至全链路追溯中心 */
 function goToTraceability() {
   if (!alarm.value) return;
   router.push({
@@ -319,6 +333,7 @@ const contextForm = reactive({
 
 const isSubmitting = ref(false);
 
+/** 获取告警状态对应徽标样式 */
 function getAlarmStatusBadge(status?: AlarmLifecycleStatus): BadgeType {
   switch (status) {
     case "Triggered": return "danger";
@@ -329,6 +344,7 @@ function getAlarmStatusBadge(status?: AlarmLifecycleStatus): BadgeType {
   }
 }
 
+/** 获取告警状态中文显示文本 */
 function getAlarmStatusText(status?: AlarmLifecycleStatus): string {
   switch (status) {
     case "Triggered": return "新触发待处理";
@@ -339,11 +355,12 @@ function getAlarmStatusText(status?: AlarmLifecycleStatus): string {
   }
 }
 
-// 替换为调用 actionGuard 的版本
+/** 检查指定操作是否被后端或状态机允许 */
 function isActionAllowed(action: string): boolean {
   return checkAction(alarm.value?.allowedActions, action);
 }
 
+/** 加载告警全景详情 */
 async function loadAlarmData() {
   viewState.value = "loading";
   errorMessage.value = "";
@@ -361,20 +378,26 @@ async function loadAlarmData() {
   }
 }
 
+/** 提交人工确认告警 */
 async function submitAck() {
-  if (!alarm.value || !ackComment.value.trim()) return;
+  if (!alarm.value || !ackComment.value.trim()) {
+    ElMessage.warning("请填写现场排查说明");
+    return;
+  }
   isSubmitting.value = true;
   try {
     await ackDeviceAlarm(alarm.value.id as string, { ackComment: ackComment.value.trim() });
     ackModalVisible.value = false;
+    ElMessage.success("告警确认已完成！");
     await loadAlarmData();
   } catch (err: any) {
-    alert(`确认失败：${err.message}`);
+    ElMessage.error(`确认失败：${err.message}`);
   } finally {
     isSubmitting.value = false;
   }
 }
 
+/** 打开更正业务上下文对话框 */
 function openContextModal() {
   if (!alarm.value) return;
   contextForm.workOrderId = alarm.value.workOrderId || "";
@@ -382,19 +405,21 @@ function openContextModal() {
   contextModalVisible.value = true;
 }
 
+/** 提交更正业务上下文软引用 */
 async function submitContext() {
   if (!alarm.value) return;
   if (!contextForm.workOrderId.trim() && !contextForm.operationExecutionId.trim()) {
-    errorMessage.value = "请填写至少一个后端已分配的工单或工序执行 UUID";
+    ElMessage.warning("请填写至少一个后端已分配的工单或工序执行 UUID");
     return;
   }
   isSubmitting.value = true;
   try {
     await updateAlarmBusinessContext(alarm.value.id as string, contextForm);
     contextModalVisible.value = false;
+    ElMessage.success("生产业务上下文关联已保存！");
     await loadAlarmData();
   } catch (err: any) {
-    alert(`保存失败：${err.message}`);
+    ElMessage.error(`保存失败：${err.message}`);
   } finally {
     isSubmitting.value = false;
   }
@@ -422,20 +447,10 @@ onMounted(() => {
   justify-content: space-between;
 }
 
-.btn-back {
-  background: none;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #cbd5e1;
-  padding: 6px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s;
-}
-
-.btn-back:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f8fafc;
+.top-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .loading-box {
@@ -651,103 +666,13 @@ onMounted(() => {
 .is-pending { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
 .is-unlinked { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
 
-.btn-text {
-  background: none;
-  border: none;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.btn-text:hover { text-decoration: underline; }
-
-/* 模态框 */
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
-.modal-card {
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
-  width: 100%;
-  max-width: 500px;
-  box-shadow: 0 20px 30px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.modal-title {
-  margin: 0;
-  font-size: 16px;
-  color: #f8fafc;
-}
-
-.modal-body {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.form-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-item label {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-.req { color: #f87171; }
-
-.form-input {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  outline: none;
-}
-
-.form-input:focus { border-color: #38bdf8; }
-
-.modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 16px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.btn-close {
-  background: none;
-  border: none;
-  color: #94a3b8;
-  font-size: 16px;
-  cursor: pointer;
-}
-
 .text-danger { color: #f87171 !important; }
 .text-warning { color: #fbbf24 !important; }
 .text-primary { color: #38bdf8 !important; }
+
+.custom-el-form :deep(.el-form-item__label) {
+  color: #94a3b8;
+  font-size: 13px;
+  padding-bottom: 4px;
+}
 </style>

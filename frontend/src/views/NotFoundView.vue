@@ -9,8 +9,8 @@
       </p>
       <p class="not-found-path">{{ route.fullPath }}</p>
       <div class="not-found-actions">
-        <button type="button" class="btn btn-secondary" @click="handleBack">返回上一页</button>
-        <button type="button" class="btn btn-primary" @click="goHome">返回系统首页</button>
+        <el-button @click="handleBack">返回上一页</el-button>
+        <el-button type="primary" @click="goHome">返回系统首页</el-button>
       </div>
     </div>
   </section>

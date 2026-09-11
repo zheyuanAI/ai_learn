@@ -14,19 +14,31 @@
       @search="fetchReservations"
       @reset="resetFilter"
     >
-      <select v-model="queryParams.sourceType" class="filter-select" @change="fetchReservations">
-        <option value="">全部来源业务</option>
-        <option value="SALES_ORDER">SALES_ORDER (销售订单)</option>
-        <option value="WORK_ORDER">WORK_ORDER (生产工单)</option>
-        <option value="TRANSFER">TRANSFER (库位调拨)</option>
-      </select>
+      <el-select
+        v-model="queryParams.sourceType"
+        placeholder="全部来源业务"
+        clearable
+        style="width: 200px"
+        @change="fetchReservations"
+      >
+        <el-option label="全部来源业务" value="" />
+        <el-option label="SALES_ORDER (销售订单)" value="SALES_ORDER" />
+        <el-option label="WORK_ORDER (生产工单)" value="WORK_ORDER" />
+        <el-option label="TRANSFER (库位调拨)" value="TRANSFER" />
+      </el-select>
 
-      <select v-model="queryParams.status" class="filter-select" @change="fetchReservations">
-        <option value="">全部预留状态</option>
-        <option value="Active">Active (生效中)</option>
-        <option value="PartiallyReleased">PartiallyReleased (部分释放)</option>
-        <option value="Released">Released (已全部释放)</option>
-      </select>
+      <el-select
+        v-model="queryParams.status"
+        placeholder="全部预留状态"
+        clearable
+        style="width: 200px"
+        @change="fetchReservations"
+      >
+        <el-option label="全部预留状态" value="" />
+        <el-option label="Active (生效中)" value="Active" />
+        <el-option label="PartiallyReleased (部分释放)" value="PartiallyReleased" />
+        <el-option label="Released (已全部释放)" value="Released" />
+      </el-select>
     </FilterBar>
 
     <!-- 四态渲染 -->

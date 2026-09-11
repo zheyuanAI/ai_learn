@@ -465,9 +465,10 @@ public class PurchasingApplicationServiceImpl implements PurchaseOrderApplicatio
     }
 
     private void validateSourceWorkOrder(UUID tenantId, UUID workOrderId, UUID productId) {
-        if (workOrderId != null && workOrderSourcePort.findActiveForProduct(tenantId, workOrderId, productId).isEmpty()) {
+        if (workOrderId != null
+                && workOrderSourcePort.findActiveForProcurement(tenantId, workOrderId, productId).isEmpty()) {
             throw new PurchasingException(PurchasingErrorCode.PO_004,
-                    "来源生产工单不存在、已删除、跨租户或产品不一致");
+                    "来源生产工单不存在、已删除、跨租户，或采购物料不属于工单产出品/BOM 组件");
         }
     }
 

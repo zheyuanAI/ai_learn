@@ -35,4 +35,14 @@ public interface WorkOrderSourcePort {
         return findActiveWorkOrder(tenantId, workOrderId)
                 .filter(source -> source.matches(tenantId, productId));
     }
+
+    /**
+     * 校验采购物料是否可追溯到指定工单。
+     * 入参：可信租户、来源工单和采购物料；出参：可关联的工单来源事实。
+     * 默认保持产出品一致校验，具备 BOM 事实的实现可同时接受该工单 BOM 组件物料。
+     */
+    default Optional<WorkOrderSourceFact> findActiveForProcurement(UUID tenantId, UUID workOrderId,
+                                                                    UUID productId) {
+        return findActiveForProduct(tenantId, workOrderId, productId);
+    }
 }

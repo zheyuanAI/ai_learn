@@ -263,7 +263,10 @@ export const useAuthStore = defineStore("auth", () => {
         localStorage.setItem(TOKEN_KEY, res.data.token);
 
         // 2. 真实初始化用户全量画像与动态菜单树
-        await fetchUserInfo();
+        const profile = await fetchUserInfo();
+        if (!profile) {
+          throw new Error("登录已成功，但用户画像与权限加载失败，请重试");
+        }
         await fetchUserMenus();
         return res.data;
       }

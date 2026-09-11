@@ -11,31 +11,41 @@
     <div class="telemetry-filter-bar">
       <div class="filter-item">
         <label>选择目标设备：</label>
-        <select v-model="selectedDeviceId" class="select-control" @change="handleDeviceChange">
-          <option v-for="d in deviceOptions" :key="d.id" :value="d.id">
-            {{ d.deviceName }} ({{ d.deviceCode }})
-          </option>
-        </select>
+        <el-select
+          v-model="selectedDeviceId"
+          placeholder="请选择设备"
+          filterable
+          style="width: 280px"
+          @change="handleDeviceChange"
+        >
+          <el-option
+            v-for="d in deviceOptions"
+            :key="d.id"
+            :label="`${d.deviceName} (${d.deviceCode})`"
+            :value="String(d.id)"
+          />
+        </el-select>
       </div>
 
       <div class="filter-item">
         <label>指标过滤：</label>
-        <input
+        <el-input
           v-model="metricCodeFilter"
-          type="text"
-          class="input-control font-mono"
           placeholder="例如 spindle_temp"
+          clearable
+          class="font-mono"
+          style="width: 200px"
           @keyup.enter="fetchTelemetry"
         />
       </div>
 
-      <button type="button" class="btn btn-primary" @click="fetchTelemetry">
-        <span>刷新遥测数据</span>
-      </button>
+      <el-button type="primary" :icon="Refresh" @click="fetchTelemetry">
+        刷新遥测数据
+      </el-button>
 
-      <button type="button" class="btn btn-secondary" @click="toggleSimulateCard">
-        <span>{{ showSimulateCard ? "收起模拟器" : "[开发模拟] 打开 HTTP QoS 1 模拟测试器" }}</span>
-      </button>
+      <el-button :icon="Cpu" @click="toggleSimulateCard">
+        {{ showSimulateCard ? "收起模拟器" : "[开发模拟] 打开 HTTP QoS 1 模拟测试器" }}
+      </el-button>
     </div>
 
     <!-- [开发模拟] HTTP QoS 1 模拟上报与去重测试卡片 -->
@@ -52,84 +62,77 @@
         ℹ️ <strong>开发模拟声明</strong>：本测试器通过后端开发辅助端点 <code>POST /api/iot/telemetry/simulate</code> 发送测试数据，用于快速联调验证 <code>(device_id + message_id)</code> 幂等去重逻辑，<strong>不代表</strong>真实的 Mosquitto MQTT Broker (1883 端口) 物理链路或网络断连重试机制。
       </div>
 
-      <form class="sim-body" @submit.prevent="handleSendSimulate">
-        <div class="sim-grid three-col">
-          <div class="sim-item">
-            <label>设备编码 (Device Code) <span class="req">*</span></label>
-            <input
-              v-model="simForm.deviceCode"
-              type="text"
-              class="input-control font-mono"
-              required
-            />
-          </div>
-          <div class="sim-item">
-            <label>消息 ID (Message ID, 用于去重) <span class="req">*</span></label>
-            <input
-              v-model="simForm.messageId"
-              type="text"
-              class="input-control font-mono"
-              required
-            />
-          </div>
-          <div class="sim-item">
-            <label>消息序号 (Sequence)</label>
-            <input
-              v-model.number="simForm.sequence"
-              type="number"
-              class="input-control font-mono"
-            />
-          </div>
-        </div>
+      <el-form label-position="top" class="sim-body" @submit.prevent="handleSendSimulate">
+        <el-row :gutter="16">
+          <el-col :span="8">
+            <el-form-item label="设备编码 (Device Code)" required>
+              <el-input
+                v-model="simForm.deviceCode"
+                class="font-mono"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="消息 ID (Message ID, 用于去重)" required>
+              <el-input
+                v-model="simForm.messageId"
+                class="font-mono"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="消息序号 (Sequence)">
+              <el-input
+                v-model.number="simForm.sequence"
+                type="number"
+                class="font-mono"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
 
-        <div class="sim-grid three-col">
-          <div class="sim-item">
-            <label>指标编码 (Metric Code) <span class="req">*</span></label>
-            <input
-              v-model="simForm.metricCode"
-              type="text"
-              class="input-control font-mono"
-              required
-            />
-          </div>
-          <div class="sim-item">
-            <label>指标数值 (Metric Value) <span class="req">*</span></label>
-            <input
-              v-model="simForm.metricValue"
-              type="text"
-              class="input-control font-mono"
-              required
-            />
-          </div>
-          <div class="sim-item">
-            <label>指标单位 (Unit)</label>
-            <input
-              v-model="simForm.metricUnit"
-              type="text"
-              class="input-control font-mono"
-            />
-          </div>
-        </div>
+        <el-row :gutter="16">
+          <el-col :span="8">
+            <el-form-item label="指标编码 (Metric Code)" required>
+              <el-input
+                v-model="simForm.metricCode"
+                class="font-mono"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="指标数值 (Metric Value)" required>
+              <el-input
+                v-model="simForm.metricValue"
+                class="font-mono"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="指标单位 (Unit)">
+              <el-input
+                v-model="simForm.metricUnit"
+                class="font-mono"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
 
         <div class="sim-footer">
           <div class="sim-hint text-muted">
             测试提示：通过 HTTP 模拟端点连续以相同 Message ID 发送，将触发 QoS 1 幂等成功响应（Duplicate = true，不重复插入记录）。
           </div>
           <div class="sim-actions">
-            <button
-              type="button"
-              class="btn btn-secondary"
-              @click="generateNewMessageId"
-            >
+            <el-button @click="generateNewMessageId">
               生成新 MsgId
-            </button>
-            <button
-              type="submit"
-              class="btn btn-primary"
-              :disabled="simulating"
+            </el-button>
+            <el-button
+              type="primary"
+              :loading="simulating"
+              @click="handleSendSimulate"
             >
               {{ simulating ? "上报中..." : "模拟发送 HTTP QoS 1 消息" }}
-            </button>
+            </el-button>
           </div>
         </div>
 
@@ -141,7 +144,7 @@
             <span class="font-mono">{{ simFeedback.message }} (Key: {{ simFeedback.messageKey }})</span>
           </div>
         </div>
-      </form>
+      </el-form>
     </div>
 
     <!-- 错误异常提示 -->
@@ -198,6 +201,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
+import { Refresh, Cpu } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import {
   PageHeader,
   DataTable,
@@ -251,15 +256,18 @@ const simForm = reactive({
   metricUnit: "℃",
 });
 
+/** 切换模拟器卡片展开/收起 */
 function toggleSimulateCard() {
   showSimulateCard.value = !showSimulateCard.value;
 }
 
+/** 生成新的消息 ID 与序号，用于测试独立消息 */
 function generateNewMessageId() {
   simForm.messageId = `msg-${Date.now().toString().slice(-6)}`;
   simForm.sequence = Math.floor(Math.random() * 9000 + 1000);
 }
 
+/** 加载设备列表下拉选项 */
 async function loadDevices() {
   try {
     const res = await getDevices({ page: 1, size: 1000 });
@@ -275,6 +283,7 @@ async function loadDevices() {
   }
 }
 
+/** 查询当前选定设备的遥测时序数据 */
 async function fetchTelemetry() {
   if (!selectedDeviceId.value) return;
   viewState.value = "loading";
@@ -297,6 +306,7 @@ async function fetchTelemetry() {
   }
 }
 
+/** 切换目标设备 */
 function handleDeviceChange() {
   const currentDev = deviceOptions.value.find((d) => d.id === selectedDeviceId.value);
   if (currentDev) {
@@ -306,11 +316,13 @@ function handleDeviceChange() {
   fetchTelemetry();
 }
 
+/** 分页变化处理 */
 function handlePageChange(page: number) {
   queryParams.page = page;
   fetchTelemetry();
 }
 
+/** 执行 HTTP QoS 1 模拟上报 */
 async function handleSendSimulate() {
   simulating.value = true;
   simFeedback.value = null;
@@ -330,10 +342,15 @@ async function handleSendSimulate() {
     });
     if (res.data) {
       simFeedback.value = res.data;
+      if (res.data.duplicate) {
+        ElMessage.warning("已触发 QoS 1 幂等去重（重复消息未二次入库）");
+      } else {
+        ElMessage.success("遥测数据模拟上报成功！");
+      }
       await fetchTelemetry();
     }
   } catch (err: any) {
-    alert(`模拟上报失败：${err.message}`);
+    ElMessage.error(`模拟上报失败：${err.message}`);
   } finally {
     simulating.value = false;
   }
@@ -373,20 +390,6 @@ onMounted(async () => {
   font-size: 13px;
   color: #94a3b8;
   white-space: nowrap;
-}
-
-.select-control, .input-control {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  outline: none;
-}
-
-.select-control:focus, .input-control:focus {
-  border-color: #38bdf8;
 }
 
 .simulate-card {
@@ -441,24 +444,11 @@ onMounted(async () => {
   gap: 12px;
 }
 
-.sim-grid.three-col {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
-}
-
-.sim-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.sim-item label {
-  font-size: 12px;
+.sim-body :deep(.el-form-item__label) {
   color: #94a3b8;
+  font-size: 12px;
+  padding-bottom: 2px;
 }
-
-.req { color: #f87171; }
 
 .sim-footer {
   display: flex;

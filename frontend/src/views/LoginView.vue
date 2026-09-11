@@ -27,41 +27,48 @@
           <form class="login-form" @submit.prevent="handleLoginSubmit">
             <div class="form-field">
               <label for="loginTenant">企业租户编码 (Tenant Code) <b class="req-star">*</b></label>
-              <select id="loginTenant" v-model="formData.tenantCode" class="form-input form-select" @change="onTenantChange">
-                <option value="tenant_demo_a">tenant_demo_a (华北智能工厂示范租户)</option>
-                <option value="tenant_demo_b">tenant_demo_b (华东高精装备制造租户)</option>
-              </select>
+              <el-select
+                id="loginTenant"
+                v-model="formData.tenantCode"
+                style="width: 100%"
+                @change="onTenantChange"
+              >
+                <el-option label="tenant_demo_a (华北智能工厂示范租户)" value="tenant_demo_a" />
+                <el-option label="tenant_demo_b (华东高精装备制造租户)" value="tenant_demo_b" />
+              </el-select>
             </div>
 
             <div class="form-field">
               <label for="loginUsername">账号用户名 (Username) <b class="req-star">*</b></label>
-              <input
+              <el-input
                 id="loginUsername"
                 v-model="formData.username"
-                type="text"
-                class="form-input"
                 placeholder="请输入用户名"
-                required
                 @input="onUsernameInput"
               />
             </div>
 
             <div class="form-field">
               <label for="loginPassword">登录密码 (Password) <b class="req-star">*</b></label>
-              <input
+              <el-input
                 id="loginPassword"
                 v-model="formData.password"
                 type="password"
-                class="form-input"
+                show-password
                 placeholder="请输入登录密码"
-                required
               />
             </div>
 
-            <button type="submit" class="login-submit-btn" :disabled="isLoading">
+            <el-button
+              type="primary"
+              size="large"
+              native-type="submit"
+              class="login-submit-btn"
+              :loading="isLoading"
+            >
               <span class="btn-text">{{ isLoading ? "正在登录..." : "登录进入系统" }}</span>
               <span class="btn-perm-tag">POST /api/auth/login</span>
-            </button>
+            </el-button>
           </form>
 
           <!-- 6 个正式业务角色快捷切换卡片 -->
@@ -127,13 +134,14 @@
           <div class="kick-demo-card">
             <div class="kick-demo-header">
               <strong>单会话顶替机制模拟演示</strong>
-              <button
-                type="button"
+              <el-button
+                type="warning"
+                size="small"
                 class="kick-action-btn"
                 @click="simulateKickOut"
               >
-                <span>⚠️ 模拟新设备登录（踢出当前会话）</span>
-              </button>
+                ⚠️ 模拟新设备登录（踢出当前会话）
+              </el-button>
             </div>
             <p class="kick-demo-desc">
               模拟另一个客户端使用相同账号成功登录并获取新 jti。当前页面下一次请求将被服务端 401 拦截并弹出失效警告。
@@ -181,6 +189,7 @@
 <script setup lang="ts">
 import { reactive, ref, computed } from "vue";
 import { useRouter, useRoute } from "vue-router";
+import { ElMessage } from "element-plus";
 import { useAuthStore, ROLE_PRESETS } from "../stores/auth";
 
 const router = useRouter();
@@ -208,6 +217,10 @@ let toastTimer: any = null;
  * 入参为消息文本与类型，出参无
  */
 function showToast(message: string, type: "success" | "danger" | "warning" = "success") {
+  ElMessage({
+    message,
+    type: type === "danger" ? "error" : type,
+  });
   if (toastTimer) clearTimeout(toastTimer);
   toast.message = message;
   toast.type = type;

@@ -38,9 +38,9 @@
             </button>
           </div>
 
-          <button type="button" class="btn-create-map" @click="openCreateModal">
-            <span>＋ 新建底图配置</span>
-          </button>
+          <el-button type="primary" :icon="Plus" @click="openCreateModal">
+            新建底图配置
+          </el-button>
         </template>
       </PageHeader>
 
@@ -53,12 +53,17 @@
       >
         <div class="filter-field">
           <label class="filter-label">底图渲染类型</label>
-          <select v-model="bgFilter" class="filter-select" @change="handleFilter">
-            <option value="">全部底图类型</option>
-            <option value="SVG">矢量图形 (SVG)</option>
-            <option value="IMAGE">光栅图片 (IMAGE)</option>
-            <option value="GRID">网格坐标 (GRID)</option>
-          </select>
+          <el-select
+            v-model="bgFilter"
+            placeholder="全部底图类型"
+            style="width: 170px"
+            @change="handleFilter"
+          >
+            <el-option label="全部底图类型" value="" />
+            <el-option label="矢量图形 (SVG)" value="SVG" />
+            <el-option label="光栅图片 (IMAGE)" value="IMAGE" />
+            <el-option label="网格坐标 (GRID)" value="GRID" />
+          </el-select>
         </div>
       </FilterBar>
 
@@ -85,9 +90,9 @@
             description="当前租户尚未创建任何厂区或库房底图，点击上方按钮即可新增。"
           >
             <template #action>
-              <button type="button" class="btn-create-map" @click="openCreateModal">
+              <el-button type="primary" size="small" @click="openCreateModal">
                 立即新建地图
-              </button>
+              </el-button>
             </template>
           </EmptyState>
         </div>
@@ -132,96 +137,110 @@
           <!-- 操作列 -->
           <template #actions="{ row }">
             <div class="action-buttons">
-              <button
-                type="button"
-                class="btn-action primary"
+              <el-button
+                link
+                type="primary"
                 title="打开只读二维空间监控画布"
                 @click="handleViewMap(row.id)"
               >
-                <span>🖥️ 空间监控</span>
-              </button>
-              <button
-                type="button"
-                class="btn-action edit"
+                🖥️ 空间监控
+              </el-button>
+              <el-button
+                link
+                type="warning"
                 title="配置与调整相对百分比点位"
                 @click="handleEditMap(row.id)"
               >
-                <span>✏️ 点位配置</span>
-              </button>
+                ✏️ 点位配置
+              </el-button>
             </div>
           </template>
         </DataTable>
       </div>
 
-      <!-- 新建地图弹窗 (ConfirmDialog 封装) -->
-      <ConfirmDialog
-        v-model:visible="showCreateModal"
+      <!-- 新建地图弹窗 (el-dialog 封装) -->
+      <el-dialog
+        v-model="showCreateModal"
         title="新建二维站点底图配置"
-        confirm-text="确认创建"
-        cancel-text="取消"
-        :loading="isSubmitting"
-        @confirm="submitCreateMap"
+        width="580px"
+        append-to-body
+        destroy-on-close
       >
-        <div class="create-form">
-          <div class="form-item">
-            <label class="form-label required">地图编码 (Map Code)</label>
-            <input
+        <el-form label-position="top" class="custom-el-form">
+          <el-form-item label="地图编码 (Map Code)" required>
+            <el-input
               v-model="createFormData.mapCode"
-              type="text"
-              class="form-input"
               placeholder="例如: MAP_WORKSHOP_01"
             />
-          </div>
+          </el-form-item>
 
-          <div class="form-item">
-            <label class="form-label required">地图名称 (Map Name)</label>
-            <input
+          <el-form-item label="地图名称 (Map Name)" required>
+            <el-input
               v-model="createFormData.mapName"
-              type="text"
-              class="form-input"
               placeholder="例如: 智能制造二车间平面图"
             />
-          </div>
+          </el-form-item>
 
-          <div class="form-item">
-            <label class="form-label required">底图资源存储键</label>
-            <input v-model="createFormData.asset.storageKey" type="text" class="form-input" placeholder="例如: maps/workshop-01.png" />
-          </div>
+          <el-form-item label="底图资源存储键" required>
+            <el-input
+              v-model="createFormData.asset.storageKey"
+              placeholder="例如: maps/workshop-01.png"
+            />
+          </el-form-item>
 
-          <div class="form-item">
-            <label class="form-label required">底图 MIME 类型</label>
-            <select v-model="createFormData.asset.mimeType" class="form-select">
-              <option value="image/png">image/png</option>
-              <option value="image/jpeg">image/jpeg</option>
-              <option value="image/webp">image/webp</option>
-            </select>
-          </div>
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="底图 MIME 类型" required>
+                <el-select v-model="createFormData.asset.mimeType" style="width: 100%">
+                  <el-option label="image/png" value="image/png" />
+                  <el-option label="image/jpeg" value="image/jpeg" />
+                  <el-option label="image/webp" value="image/webp" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="底图大小（字节）" required>
+                <el-input-number
+                  v-model="createFormData.asset.sizeBytes"
+                  :min="1"
+                  :max="5242880"
+                  style="width: 100%"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
 
-          <div class="form-item">
-            <label class="form-label required">底图大小（字节）</label>
-            <input v-model.number="createFormData.asset.sizeBytes" type="number" min="1" max="5242880" class="form-input" />
-          </div>
+          <el-form-item label="底图 SHA-256" required>
+            <el-input
+              v-model="createFormData.asset.sha256"
+              maxlength="64"
+              placeholder="64 位十六进制摘要"
+              class="font-mono"
+            />
+          </el-form-item>
 
-          <div class="form-item">
-            <label class="form-label required">底图 SHA-256</label>
-            <input v-model="createFormData.asset.sha256" type="text" maxlength="64" class="form-input font-mono" placeholder="64 位十六进制摘要" />
-          </div>
-
-          <div class="form-item">
-            <label class="form-label">用途描述说明</label>
-            <textarea
+          <el-form-item label="用途描述说明">
+            <el-input
               v-model="createFormData.description"
-              class="form-textarea"
-              rows="3"
+              type="textarea"
+              :rows="3"
               placeholder="说明底图适用的厂区、库区或生产线范围..."
-            ></textarea>
-          </div>
+            />
+          </el-form-item>
 
           <p v-if="formValidationError" class="form-error-tip">
             ⚠️ {{ formValidationError }}
           </p>
-        </div>
-      </ConfirmDialog>
+        </el-form>
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button @click="showCreateModal = false">取消</el-button>
+            <el-button type="primary" :loading="isSubmitting" @click="submitCreateMap">
+              确认创建
+            </el-button>
+          </div>
+        </template>
+      </el-dialog>
     </div>
   </div>
 </template>
@@ -237,6 +256,7 @@
  */
 
 import { ref, reactive, computed, onMounted } from "vue";
+import { Plus } from "@element-plus/icons-vue";
 import type { SiteMapItem } from "../../types/insights";
 import type { ViewState } from "../../types/common";
 import { fetchSiteMapList, createSiteMap } from "../../api/insights";

@@ -7,10 +7,9 @@
       description="生产工单承接销售与制造意图，锁定 BOM 与 Routing 版本，记录下达派工、领退料、报工质检与成品入库全流程。"
     >
       <template #actions>
-        <button v-if="hasPermission('mes:workorder:create')" type="button" class="btn btn-primary" @click="openCreateModal">
-          <span class="btn-icon">＋</span>
-          <span>新建生产工单</span>
-        </button>
+        <el-button v-if="hasPermission('mes:workorder:create')" type="primary" :icon="Plus" @click="openCreateModal">
+          新建生产工单
+        </el-button>
       </template>
     </PageHeader>
 
@@ -21,18 +20,20 @@
       @search="handleSearch"
       @reset="handleReset"
     >
-      <div class="filter-select-group">
-        <label class="filter-label">状态：</label>
-        <select v-model="queryParams.status" class="filter-select" @change="handleSearch">
-          <option value="">全部状态</option>
-          <option value="Draft">草稿 (Draft)</option>
-          <option value="PendingApproval">待审核 (PendingApproval)</option>
-          <option value="Released">已下达 (Released)</option>
-          <option value="InProgress">生产中 (InProgress)</option>
-          <option value="Completed">已完成 (Completed)</option>
-          <option value="Rejected">已驳回 (Rejected)</option>
-        </select>
-      </div>
+      <el-select
+        v-model="queryParams.status"
+        placeholder="全部状态"
+        clearable
+        style="width: 180px"
+        @change="handleSearch"
+      >
+        <el-option label="草稿 (Draft)" value="Draft" />
+        <el-option label="待审核 (PendingApproval)" value="PendingApproval" />
+        <el-option label="已下达 (Released)" value="Released" />
+        <el-option label="生产中 (InProgress)" value="InProgress" />
+        <el-option label="已完成 (Completed)" value="Completed" />
+        <el-option label="已驳回 (Rejected)" value="Rejected" />
+      </el-select>
     </FilterBar>
 
     <!-- 错误异常提示 -->
@@ -113,237 +114,243 @@
 
       <!-- 操作入口列 (受 allowedActions 控制) -->
       <template #actions="{ row }">
-        <div class="action-btn-group">
+        <div style="display: flex; gap: 6px; justify-content: center; flex-wrap: wrap">
           <!-- 详情 -->
-          <button type="button" class="btn-text" @click="viewDetail(row)">
+          <el-button type="primary" link size="small" @click="viewDetail(row)">
             详情
-          </button>
+          </el-button>
 
           <!-- 提交审核 (Draft / Rejected) -->
-          <button
+          <el-button
             v-if="row.status === 'Draft' || row.status === 'Rejected'"
-            type="button"
-            class="btn-text text-primary"
+            type="primary"
+            link
+            size="small"
             :disabled="!isActionAllowed(row, 'submit')"
             :title="getActionDisabledReason(row, 'submit') || '提交审批'"
             @click="promptSubmit(row)"
           >
             提交
-          </button>
+          </el-button>
 
           <!-- 审核批准与驳回 (PendingApproval) -->
           <template v-if="row.status === 'PendingApproval'">
-            <button
-              type="button"
-              class="btn-text text-success"
+            <el-button
+              type="success"
+              link
+              size="small"
               :disabled="!isActionAllowed(row, 'approve')"
               :title="getActionDisabledReason(row, 'approve') || '审核通过并下达'"
               @click="promptApprove(row)"
             >
               批准
-            </button>
-            <button
-              type="button"
-              class="btn-text text-warning"
+            </el-button>
+            <el-button
+              type="warning"
+              link
+              size="small"
               :disabled="!isActionAllowed(row, 'reject')"
               :title="getActionDisabledReason(row, 'reject') || '驳回工单'"
               @click="openRejectModal(row)"
             >
               驳回
-            </button>
+            </el-button>
           </template>
 
           <!-- 完工 (InProgress) -->
-          <button
+          <el-button
             v-if="row.status === 'InProgress'"
-            type="button"
-            class="btn-text text-success"
+            type="success"
+            link
+            size="small"
             :disabled="!isActionAllowed(row, 'complete')"
             :title="getActionDisabledReason(row, 'complete') || '正常完工'"
             @click="promptComplete(row)"
           >
             完工
-          </button>
+          </el-button>
 
           <!-- 强制结案 (Released / InProgress) -->
-          <button
+          <el-button
             v-if="row.status === 'Released' || row.status === 'InProgress'"
-            type="button"
-            class="btn-text text-muted"
+            type="info"
+            link
+            size="small"
             :disabled="!isActionAllowed(row, 'manualComplete')"
             :title="getActionDisabledReason(row, 'manualComplete') || '强制人工结案'"
             @click="openManualCompleteModal(row)"
           >
             结案
-          </button>
+          </el-button>
         </div>
       </template>
     </DataTable>
 
     <!-- 新建工单对话框 -->
-    <div v-if="createModalVisible" class="modal-mask" @click.self="createModalVisible = false">
-      <div class="modal-card modal-large">
-        <div class="modal-header">
-          <h3 class="modal-title">新建生产工单 (Work Order)</h3>
-          <button type="button" class="btn-close" @click="createModalVisible = false">✕</button>
-        </div>
-
-        <form class="modal-body" @submit.prevent="submitCreateWorkOrder">
-          <div class="options-search-row">
-            <label for="work-order-option-keyword">目录搜索</label>
-            <input
-              id="work-order-option-keyword"
-              v-model="createOptionsKeyword"
-              type="search"
-              class="form-input"
-              placeholder="输入产品、BOM 或工艺路线编码后回车搜索"
-              @keyup.enter="loadCreateOptions"
-            />
-            <button type="button" class="btn-text text-primary" @click="loadCreateOptions">搜索</button>
-          </div>
-          <div v-if="createOptionsLoading" class="options-hint text-muted">⏳ 正在加载真实产品、BOM 和工艺路线目录...</div>
-          <div v-else-if="createOptionsError" class="options-hint text-warning">⚠️ {{ createOptionsError }}</div>
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>产出产品 <span class="req">*</span></label>
-              <select v-model="createForm.productId" class="form-input" required>
-                <option value="">请选择真实产品</option>
-                <option v-for="product in products" :key="product.id" :value="String(product.id)">{{ product.sku }} ({{ product.name }})</option>
-              </select>
-            </div>
-            <div class="form-item">
-              <label>计划生产数量 <span class="req">*</span></label>
-              <input
-                v-model="createForm.plannedQty"
-                type="text"
-                class="form-input font-mono"
-                placeholder="例如 100.00"
-                required
-              />
-            </div>
-          </div>
-
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>计划开工时间 <span class="req">*</span></label>
-              <input
-                v-model="createForm.plannedStartTime"
-                type="datetime-local"
-                class="form-input"
-                required
-              />
-              <small class="form-hint">页面选择日期和时间，提交时自动转换为服务端时间格式。</small>
-            </div>
-            <div class="form-item">
-              <label>计划完工时间 <span class="req">*</span></label>
-              <input
-                v-model="createForm.plannedFinishTime"
-                type="datetime-local"
-                class="form-input"
-                required
-              />
-              <small class="form-hint">页面选择日期和时间，提交时自动转换为服务端时间格式。</small>
-            </div>
-          </div>
-
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>关联 BOM <span class="req">*</span></label>
-              <select v-model="createForm.bomId" class="form-input" required>
-                <option value="">请选择真实 BOM</option>
-                <option v-for="bom in boms" :key="bom.id" :value="String(bom.id)">{{ bom.bomCode }} / {{ bom.version }}</option>
-              </select>
-            </div>
-            <div class="form-item">
-              <label>关联工艺路线 <span class="req">*</span></label>
-              <select v-model="createForm.routingId" class="form-input" required>
-                <option value="">请选择真实工艺路线</option>
-                <option v-for="routing in routings" :key="routing.id" :value="String(routing.id)">{{ routing.routingCode }} / {{ routing.version }}</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-item">
-            <label>来源销售订单行 ID (可选，仅用于追溯)</label>
-            <input
-              v-model="createForm.sourceSalesOrderLineId"
-              type="text"
-              class="form-input font-mono"
-              placeholder="真实销售订单行 UUID"
-            />
-          </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="createModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
-              {{ isSubmitting ? "创建中..." : "确认创建工单 (Draft)" }}
-            </button>
-          </div>
-        </form>
+    <el-dialog
+      v-model="createModalVisible"
+      title="新建生产工单 (Work Order)"
+      width="780px"
+      destroy-on-close
+      append-to-body
+    >
+      <div style="display: flex; gap: 8px; margin-bottom: 16px; align-items: center">
+        <el-input
+          id="work-order-option-keyword"
+          v-model="createOptionsKeyword"
+          placeholder="输入产品、BOM 或工艺路线编码后回车搜索"
+          clearable
+          style="flex: 1"
+          @keyup.enter="loadCreateOptions"
+        />
+        <el-button type="primary" :icon="Search" @click="loadCreateOptions">搜索</el-button>
       </div>
-    </div>
+      <div v-if="createOptionsLoading" style="font-size: 12px; color: #8ca2b8; margin-bottom: 12px">⏳ 正在加载真实产品、BOM 和工艺路线目录...</div>
+      <div v-else-if="createOptionsError" style="font-size: 12px; color: #f43f5e; margin-bottom: 12px">⚠️ {{ createOptionsError }}</div>
+
+      <el-form label-width="110px" @submit.prevent="submitCreateWorkOrder">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="产出产品" required>
+              <el-select v-model="createForm.productId" placeholder="请选择真实产品" filterable style="width: 100%">
+                <el-option
+                  v-for="product in products"
+                  :key="product.id"
+                  :value="String(product.id)"
+                  :label="`${product.sku} (${product.name})`"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="计划生产数量" required>
+              <el-input v-model="createForm.plannedQty" placeholder="例如 100.00" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="计划开工时间" required>
+              <el-input v-model="createForm.plannedStartTime" type="datetime-local" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="计划完工时间" required>
+              <el-input v-model="createForm.plannedFinishTime" type="datetime-local" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="关联 BOM" required>
+              <el-select v-model="createForm.bomId" placeholder="请选择真实 BOM" filterable style="width: 100%">
+                <el-option
+                  v-for="bom in boms"
+                  :key="bom.id"
+                  :value="String(bom.id)"
+                  :label="`${bom.bomCode} / ${bom.version}`"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="关联工艺路线" required>
+              <el-select v-model="createForm.routingId" placeholder="请选择真实工艺路线" filterable style="width: 100%">
+                <el-option
+                  v-for="routing in routings"
+                  :key="routing.id"
+                  :value="String(routing.id)"
+                  :label="`${routing.routingCode} / ${routing.version}`"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="来源销售订单行">
+              <el-select
+                v-model="createForm.sourceSalesOrderLineId"
+                placeholder="请选择已审核销售订单行（可选，用于追溯）"
+                filterable
+                clearable
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="line in sourceSalesOrderLines"
+                  :key="line.id"
+                  :value="line.id"
+                  :label="line.label"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="createModalVisible = false">取消</el-button>
+        <el-button type="primary" :loading="isSubmitting" @click="submitCreateWorkOrder">
+          {{ isSubmitting ? "创建中..." : "确认创建工单 (Draft)" }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 审核驳回原因弹窗 -->
-    <div v-if="rejectModalVisible" class="modal-mask" @click.self="rejectModalVisible = false">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">驳回工单审核确认</h3>
-          <button type="button" class="btn-close" @click="rejectModalVisible = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="handleConfirmReject">
-          <p class="modal-hint">
-            正在审核驳回工单 <strong>{{ activeWo?.workOrderNo }}</strong>。必须填写驳回原因：
-          </p>
-          <div class="form-item">
-            <label>驳回原因说明 <span class="req">*</span></label>
-            <textarea
-              v-model="rejectionReason"
-              class="form-input form-textarea"
-              rows="3"
-              placeholder="请详述退回原因，如物料缺料、工时计划冲突等..."
-              required
-            ></textarea>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="rejectModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-warning" :disabled="isSubmitting">
-              {{ isSubmitting ? "处理中..." : "确认退回驳回" }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog
+      v-model="rejectModalVisible"
+      title="驳回工单审核确认"
+      width="540px"
+      destroy-on-close
+      append-to-body
+    >
+      <p style="margin-bottom: 12px; color: #cbd5e1">
+        正在审核驳回工单 <strong style="color: #f1f5f9">{{ activeWo?.workOrderNo }}</strong>。必须填写驳回原因：
+      </p>
+      <el-form label-width="100px" @submit.prevent="handleConfirmReject">
+        <el-form-item label="驳回原因说明" required>
+          <el-input
+            v-model="rejectionReason"
+            type="textarea"
+            :rows="3"
+            placeholder="请详述退回原因，如物料缺料、工时计划冲突等..."
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="rejectModalVisible = false">取消</el-button>
+        <el-button type="warning" :loading="isSubmitting" @click="handleConfirmReject">
+          {{ isSubmitting ? "处理中..." : "确认退回驳回" }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 人工强制结案原因弹窗 -->
-    <div v-if="manualCompleteModalVisible" class="modal-mask" @click.self="manualCompleteModalVisible = false">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">工单强制手动结案确认</h3>
-          <button type="button" class="btn-close" @click="manualCompleteModalVisible = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="handleConfirmManualComplete">
-          <p class="modal-hint">
-            注意：提前强制结案工单 <strong>{{ activeWo?.workOrderNo }}</strong> 将终止剩余生产，不补造任何报工或库存流水！
-          </p>
-          <div class="form-item">
-            <label>强制完工原因 <span class="req">*</span></label>
-            <textarea
-              v-model="manualCompleteReason"
-              class="form-input form-textarea"
-              rows="3"
-              placeholder="请填写提前截单/结案原因..."
-              required
-            ></textarea>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="manualCompleteModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-danger" :disabled="isSubmitting">
-              {{ isSubmitting ? "提交中..." : "确认强制结案" }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog
+      v-model="manualCompleteModalVisible"
+      title="工单强制手动结案确认"
+      width="540px"
+      destroy-on-close
+      append-to-body
+    >
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 14px"
+        :description="`提前强制结案工单【${activeWo?.workOrderNo}】将终止剩余生产，不补造任何报工或库存流水！`"
+      />
+      <el-form label-width="100px" @submit.prevent="handleConfirmManualComplete">
+        <el-form-item label="强制结案原因" required>
+          <el-input
+            v-model="manualCompleteReason"
+            type="textarea"
+            :rows="3"
+            placeholder="请填写提前截单/结案原因..."
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="manualCompleteModalVisible = false">取消</el-button>
+        <el-button type="danger" :loading="isSubmitting" @click="handleConfirmManualComplete">
+          {{ isSubmitting ? "提交中..." : "确认强制结案" }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 二次确认对话框 (提交/审核批准/正常完工) -->
     <ConfirmDialog
@@ -360,6 +367,8 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
 import { useRouter } from "vue-router";
+import { Plus, Search } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
 import type { AllowedAction } from "../../types/common";
 import {
@@ -381,6 +390,7 @@ import type {
   RoutingItem,
 } from "../../types/manufacturing";
 import type { Product } from "../../types/inventory";
+import type { SalesOrder } from "../../types/sales";
 import {
   getWorkOrders,
   createWorkOrder,
@@ -393,6 +403,7 @@ import {
   getRoutings,
 } from "../../api/manufacturing";
 import { getProducts } from "../../api/masterData";
+import { getSalesOrders } from "../../api/sales";
 import { usePermission } from "../../composables/usePermission";
 
 const emit = defineEmits<{
@@ -410,6 +421,7 @@ const total = ref(0);
 const products = ref<Product[]>([]);
 const boms = ref<BomItem[]>([]);
 const routings = ref<RoutingItem[]>([]);
+const sourceSalesOrderLines = ref<Array<{ id: string; label: string }>>([]);
 const createOptionsKeyword = ref("");
 const createOptionsLoading = ref(false);
 const createOptionsError = ref("");
@@ -583,7 +595,7 @@ async function submitCreateWorkOrder() {
     createModalVisible.value = false;
     await fetchWorkOrders();
   } catch (err: any) {
-    alert(`创建工单失败：${err.message}`);
+    ElMessage.error(`创建工单失败：${err.message}`);
   } finally {
     isSubmitting.value = false;
   }
@@ -630,7 +642,7 @@ async function handleExecuteActionConfirm() {
     actionConfirm.visible = false;
     await fetchWorkOrders();
   } catch (err: any) {
-    alert(`操作失败：${err.message}`);
+    ElMessage.error(`操作失败：${err.message}`);
   } finally {
     actionConfirm.loading = false;
   }
@@ -650,7 +662,7 @@ async function handleConfirmReject() {
     rejectModalVisible.value = false;
     await fetchWorkOrders();
   } catch (err: any) {
-    alert(`退回失败：${err.message}`);
+    ElMessage.error(`退回失败：${err.message}`);
   } finally {
     isSubmitting.value = false;
   }
@@ -670,7 +682,7 @@ async function handleConfirmManualComplete() {
     manualCompleteModalVisible.value = false;
     await fetchWorkOrders();
   } catch (err: any) {
-    alert(`结案失败：${err.message}`);
+    ElMessage.error(`结案失败：${err.message}`);
   } finally {
     isSubmitting.value = false;
   }
@@ -696,10 +708,26 @@ async function loadCreateOptions() {
     products.value = productRes.data.records || [];
     boms.value = bomRes.data.records || [];
     routings.value = routingRes.data.records || [];
+    try {
+      const salesRes = await getSalesOrders({ page: 1, size: 1000, status: "Approved" });
+      sourceSalesOrderLines.value = (salesRes.data.records || []).flatMap((order: SalesOrder) =>
+        (order.lines || []).map((line) => ({
+          id: String(line.id),
+          label: `${order.soNo} / 第 ${line.lineNo} 行 / ${line.sku || line.productId} / 未发 ${line.unshippedQty} ${line.uom}`,
+        })),
+      );
+    } catch (error) {
+      // 来源关联是可选项；目录权限或接口暂不可用时不阻断工单基础选项。
+      sourceSalesOrderLines.value = [];
+      console.info("[WorkOrderListView] 来源销售订单行目录暂不可用", error);
+    }
     // 搜索结果变化后清理不再属于当前真实目录的选择值，禁止提交失效 UUID。
     if (createForm.productId && !products.value.some((item) => String(item.id) === String(createForm.productId))) createForm.productId = "";
     if (createForm.bomId && !boms.value.some((item) => String(item.id) === String(createForm.bomId))) createForm.bomId = "";
     if (createForm.routingId && !routings.value.some((item) => String(item.id) === String(createForm.routingId))) createForm.routingId = "";
+    if (createForm.sourceSalesOrderLineId && !sourceSalesOrderLines.value.some(
+      (item) => item.id === String(createForm.sourceSalesOrderLineId),
+    )) createForm.sourceSalesOrderLineId = "";
   } catch (err: any) {
     createOptionsError.value = err?.message || "加载工单创建主数据失败";
   } finally {

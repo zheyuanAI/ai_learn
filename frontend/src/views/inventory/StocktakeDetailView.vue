@@ -1,127 +1,116 @@
 <template>
-  <div v-if="visible && stocktake" class="dialog-mask" @click.self="handleClose">
-    <div class="dialog-panel">
-      <div class="dialog-header">
-        <div class="header-left">
-          <h3 class="dialog-title">差异盘点单详情</h3>
-          <span class="mono-no">{{ stocktake.stocktakeNo }}</span>
-          <StatusBadge
-            :type="stocktake.status === 'ConfirmedAdjusted' ? 'success' : stocktake.status === 'Counting' ? 'warning' : 'default'"
-            :text="stocktake.status === 'ConfirmedAdjusted' ? '已确认并调整' : stocktake.status === 'Counting' ? '盘点中' : '未盘点'"
-          />
-        </div>
-        <button type="button" class="btn-close" @click="handleClose">✕</button>
+  <el-dialog
+    :model-value="visible && !!stocktake"
+    width="920px"
+    destroy-on-close
+    @close="handleClose"
+  >
+    <template #header>
+      <div v-if="stocktake" class="header-left" style="display: flex; align-items: center; gap: 12px">
+        <span style="font-weight: 600; font-size: 16px">差异盘点单详情</span>
+        <span class="mono-no" style="color: #67d2ff; font-family: monospace">{{ stocktake.stocktakeNo }}</span>
+        <StatusBadge
+          :type="stocktake.status === 'ConfirmedAdjusted' ? 'success' : stocktake.status === 'Counting' ? 'warning' : 'default'"
+          :text="stocktake.status === 'ConfirmedAdjusted' ? '已确认并调整' : stocktake.status === 'Counting' ? '盘点中' : '未盘点'"
+        />
       </div>
+    </template>
 
-      <div class="dialog-body">
-        <div class="meta-row">
-          <div class="meta-card">
-            <span class="lbl">盘点仓库</span>
-            <strong>{{ stocktake.warehouseName }}</strong>
-          </div>
-          <div class="meta-card">
-            <span class="lbl">盘点范围</span>
-            <strong>{{ stocktake.scopeType === 'FULL' ? '全仓盘点' : '指定库位盘点' }}</strong>
-          </div>
-          <div class="meta-card">
-            <span class="lbl">系统数量快照时点</span>
-            <span class="mono-text">{{ stocktake.systemSnapshotAt || stocktake.startedAt || '-' }}</span>
-          </div>
-          <div class="meta-card">
-            <span class="lbl">单据版本</span>
-            <span class="mono-text">v{{ stocktake.version }}</span>
-          </div>
-          <div class="meta-card">
-            <span class="lbl">后端允许动作</span>
-            <span class="mono-text">{{ allowedActionText }}</span>
-          </div>
-          <div v-if="stocktake.confirmedAt" class="meta-card">
-            <span class="lbl">调整完成时点</span>
-            <span class="mono-text text-success">{{ stocktake.confirmedAt }}</span>
-          </div>
+    <div v-if="stocktake" class="dialog-inner">
+      <div class="meta-row">
+        <div class="meta-card">
+          <span class="lbl">盘点仓库</span>
+          <strong>{{ stocktake.warehouseName }}</strong>
         </div>
-
-        <div class="lines-container">
-          <div class="lines-title-row">
-            <h4>盘点物料明细与差异录入</h4>
-            <span class="hint-text">实盘录入后自动计算差异；存在差异时必须填写原因说明</span>
-          </div>
-
-          <div class="table-scroll">
-            <table class="detail-table">
-              <thead>
-                <tr>
-                  <th>物料编码 (SKU)</th>
-                  <th>物料名称</th>
-                  <th>所在库位</th>
-                  <th style="text-align: right;">快照系统量</th>
-                  <th style="text-align: right; width: 130px;">实盘录入量</th>
-                  <th style="text-align: right;">盘点差异</th>
-                  <th>差异原因 (有差异必填)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="line in editableLines" :key="line.id">
-                  <td class="mono-sku">{{ line.sku }}</td>
-                  <td>{{ line.productName }}</td>
-                  <td class="mono-loc">{{ line.locationCode }}</td>
-                  <td style="text-align: right;">
-                    <QuantityText :value="line.systemQty" :unit="line.uom" />
-                  </td>
-                  <td style="text-align: right;">
-                    <input
-                      v-if="stocktake.status === 'Counting'"
-                      v-model="line.countedQty"
-                      type="text"
-                      class="counted-input"
-                      @input="onCountedChange(line)"
-                    />
-                    <QuantityText v-else :value="line.countedQty" :unit="line.uom" />
-                  </td>
-                  <td style="text-align: right;">
-                    <span :class="getVarianceClass(line.varianceQty)">
-                      <QuantityText :value="line.varianceQty" :unit="line.uom" />
-                    </span>
-                  </td>
-                  <td>
-                    <input
-                      v-if="stocktake.status === 'Counting'"
-                      v-model="line.varianceReason"
-                      type="text"
-                      class="reason-input"
-                      :placeholder="parseFloat(line.varianceQty || '0') !== 0 ? '必须填写差异原因' : '无差异可留空'"
-                    />
-                    <span v-else class="reason-text">{{ line.varianceReason || '-' }}</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="meta-card">
+          <span class="lbl">盘点范围</span>
+          <strong>{{ stocktake.scopeType === 'FULL' ? '全仓盘点' : '指定库位盘点' }}</strong>
+        </div>
+        <div class="meta-card">
+          <span class="lbl">系统数量快照时点</span>
+          <span class="mono-text">{{ stocktake.systemSnapshotAt || stocktake.startedAt || '-' }}</span>
+        </div>
+        <div class="meta-card">
+          <span class="lbl">单据版本</span>
+          <span class="mono-text">v{{ stocktake.version }}</span>
+        </div>
+        <div class="meta-card">
+          <span class="lbl">后端允许动作</span>
+          <span class="mono-text">{{ allowedActionText }}</span>
+        </div>
+        <div v-if="stocktake.confirmedAt" class="meta-card">
+          <span class="lbl">调整完成时点</span>
+          <span class="mono-text text-success">{{ stocktake.confirmedAt }}</span>
         </div>
       </div>
 
-      <div class="dialog-footer">
-        <button type="button" class="btn btn-secondary" @click="handleClose">关闭</button>
-        <template v-if="canConfirm">
-          <button type="button" class="btn btn-secondary" :disabled="submitting" @click="saveDraftCount">
-            暂存实盘数量
-          </button>
-          <button type="button" class="btn btn-primary" :disabled="submitting" @click="handleOpenConfirm">
-            <span>{{ submitting ? '调整中...' : '确认并调整库存' }}</span>
-          </button>
-        </template>
+      <div class="lines-container">
+        <div class="lines-title-row">
+          <h4>盘点物料明细与差异录入</h4>
+          <span class="hint-text">实盘录入后自动计算差异；存在差异时必须填写原因说明</span>
+        </div>
+
+        <el-table :data="editableLines" stripe border style="width: 100%">
+          <el-table-column prop="sku" label="物料编码 (SKU)" width="140" />
+          <el-table-column prop="productName" label="物料名称" min-width="140" />
+          <el-table-column prop="locationCode" label="所在库位" width="110" />
+          <el-table-column label="快照系统量" width="120" align="right">
+            <template #default="{ row }">
+              <QuantityText :value="row.systemQty" :unit="row.uom" />
+            </template>
+          </el-table-column>
+          <el-table-column label="实盘录入量" width="140" align="right">
+            <template #default="{ row }">
+              <el-input
+                v-if="stocktake.status === 'Counting'"
+                v-model="row.countedQty"
+                size="small"
+                @input="onCountedChange(row)"
+              />
+              <QuantityText v-else :value="row.countedQty" :unit="row.uom" />
+            </template>
+          </el-table-column>
+          <el-table-column label="盘点差异" width="120" align="right">
+            <template #default="{ row }">
+              <span :class="getVarianceClass(row.varianceQty)">
+                <QuantityText :value="row.varianceQty" :unit="row.uom" />
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="差异原因 (有差异必填)" min-width="160">
+            <template #default="{ row }">
+              <el-input
+                v-if="stocktake.status === 'Counting'"
+                v-model="row.varianceReason"
+                size="small"
+                :placeholder="parseFloat(row.varianceQty || '0') !== 0 ? '必须填写差异原因' : '无差异可留空'"
+              />
+              <span v-else class="reason-text">{{ row.varianceReason || '-' }}</span>
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
     </div>
 
-    <!-- 确认并调整对话框 -->
-    <ConfirmDialog
-      v-model:visible="isConfirmOpen"
-      title="确认盘点结果并更新库存"
-      message="确认后将依据【实盘数量 - 系统数量】自动生成库存调整流水（STOCKTAKE_ADJUST），并正式调整对应库位实时余额。是否继续？"
-      :loading="submitting"
-      @confirm="executeConfirmAdjustment"
-    />
-  </div>
+    <template #footer>
+      <el-button @click="handleClose">关闭</el-button>
+      <template v-if="canConfirm">
+        <el-button :disabled="submitting" @click="saveDraftCount">暂存实盘数量</el-button>
+        <el-button type="primary" :loading="submitting" @click="handleOpenConfirm">
+          确认并调整库存
+        </el-button>
+      </template>
+    </template>
+  </el-dialog>
+
+  <!-- 确认并调整对话框 -->
+  <ConfirmDialog
+    v-model:visible="isConfirmOpen"
+    title="确认盘点结果并更新库存"
+    message="确认后将依据【实盘数量 - 系统数量】自动生成库存调整流水（STOCKTAKE_ADJUST），并正式调整对应库位实时余额。是否继续？"
+    :loading="submitting"
+    @confirm="executeConfirmAdjustment"
+  />
 </template>
 
 <script setup lang="ts">
@@ -131,6 +120,7 @@
  * 规则：无差异时不生成调整流水；有差异时生成不可篡改流水并更新库存
  */
 import { ref, watch, computed } from "vue";
+import { ElMessage } from "element-plus";
 import StatusBadge from "@/components/common/StatusBadge.vue";
 import QuantityText from "@/components/common/QuantityText.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
@@ -211,7 +201,7 @@ function handleOpenConfirm() {
   for (const l of editableLines.value) {
     const v = parseFloat(l.varianceQty || "0");
     if (v !== 0 && (!l.varianceReason || !l.varianceReason.trim())) {
-      alert(`物料 ${l.sku} 存在差异量 (${l.varianceQty})，必须填写差异原因！`);
+      ElMessage.warning(`物料 ${l.sku} 存在差异量 (${l.varianceQty})，必须填写差异原因！`);
       return;
     }
   }

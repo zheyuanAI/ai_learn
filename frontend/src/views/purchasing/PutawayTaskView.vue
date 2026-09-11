@@ -15,11 +15,17 @@
       @search="fetchPutawayTasks"
       @reset="resetFilter"
     >
-      <select v-model="queryParams.status" class="filter-select" @change="fetchPutawayTasks">
-        <option value="">全部上架状态</option>
-        <option value="Pending">待上架 (Pending)</option>
-        <option value="Confirmed">已确认完成 (Confirmed)</option>
-      </select>
+      <el-select
+        v-model="queryParams.status"
+        placeholder="全部上架状态"
+        clearable
+        style="width: 200px"
+        @change="fetchPutawayTasks"
+      >
+        <el-option label="全部上架状态" value="" />
+        <el-option label="待上架 (Pending)" value="Pending" />
+        <el-option label="已确认完成 (Confirmed)" value="Confirmed" />
+      </el-select>
     </FilterBar>
 
     <!-- 四态展示 -->
@@ -80,53 +86,58 @@
 
       <!-- 操作列 -->
       <template #actions="{ row }">
-        <button
+        <el-button
           v-if="row.status === 'Pending'"
-          type="button"
-          class="btn-action-primary"
+          type="primary"
+          link
+          size="small"
           @click="openConfirmModal(row)"
         >
           确认上架
-        </button>
-        <span v-else class="text-muted">已入库</span>
+        </el-button>
+        <el-tag v-else type="info" size="small">已入库</el-tag>
       </template>
     </DataTable>
 
     <!-- 确认上架弹窗 -->
-    <div v-if="isConfirmModalOpen && selectedTask" class="modal-mask" @click.self="isConfirmModalOpen = false">
-      <div class="modal-panel">
-        <div class="modal-header">
-          <h3 class="modal-title">确认执行货物上架</h3>
-          <button type="button" class="btn-close" @click="isConfirmModalOpen = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitPutaway">
-          <div class="info-card">
-            <span class="lbl">物料信息</span>
+    <el-dialog
+      v-model="isConfirmModalOpen"
+      title="确认执行货物上架"
+      width="560px"
+      destroy-on-close
+    >
+      <el-form v-if="selectedTask" label-width="140px" @submit.prevent="submitPutaway">
+        <el-descriptions :column="1" border style="margin-bottom: 16px">
+          <el-descriptions-item label="物料信息">
             <strong>{{ selectedTask.productName }} ({{ selectedTask.sku }})</strong>
-            <span class="sub">来源暂存位: {{ selectedTask.fromLocationCode }} | 批次: {{ selectedTask.lotNo || '-' }}</span>
-          </div>
-          <div class="form-item">
-            <label>目标常规存储库位 (Storage) <span class="req">*</span></label>
-            <select v-model="targetLocationId" class="form-select" required>
-              <option value="">请选择 Storage 库位</option>
-              <option v-for="location in filteredStorageLocations" :key="location.id" :value="location.id">
-                {{ location.code }} - {{ location.name }} {{ location.warehouseName ? `(${location.warehouseName})` : '' }}
-              </option>
-            </select>
-          </div>
-          <div class="form-item">
-            <label>本次上架数量 <span class="req">*</span></label>
-            <input v-model="putawayQtyInput" type="text" class="form-input" required />
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn-secondary" @click="isConfirmModalOpen = false">取消</button>
-            <button type="submit" class="btn-primary" :disabled="isSubmitting">
-              {{ isSubmitting ? '上架执行中...' : '确认移入目标库位' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          </el-descriptions-item>
+          <el-descriptions-item label="来源与批次">
+            来源暂存位: {{ selectedTask.fromLocationCode }} | 批次: {{ selectedTask.lotNo || '-' }}
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <el-form-item label="目标存储库位" required>
+          <el-select v-model="targetLocationId" placeholder="请选择 Storage 库位" style="width: 100%">
+            <el-option
+              v-for="location in filteredStorageLocations"
+              :key="location.id"
+              :label="`${location.code} - ${location.name} ${location.warehouseName ? `(${location.warehouseName})` : ''}`"
+              :value="location.id"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="本次上架数量" required>
+          <el-input v-model="putawayQtyInput" placeholder="请输入上架数量" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="isConfirmModalOpen = false">取消</el-button>
+        <el-button type="primary" :loading="isSubmitting" @click="submitPutaway">
+          {{ isSubmitting ? '上架执行中...' : '确认移入目标库位' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -136,6 +147,7 @@
  * 职责：展示待上架任务，指定目标常规存储库位并确认实物上架
  */
 import { ref, reactive, computed, onMounted } from "vue";
+import { ElMessage } from "element-plus";
 import { useCommand } from "@/composables/useCommand";
 import CommandFeedback from "@/components/common/CommandFeedback.vue";
 import PageHeader from "@/components/common/PageHeader.vue";
@@ -146,10 +158,10 @@ import QuantityText from "@/components/common/QuantityText.vue";
 import EmptyState from "@/components/common/EmptyState.vue";
 import ErrorState from "@/components/common/ErrorState.vue";
 import type { ViewState } from "@/types/common";
-import type { PutawayTask } from "@/types/purchasing";
-import type { Location } from "@/types/inventory";
-import { getLocationById, getLocations } from "@/api/masterData";
-import { getPutawayTasks, confirmPutawayTask } from "@/api/purchasing";
+import type { PurchaseQualityReceiptCandidate, PutawayTask } from "@/types/purchasing";
+import type { Location, Product } from "@/types/inventory";
+import { getLocationById, getLocations, getProducts } from "@/api/masterData";
+import { getPutawayTasks, confirmPutawayTask, getQualityReceiptCandidates } from "@/api/purchasing";
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
@@ -157,6 +169,8 @@ const taskList = ref<PutawayTask[]>([]);
 const totalCount = ref(0);
 const storageLocations = ref<Location[]>([]);
 const sourceLocations = ref<Record<string, Location>>({});
+const products = ref<Product[]>([]);
+const receiptCandidates = ref<PurchaseQualityReceiptCandidate[]>([]);
 
 /** 根据当前上架任务所属仓库，过滤出同仓 Storage 库位 */
 const filteredStorageLocations = computed(() => {
@@ -198,7 +212,21 @@ async function fetchPutawayTasks() {
       size: queryParams.size,
       status: queryParams.status || undefined,
     });
-    taskList.value = res.data.records;
+    const productMap = new Map(products.value.map((item) => [String(item.id), item]));
+    const receiptMap = new Map(receiptCandidates.value.map((item) => [String(item.receiptId), item]));
+    taskList.value = (res.data.records || []).map((task) => {
+      const product = productMap.get(String(task.productId));
+      const receipt = receiptMap.get(String(task.purchaseReceiptId));
+      return {
+        ...task,
+        purchaseOrderId: task.purchaseOrderId || receipt?.purchaseOrderId,
+        poNo: task.poNo || receipt?.purchaseOrderNo || receipt?.receiptNo,
+        sku: task.sku || product?.sku || String(task.productId),
+        productName: task.productName || product?.name || String(task.productId),
+        uom: task.uom || receipt?.uom || product?.uom,
+        lotNo: task.lotNo || receipt?.lotNo,
+      };
+    });
     totalCount.value = res.data.total;
     await loadSourceLocations(taskList.value);
     viewState.value = taskList.value.length === 0 ? "empty" : "ready";
@@ -276,7 +304,7 @@ async function openConfirmModal(row: PutawayTask) {
   selectedTask.value = row;
   if (!(await loadStorageLocationsForTask(row))) {
     targetLocationId.value = "";
-    alert("未找到该上架任务来源仓库下启用的 Storage 库位，请先维护真实库位。");
+    ElMessage.warning("未找到该上架任务来源仓库下启用的 Storage 库位，请先维护真实库位。");
     selectedTask.value = null;
     return;
   }
@@ -293,11 +321,11 @@ async function submitPutaway() {
   if (!targetLocationId.value || !filteredStorageLocations.value.some(
     (location) => String(location.id) === String(targetLocationId.value),
   )) {
-    alert("请选择当前来源仓库下真实、启用的 Storage 库位。");
+    ElMessage.warning("请选择当前来源仓库下真实、启用的 Storage 库位。");
     return;
   }
   if (!putawayQtyInput.value || Number.parseFloat(putawayQtyInput.value) <= 0) {
-    alert("上架数量必须来自真实任务且大于 0。");
+    ElMessage.warning("上架数量必须来自真实任务且大于 0。");
     return;
   }
   try {
@@ -307,14 +335,21 @@ async function submitPutaway() {
       putawayQty: putawayQtyInput.value,
     }, key), { onConflict: fetchPutawayTasks });
     isConfirmModalOpen.value = false;
+    ElMessage.success("上架确认成功！货物已上架到目标存储库位。");
     await fetchPutawayTasks();
   } catch (err: any) {
-    alert(err?.message || "上架确认失败");
+    ElMessage.error(err?.message || "上架确认失败");
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
-onMounted(() => {
-  fetchPutawayTasks();
+onMounted(async () => {
+  const [productResult, receiptResult] = await Promise.allSettled([
+    getProducts({ page: 1, size: 1000, status: "ACTIVE" }),
+    getQualityReceiptCandidates(),
+  ]);
+  if (productResult.status === "fulfilled") products.value = productResult.value.data.records || [];
+  if (receiptResult.status === "fulfilled") receiptCandidates.value = receiptResult.value.data || [];
+  await fetchPutawayTasks();
 });
 </script>
 

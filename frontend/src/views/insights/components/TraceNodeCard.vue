@@ -67,16 +67,18 @@
           <span v-else class="perm-lock">🔒 权限受限</span>
         </div>
 
-        <button
+        <el-button
           v-if="node.hasPermission && node.linkedRoute"
-          type="button"
+          type="primary"
+          link
+          size="small"
           class="btn-jump"
           title="点击穿透至业务控制台查看原始事实"
           @click.stop="handleNavigate"
         >
           <span>穿透详情</span>
-          <span class="jump-arrow">➔</span>
-        </button>
+          <el-icon class="jump-arrow"><ArrowRight /></el-icon>
+        </el-button>
       </div>
     </div>
 
@@ -101,6 +103,7 @@
  */
 
 import { useRouter } from "vue-router";
+import { ArrowRight } from "@element-plus/icons-vue";
 import type { TraceNode, TraceNodeType, TraceDirection } from "../../../types/insights";
 import StatusBadge from "../../../components/common/StatusBadge.vue";
 import QuantityText from "../../../components/common/QuantityText.vue";

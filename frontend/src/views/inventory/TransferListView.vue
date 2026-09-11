@@ -7,9 +7,9 @@
       description="在同一事务中扣减来源库位、增加目标库位，企业总实物库存保持不变。来源库位可用库存必须充足，调拨失败严禁产生单边库存事实。"
     >
       <template #actions>
-        <button type="button" class="btn-primary" @click="openCreateModal">
-          <span>＋ 发起库位调拨</span>
-        </button>
+        <el-button type="primary" :icon="Plus" @click="openCreateModal">
+          发起库位调拨
+        </el-button>
       </template>
     </PageHeader>
 
@@ -20,11 +20,17 @@
       @search="fetchTransfers"
       @reset="resetFilter"
     >
-      <select v-model="queryParams.status" class="filter-select" @change="fetchTransfers">
-        <option value="">全部调拨状态</option>
-        <option value="Draft">待确认执行 (Draft)</option>
-        <option value="Confirmed">已确认完成 (Confirmed)</option>
-      </select>
+      <el-select
+        v-model="queryParams.status"
+        placeholder="全部调拨状态"
+        clearable
+        style="width: 220px"
+        @change="fetchTransfers"
+      >
+        <el-option label="全部调拨状态" value="" />
+        <el-option label="待确认执行 (Draft)" value="Draft" />
+        <el-option label="已确认完成 (Confirmed)" value="Confirmed" />
+      </el-select>
     </FilterBar>
 
     <!-- 四态展示 -->
@@ -41,9 +47,9 @@
       description="当前未查询到任何库位调拨单据，您可以点击右上角发起新的调拨任务。"
     >
       <template #action>
-        <button type="button" class="btn-create-sm" @click="openCreateModal">
+        <el-button type="primary" size="small" :icon="Plus" @click="openCreateModal">
           立即发起调拨
-        </button>
+        </el-button>
       </template>
     </EmptyState>
 
@@ -89,19 +95,18 @@
 
       <!-- 操作列 -->
       <template #actions="{ row }">
-        <div class="table-actions">
-          <button type="button" class="btn-link" @click="openDetailModal(row)">
-            详情
-          </button>
-          <button
-            v-if="row.status === 'Draft'"
-            type="button"
-            class="btn-link confirm-link"
-            @click="openDetailModal(row)"
-          >
-            确认执行
-          </button>
-        </div>
+        <el-button type="primary" link size="small" @click="openDetailModal(row)">
+          详情
+        </el-button>
+        <el-button
+          v-if="row.status === 'Draft'"
+          type="success"
+          link
+          size="small"
+          @click="openDetailModal(row)"
+        >
+          确认执行
+        </el-button>
       </template>
     </DataTable>
 
@@ -115,55 +120,54 @@
     />
 
     <!-- 新建调拨单弹窗 -->
-    <div v-if="isCreateVisible" class="modal-mask" @click.self="isCreateVisible = false">
-      <div class="modal-panel">
-        <div class="modal-header">
-          <h3 class="modal-title">发起库位调拨</h3>
-          <button type="button" class="btn-close" @click="isCreateVisible = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="handleCreateSubmit">
-          <div class="form-item">
-            <label>物料 <span class="req">*</span></label>
-            <select v-model="createForm.productId" class="form-select" required>
-              <option value="">请选择物料</option>
-              <option v-for="product in products" :key="product.id" :value="product.id">
-                {{ product.sku }} - {{ product.name }}
-              </option>
-            </select>
-          </div>
-          <div class="form-row">
-            <div class="form-item">
-              <label>来源库位 <span class="req">*</span></label>
-              <select v-model="createForm.fromLocationId" class="form-select" required>
-                <option value="">请选择来源库位</option>
-                <option v-for="location in locations" :key="location.id" :value="location.id">
-                  {{ location.code }} - {{ location.name }}
-                </option>
-              </select>
-            </div>
-            <div class="form-item">
-              <label>目标库位 <span class="req">*</span></label>
-              <select v-model="createForm.toLocationId" class="form-select" required>
-                <option value="">请选择目标库位</option>
-                <option v-for="location in locations" :key="location.id" :value="location.id">
-                  {{ location.code }} - {{ location.name }}
-                </option>
-              </select>
-            </div>
-          </div>
-          <div class="form-item">
-            <label>调拨数量 <span class="req">*</span></label>
-            <input v-model="createForm.qty" type="text" class="form-input" required placeholder="如: 30" />
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn-secondary" @click="isCreateVisible = false">取消</button>
-            <button type="submit" class="btn-primary" :disabled="isSubmitting">
-              {{ isSubmitting ? '创建中...' : '提交调拨单' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog
+      v-model="isCreateVisible"
+      title="发起库位调拨"
+      width="550px"
+      destroy-on-close
+    >
+      <el-form label-width="100px" @submit.prevent="handleCreateSubmit">
+        <el-form-item label="物料" required>
+          <el-select v-model="createForm.productId" placeholder="请选择物料" style="width: 100%">
+            <el-option
+              v-for="product in products"
+              :key="product.id"
+              :label="`${product.sku} - ${product.name}`"
+              :value="product.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="来源库位" required>
+          <el-select v-model="createForm.fromLocationId" placeholder="请选择来源库位" style="width: 100%">
+            <el-option
+              v-for="location in locations"
+              :key="location.id"
+              :label="`${location.code} - ${location.name}`"
+              :value="location.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="目标库位" required>
+          <el-select v-model="createForm.toLocationId" placeholder="请选择目标库位" style="width: 100%">
+            <el-option
+              v-for="location in locations"
+              :key="location.id"
+              :label="`${location.code} - ${location.name}`"
+              :value="location.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="调拨数量" required>
+          <el-input v-model="createForm.qty" placeholder="如: 30" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="isCreateVisible = false">取消</el-button>
+        <el-button type="primary" :loading="isSubmitting" @click="handleCreateSubmit">
+          {{ isSubmitting ? '创建中...' : '提交调拨单' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -173,6 +177,8 @@
  * 职责：展示调拨单据，支持发起新调拨与查看详情/确认执行
  */
 import { ref, reactive, onMounted } from "vue";
+import { Plus } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import PageHeader from "@/components/common/PageHeader.vue";
 import FilterBar from "@/components/common/FilterBar.vue";
 import DataTable, { type TableColumn } from "@/components/common/DataTable.vue";
@@ -268,8 +274,9 @@ async function handleConfirmTransfer(id: string | number) {
     selectedTransfer.value = res.data;
     await fetchTransfers();
     isDetailVisible.value = false;
+    ElMessage.success("调拨确认成功！");
   } catch (err: any) {
-    alert(err?.message || "确认失败");
+    ElMessage.error(err?.message || "确认失败");
   } finally {
     isConfirming.value = false;
   }
@@ -300,9 +307,10 @@ async function handleCreateSubmit() {
       }],
     });
     isCreateVisible.value = false;
+    ElMessage.success("调拨单创建成功！");
     await fetchTransfers();
   } catch (err: any) {
-    alert(err?.message || "创建调拨失败");
+    ElMessage.error(err?.message || "创建调拨失败");
   } finally {
     isSubmitting.value = false;
   }

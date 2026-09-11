@@ -46,17 +46,17 @@
           </div>
 
           <!-- 30 秒自动轮询与即时刷新按钮 -->
-          <button
-            type="button"
+          <el-button
+            type="primary"
             class="btn-refresh-now"
-            :disabled="isRefreshing"
+            :loading="isRefreshing"
+            :icon="Refresh"
             title="点击立即触发跨域指标全量聚合"
             @click="handleManualRefresh"
           >
-            <span :class="{ 'is-spinning': isRefreshing }">🔄</span>
             <span>立即刷新</span>
             <span class="countdown-badge">{{ countdownSeconds }}s</span>
-          </button>
+          </el-button>
         </template>
       </PageHeader>
 
@@ -65,32 +65,16 @@
         <!-- 时间范围切换 -->
         <div class="range-block">
           <span class="review-label">统计时间范围</span>
-          <div class="scenario-tabs">
-            <button
-              type="button"
-              class="tab-btn-pill"
-              :class="{ 'is-active': currentTimeRange === 'today' }"
-              @click="setTimeRange('today')"
-            >
-              今日
-            </button>
-            <button
-              type="button"
-              class="tab-btn-pill"
-              :class="{ 'is-active': currentTimeRange === '7d' }"
-              @click="setTimeRange('7d')"
-            >
-              近 7 天
-            </button>
-            <button
-              type="button"
-              class="tab-btn-pill"
-              :class="{ 'is-active': currentTimeRange === '30d' }"
-              @click="setTimeRange('30d')"
-            >
-              近 30 天
-            </button>
-          </div>
+          <el-radio-group
+            v-model="currentTimeRange"
+            size="small"
+            class="custom-el-radio-group"
+            @change="(val: any) => setTimeRange(val)"
+          >
+            <el-radio-button value="today">今日</el-radio-button>
+            <el-radio-button value="7d">近 7 天</el-radio-button>
+            <el-radio-button value="30d">近 30 天</el-radio-button>
+          </el-radio-group>
           <strong class="effective-range-text">{{ overviewData?.timeRangeLabel || "今日 (00:00 - 23:59)" }}</strong>
         </div>
 
@@ -120,7 +104,7 @@
       <div class="dashboard-content-area">
         <!-- 1. 加载态 (Loading) -->
         <div v-if="viewState === 'loading'" class="state-loading-box">
-          <span class="spinner-large">⏳</span>
+          <el-icon class="is-loading spinner-large"><Loading /></el-icon>
           <p class="loading-msg">正在跨 7 大业务事实域并发聚合快照指标...</p>
         </div>
 
@@ -143,9 +127,9 @@
             description="该租户在所选统计时间段内未产生业务事实或权限范围为空。"
           >
             <template #action>
-              <button type="button" class="btn-refresh-pill" @click="setTimeRange('today')">
+              <el-button type="primary" size="small" @click="setTimeRange('today')">
                 切换至今日
-              </button>
+              </el-button>
             </template>
           </EmptyState>
         </div>
@@ -227,6 +211,7 @@
 
 import { computed, ref, reactive, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
+import { Refresh, Loading } from "@element-plus/icons-vue";
 import type {
   DashboardOverviewData,
   DashboardTimeRange,

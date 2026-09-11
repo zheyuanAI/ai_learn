@@ -1,0 +1,12 @@
+/**
+ * 全局样式入口文件
+ * 统一管理样式加载顺序：
+ * 1. Element Plus 暗色模式基础变量
+ * 2. 自定义工业主题覆盖
+ */
+
+/* Element Plus 暗色模式 CSS 变量体系 */
+@import "element-plus/theme-chalk/dark/css-vars.css";
+
+/* 自定义工业暗色主题覆盖 */
+@import "./element-theme.css";

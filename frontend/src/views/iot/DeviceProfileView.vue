@@ -7,14 +7,12 @@
       description="定义设备类别及其允许上报的遥测指标规格、离线判定超时时长及单指标告警触发阈值规则。"
     >
       <template #actions>
-        <button type="button" class="btn btn-secondary" @click="openCreateRuleModal">
-          <span class="btn-icon">＋</span>
-          <span>添加告警规则</span>
-        </button>
-        <button type="button" class="btn btn-primary" @click="openCreateModal">
-          <span class="btn-icon">＋</span>
-          <span>新建设备模型</span>
-        </button>
+        <el-button :icon="Plus" @click="openCreateRuleModal">
+          添加告警规则
+        </el-button>
+        <el-button type="primary" :icon="Plus" @click="openCreateModal">
+          新建设备模型
+        </el-button>
       </template>
     </PageHeader>
 
@@ -27,11 +25,17 @@
     >
       <div class="filter-select-group">
         <label class="filter-label">状态：</label>
-        <select v-model="queryParams.status" class="filter-select" @change="handleSearch">
-          <option value="">全部状态</option>
-          <option value="ACTIVE">启用中 (ACTIVE)</option>
-          <option value="DISABLED">已停用 (DISABLED)</option>
-        </select>
+        <el-select
+          v-model="queryParams.status"
+          placeholder="全部状态"
+          clearable
+          style="width: 170px"
+          @change="handleSearch"
+        >
+          <el-option label="全部状态" value="" />
+          <el-option label="启用中 (ACTIVE)" value="ACTIVE" />
+          <el-option label="已停用 (DISABLED)" value="DISABLED" />
+        </el-select>
       </div>
     </FilterBar>
 
@@ -89,293 +93,289 @@
       <!-- 操作列 -->
       <template #actions="{ row }">
         <div class="action-btn-group">
-          <button type="button" class="btn-text" @click="openMetricsDrawer(row)">
+          <el-button link type="primary" @click="openMetricsDrawer(row)">
             指标规格
-          </button>
+          </el-button>
         </div>
       </template>
     </DataTable>
 
     <!-- 指标规格抽屉 -->
-    <div v-if="drawerVisible && activeProfile" class="drawer-overlay" @click.self="drawerVisible = false">
-      <div class="drawer-panel">
-        <div class="drawer-header">
-          <div>
-            <span class="drawer-tag font-mono">{{ activeProfile.profileCode }}</span>
-            <h3 class="drawer-title">{{ activeProfile.profileName }}</h3>
-          </div>
-          <button type="button" class="btn-close" @click="drawerVisible = false">✕</button>
+    <el-drawer
+      v-model="drawerVisible"
+      :title="activeProfile ? `${activeProfile.profileName} (${activeProfile.profileCode})` : '指标规格详情'"
+      size="560px"
+      append-to-body
+    >
+      <div v-if="activeProfile" class="drawer-body-wrapper">
+        <div class="drawer-section-title">
+          <span>允许上报指标集 (共 {{ activeProfile.metrics?.length || 0 }} 项)</span>
         </div>
 
-        <div class="drawer-body">
-          <div class="drawer-section-title">
-            <span>允许上报指标集 (共 {{ activeProfile.metrics?.length || 0 }} 项)</span>
-          </div>
-
-          <table class="nested-table">
-            <thead>
-              <tr>
-                <th>指标编码</th>
-                <th>指标名称</th>
-                <th>数据类型</th>
-                <th>物理单位</th>
-                <th>必填约束</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="m in activeProfile.metrics" :key="m.id || m.metricCode">
-                <td class="font-mono text-primary">{{ m.metricCode }}</td>
-                <td>{{ m.metricName }}</td>
-                <td class="font-mono">{{ m.valueType }}</td>
-                <td class="font-mono">{{ m.unit || "-" }}</td>
-                <td>
-                  <span :class="m.required ? 'text-warning' : 'text-muted'">
-                    {{ m.required ? "必须上报" : "可选" }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="drawer-footer">
-          <button type="button" class="btn btn-secondary" @click="drawerVisible = false">关闭</button>
-        </div>
+        <table class="nested-table">
+          <thead>
+            <tr>
+              <th>指标编码</th>
+              <th>指标名称</th>
+              <th>数据类型</th>
+              <th>物理单位</th>
+              <th>必填约束</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="m in activeProfile.metrics" :key="m.id || m.metricCode">
+              <td class="font-mono text-primary">{{ m.metricCode }}</td>
+              <td>{{ m.metricName }}</td>
+              <td class="font-mono">{{ m.valueType }}</td>
+              <td class="font-mono">{{ m.unit || "-" }}</td>
+              <td>
+                <span :class="m.required ? 'text-warning' : 'text-muted'">
+                  {{ m.required ? "必须上报" : "可选" }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-    </div>
+      <template #footer>
+        <div class="drawer-footer">
+          <el-button @click="drawerVisible = false">关闭</el-button>
+        </div>
+      </template>
+    </el-drawer>
 
     <!-- 弹窗 1：新建设备模型 -->
-    <div v-if="createModalVisible" class="modal-mask" @click.self="createModalVisible = false">
-      <div class="modal-card modal-large">
-        <div class="modal-header">
-          <h3 class="modal-title">新建设备模型 (Device Profile)</h3>
-          <button type="button" class="btn-close" @click="createModalVisible = false">✕</button>
-        </div>
-
-        <form class="modal-body" @submit.prevent="submitCreateProfile">
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>模型编码 <span class="req">*</span></label>
-              <input
+    <el-dialog
+      v-model="createModalVisible"
+      title="新建设备模型 (Device Profile)"
+      width="680px"
+      append-to-body
+      destroy-on-close
+    >
+      <el-form label-position="top" class="custom-el-form">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="模型编码" required>
+              <el-input
                 v-model="createForm.profileCode"
-                type="text"
-                class="form-input font-mono"
                 placeholder="例如 PROF-CNC-MILL"
-                required
+                class="font-mono"
               />
-            </div>
-            <div class="form-item">
-              <label>模型名称 <span class="req">*</span></label>
-              <input
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="模型名称" required>
+              <el-input
                 v-model="createForm.profileName"
-                type="text"
-                class="form-input"
                 placeholder="例如 数控加工中心 Profile"
-                required
               />
-            </div>
-          </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
 
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>离线超时判定时间 (秒)</label>
-              <input
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="离线超时判定时间 (秒)">
+              <el-input
                 v-model.number="createForm.offlineTimeoutSeconds"
                 type="number"
-                class="form-input font-mono"
                 placeholder="默认 60"
+                class="font-mono"
               />
-            </div>
-            <div class="form-item">
-              <label>模型简要描述说明</label>
-              <input
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="模型简要描述说明">
+              <el-input
                 v-model="createForm.description"
-                type="text"
-                class="form-input"
                 placeholder="应用场景或机型规格"
               />
-            </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <!-- 动态指标列表编辑 -->
+        <div class="form-section">
+          <div class="section-head">
+            <label>指标规格定义 (Metrics) <span class="req">*</span></label>
+            <el-button size="small" :icon="Plus" @click="addMetricRow">
+              添加指标
+            </el-button>
           </div>
 
-          <!-- 动态指标列表编辑 -->
-          <div class="form-section">
-            <div class="section-head">
-              <label>指标规格定义 (Metrics) <span class="req">*</span></label>
-              <button type="button" class="btn-sm btn-secondary" @click="addMetricRow">
-                ＋ 添加指标
-              </button>
-            </div>
-
-            <div class="metrics-form-list">
-              <div
-                v-for="(m, idx) in createForm.metrics"
-                :key="idx"
-                class="metric-form-row"
-              >
-                <div class="m-code">
-                  <input
-                    v-model="m.metricCode"
-                    type="text"
-                    class="form-input font-mono"
-                    placeholder="指标编码 (如 temp)"
-                    required
-                  />
-                </div>
-                <div class="m-name">
-                  <input
-                    v-model="m.metricName"
-                    type="text"
-                    class="form-input"
-                    placeholder="指标名称 (如 温度)"
-                    required
-                  />
-                </div>
-                <div class="m-type">
-                  <select v-model="m.valueType" class="form-input font-mono">
-                    <option value="FLOAT">FLOAT</option>
-                    <option value="INTEGER">INTEGER</option>
-                    <option value="BOOLEAN">BOOLEAN</option>
-                    <option value="STRING">STRING</option>
-                  </select>
-                </div>
-                <div class="m-unit">
-                  <input
-                    v-model="m.unit"
-                    type="text"
-                    class="form-input font-mono"
-                    placeholder="单位 (℃)"
-                  />
-                </div>
-                <button
-                  type="button"
-                  class="btn-del-row"
-                  :disabled="createForm.metrics.length <= 1"
-                  @click="removeMetricRow(idx)"
-                >
-                  ✕
-                </button>
+          <div class="metrics-form-list">
+            <div
+              v-for="(m, idx) in createForm.metrics"
+              :key="idx"
+              class="metric-form-row"
+            >
+              <div class="m-code">
+                <el-input
+                  v-model="m.metricCode"
+                  placeholder="指标编码 (如 temp)"
+                  class="font-mono"
+                />
               </div>
+              <div class="m-name">
+                <el-input
+                  v-model="m.metricName"
+                  placeholder="指标名称 (如 温度)"
+                />
+              </div>
+              <div class="m-type">
+                <el-select v-model="m.valueType" style="width: 100%">
+                  <el-option label="FLOAT" value="FLOAT" />
+                  <el-option label="INTEGER" value="INTEGER" />
+                  <el-option label="BOOLEAN" value="BOOLEAN" />
+                  <el-option label="STRING" value="STRING" />
+                </el-select>
+              </div>
+              <div class="m-unit">
+                <el-input
+                  v-model="m.unit"
+                  placeholder="单位 (℃)"
+                  class="font-mono"
+                />
+              </div>
+              <el-button
+                type="danger"
+                :icon="Delete"
+                circle
+                size="small"
+                :disabled="createForm.metrics.length <= 1"
+                @click="removeMetricRow(idx)"
+              />
             </div>
           </div>
+        </div>
+      </el-form>
 
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="createModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting">保存设备模型</button>
-          </div>
-        </form>
-      </div>
-    </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="createModalVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="isSubmitting"
+            @click="submitCreateProfile"
+          >
+            保存设备模型
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
 
     <!-- 弹窗 2：新建单指标告警规则 -->
-    <div v-if="createRuleModalVisible" class="modal-mask" @click.self="createRuleModalVisible = false">
-      <div class="modal-card modal-large">
-        <div class="modal-header">
-          <h3 class="modal-title">新建单指标阈值告警规则</h3>
-          <button type="button" class="btn-close" @click="createRuleModalVisible = false">✕</button>
-        </div>
-
-        <form class="modal-body" @submit.prevent="submitCreateRule">
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>规则编码 <span class="req">*</span></label>
-              <input
+    <el-dialog
+      v-model="createRuleModalVisible"
+      title="新建单指标阈值告警规则"
+      width="680px"
+      append-to-body
+      destroy-on-close
+    >
+      <el-form label-position="top" class="custom-el-form">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="规则编码" required>
+              <el-input
                 v-model="ruleForm.ruleCode"
-                type="text"
-                class="form-input font-mono"
                 placeholder="例如 RULE-SPINDLE-OVERHEAT"
-                required
+                class="font-mono"
               />
-            </div>
-            <div class="form-item">
-              <label>规则名称 <span class="req">*</span></label>
-              <input
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="规则名称" required>
+              <el-input
                 v-model="ruleForm.ruleName"
-                type="text"
-                class="form-input"
                 placeholder="例如 主轴超温严重告警"
-                required
               />
-            </div>
-          </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
 
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>作用设备模型 ID <span class="req">*</span></label>
-              <input
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="作用设备模型 ID" required>
+              <el-input
                 v-model="ruleForm.deviceProfileId"
-                type="text"
-                class="form-input font-mono"
                 placeholder="请输入设备模型 UUID"
-                required
+                class="font-mono"
               />
-            </div>
-            <div class="form-item">
-              <label>监控指标编码 (Metric Code) <span class="req">*</span></label>
-              <input
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="监控指标编码 (Metric Code)" required>
+              <el-input
                 v-model="ruleForm.metricCode"
-                type="text"
-                class="form-input font-mono"
                 placeholder="例如 spindle_temp"
-                required
+                class="font-mono"
               />
-            </div>
-          </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
 
-          <div class="form-grid three-col">
-            <div class="form-item">
-              <label>比较运算符 <span class="req">*</span></label>
-              <select v-model="ruleForm.operator" class="form-input font-mono">
-                <option value="GT">大于 (&gt;)</option>
-                <option value="GTE">大于等于 (&gt;=)</option>
-                <option value="LT">小于 (&lt;)</option>
-                <option value="LTE">小于等于 (&lt;=)</option>
-                <option value="EQ">等于 (==)</option>
-              </select>
-            </div>
-            <div class="form-item">
-              <label>触发阈值 <span class="req">*</span></label>
-              <input
+        <el-row :gutter="16">
+          <el-col :span="8">
+            <el-form-item label="比较运算符" required>
+              <el-select v-model="ruleForm.operator" style="width: 100%">
+                <el-option label="大于 (>)" value="GT" />
+                <el-option label="大于等于 (>=)" value="GTE" />
+                <el-option label="小于 (<)" value="LT" />
+                <el-option label="小于等于 (<=)" value="LTE" />
+                <el-option label="等于 (==)" value="EQ" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="触发阈值" required>
+              <el-input
                 v-model="ruleForm.triggerThreshold"
-                type="text"
-                class="form-input font-mono"
                 placeholder="例如 65.00"
-                required
+                class="font-mono"
               />
-            </div>
-            <div class="form-item">
-              <label>恢复阈值 <span class="req">*</span></label>
-              <input
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="恢复阈值" required>
+              <el-input
                 v-model="ruleForm.recoveryThreshold"
-                type="text"
-                class="form-input font-mono"
                 placeholder="例如 58.00"
-                required
+                class="font-mono"
               />
-            </div>
-          </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
 
-          <div class="form-item">
-            <label>告警严重级别 <span class="req">*</span></label>
-            <select v-model="ruleForm.alarmLevel" class="form-input">
-              <option value="CRITICAL">紧急 (CRITICAL)</option>
-              <option value="MAJOR">严重 (MAJOR)</option>
-              <option value="MINOR">次要 (MINOR)</option>
-              <option value="WARNING">预警 (WARNING)</option>
-            </select>
-          </div>
+        <el-form-item label="告警严重级别" required>
+          <el-select v-model="ruleForm.alarmLevel" style="width: 100%">
+            <el-option label="紧急 (CRITICAL)" value="CRITICAL" />
+            <el-option label="严重 (MAJOR)" value="MAJOR" />
+            <el-option label="次要 (MINOR)" value="MINOR" />
+            <el-option label="预警 (WARNING)" value="WARNING" />
+          </el-select>
+        </el-form-item>
+      </el-form>
 
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="createRuleModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting">保存告警规则</button>
-          </div>
-        </form>
-      </div>
-    </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="createRuleModalVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="isSubmitting"
+            @click="submitCreateRule"
+          >
+            保存告警规则
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
+import { Plus, Delete } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import {
   PageHeader,
   FilterBar,
@@ -448,6 +448,7 @@ const ruleForm = reactive<DeviceAlarmRuleCreateRequest>({
   alarmLevel: "CRITICAL" as AlarmLevel,
 });
 
+/** 分页加载设备模型列表 */
 async function fetchProfileList() {
   viewState.value = "loading";
   errorMessage.value = "";
@@ -469,11 +470,13 @@ async function fetchProfileList() {
   }
 }
 
+/** 搜索模型 */
 function handleSearch() {
   queryParams.page = 1;
   fetchProfileList();
 }
 
+/** 重置搜索条件 */
 function handleReset() {
   queryParams.keyword = "";
   queryParams.status = "";
@@ -481,16 +484,19 @@ function handleReset() {
   fetchProfileList();
 }
 
+/** 分页变化处理 */
 function handlePageChange(page: number) {
   queryParams.page = page;
   fetchProfileList();
 }
 
+/** 打开指标规格抽屉 */
 function openMetricsDrawer(item: DeviceProfileItem) {
   activeProfile.value = item;
   drawerVisible.value = true;
 }
 
+/** 打开新建设备模型对话框 */
 function openCreateModal() {
   createForm.profileCode = "";
   createForm.profileName = "";
@@ -502,6 +508,7 @@ function openCreateModal() {
   createModalVisible.value = true;
 }
 
+/** 新增一行指标规格 */
 function addMetricRow() {
   createForm.metrics.push({
     metricCode: "",
@@ -512,26 +519,33 @@ function addMetricRow() {
   });
 }
 
+/** 移除一行指标规格 */
 function removeMetricRow(idx: number) {
   if (createForm.metrics.length > 1) {
     createForm.metrics.splice(idx, 1);
   }
 }
 
+/** 提交创建设备模型 */
 async function submitCreateProfile() {
-  if (!createForm.profileCode || !createForm.profileName) return;
+  if (!createForm.profileCode || !createForm.profileName) {
+    ElMessage.warning("请填写模型编码和名称");
+    return;
+  }
   isSubmitting.value = true;
   try {
     await createDeviceProfile(createForm);
     createModalVisible.value = false;
+    ElMessage.success("设备模型创建成功！");
     await fetchProfileList();
   } catch (err: any) {
-    alert(`创建设备模型失败：${err.message}`);
+    ElMessage.error(`创建设备模型失败：${err.message}`);
   } finally {
     isSubmitting.value = false;
   }
 }
 
+/** 打开新建告警规则对话框 */
 function openCreateRuleModal() {
   ruleForm.ruleCode = "";
   ruleForm.ruleName = "";
@@ -544,15 +558,19 @@ function openCreateRuleModal() {
   createRuleModalVisible.value = true;
 }
 
+/** 提交新建告警规则 */
 async function submitCreateRule() {
-  if (!ruleForm.ruleCode || !ruleForm.metricCode || !ruleForm.deviceProfileId) return;
+  if (!ruleForm.ruleCode || !ruleForm.metricCode || !ruleForm.deviceProfileId) {
+    ElMessage.warning("请填写完整的告警规则信息");
+    return;
+  }
   isSubmitting.value = true;
   try {
     await createAlarmRule(ruleForm);
     createRuleModalVisible.value = false;
-    alert("单指标告警规则已成功创建！");
+    ElMessage.success("单指标告警规则已成功创建！");
   } catch (err: any) {
-    alert(`创建告警规则失败：${err.message}`);
+    ElMessage.error(`创建告警规则失败：${err.message}`);
   } finally {
     isSubmitting.value = false;
   }
@@ -579,16 +597,6 @@ onMounted(() => {
 .filter-label {
   font-size: 13px;
   color: #94a3b8;
-}
-
-.filter-select {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  outline: none;
 }
 
 .highlight-code {
@@ -622,71 +630,17 @@ onMounted(() => {
   justify-content: center;
 }
 
-.btn-text {
-  background: none;
-  border: none;
-  color: #38bdf8;
-  font-size: 12px;
-  cursor: pointer;
-  padding: 2px 6px;
-}
-
-.btn-text:hover {
-  text-decoration: underline;
-}
-
-/* 抽屉 */
-.drawer-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(3px);
-  z-index: 1000;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.drawer-panel {
-  width: 600px;
-  max-width: 90vw;
-  background: #0f172a;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
-  height: 100%;
+/* 抽屉样式 */
+.drawer-body-wrapper {
   display: flex;
   flex-direction: column;
-  box-shadow: -10px 0 25px rgba(0, 0, 0, 0.5);
-}
-
-.drawer-header {
-  padding: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-}
-
-.drawer-tag {
-  font-size: 11px;
-  color: #38bdf8;
-}
-
-.drawer-title {
-  margin: 4px 0 0;
-  font-size: 16px;
-  color: #f8fafc;
-}
-
-.drawer-body {
-  flex: 1;
-  padding: 20px;
-  overflow-y: auto;
+  gap: 14px;
 }
 
 .drawer-section-title {
   font-size: 13px;
   font-weight: 600;
-  color: #94a3b8;
-  margin-bottom: 12px;
+  color: #38bdf8;
 }
 
 .nested-table {
@@ -701,6 +655,7 @@ onMounted(() => {
   color: #94a3b8;
   font-weight: 500;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
 }
 
 .nested-table td {
@@ -710,103 +665,18 @@ onMounted(() => {
 }
 
 .drawer-footer {
-  padding: 16px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   justify-content: flex-end;
 }
 
-/* 模态框 */
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
-.modal-card {
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
-  width: 100%;
-  max-width: 520px;
-  box-shadow: 0 20px 30px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-}
-
-.modal-large { max-width: 680px; }
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.modal-title {
-  margin: 0;
-  font-size: 16px;
-  color: #f8fafc;
-}
-
-.modal-body {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-height: 75vh;
-  overflow-y: auto;
-}
-
-.form-grid.two-col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.form-grid.three-col {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
-}
-
-.form-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-item label {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-.req { color: #f87171; }
-
-.form-input {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  outline: none;
-}
-
-.form-input:focus { border-color: #38bdf8; }
-
+/* 表单内部 */
 .form-section {
   display: flex;
   flex-direction: column;
   gap: 10px;
   border-top: 1px dashed rgba(255, 255, 255, 0.1);
   padding-top: 14px;
+  margin-top: 6px;
 }
 
 .section-head {
@@ -820,6 +690,8 @@ onMounted(() => {
   font-weight: 600;
   color: #cbd5e1;
 }
+
+.req { color: #f87171; }
 
 .metrics-form-list {
   display: flex;
@@ -838,43 +710,10 @@ onMounted(() => {
 .m-type { flex: 2; }
 .m-unit { flex: 1.5; }
 
-.btn-del-row {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #f87171;
-  padding: 6px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.btn-del-row:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 16px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.btn-close {
-  background: none;
-  border: none;
+.custom-el-form :deep(.el-form-item__label) {
   color: #94a3b8;
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.btn-sm {
-  padding: 4px 10px;
-  font-size: 12px;
-  border-radius: 4px;
-  cursor: pointer;
+  font-size: 13px;
+  padding-bottom: 4px;
 }
 
 .text-primary { color: #38bdf8 !important; }

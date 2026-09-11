@@ -1,93 +1,90 @@
 <template>
-  <div v-if="visible && transfer" class="dialog-mask" @click.self="handleClose">
-    <div class="dialog-panel">
-      <div class="dialog-header">
-        <div class="header-title-box">
-          <h3 class="dialog-title">库位调拨单详情</h3>
-          <span class="mono-no">{{ transfer.transferNo }}</span>
-        </div>
-        <button type="button" class="btn-close" @click="handleClose">✕</button>
+  <el-dialog
+    :model-value="visible && !!transfer"
+    width="720px"
+    destroy-on-close
+    @close="handleClose"
+  >
+    <template #header>
+      <div v-if="transfer" class="header-title-box" style="display: flex; align-items: center; gap: 12px">
+        <span style="font-weight: 600; font-size: 16px">库位调拨单详情</span>
+        <span class="mono-no" style="color: #67d2ff; font-family: monospace">{{ transfer.transferNo }}</span>
+        <StatusBadge
+          :type="transfer.status === 'Confirmed' ? 'success' : transfer.status === 'Draft' ? 'warning' : 'default'"
+          :text="transfer.status === 'Confirmed' ? '已确认完成' : transfer.status === 'Draft' ? '待执行确认' : '已取消'"
+        />
       </div>
+    </template>
 
-      <div class="dialog-body">
-        <div class="status-summary-bar">
-          <span class="status-label">当前单据状态：</span>
-          <StatusBadge
-            :type="transfer.status === 'Confirmed' ? 'success' : transfer.status === 'Draft' ? 'warning' : 'default'"
-            :text="transfer.status === 'Confirmed' ? '已确认完成' : transfer.status === 'Draft' ? '待执行确认' : '已取消'"
-          />
+    <div v-if="transfer" class="dialog-body">
+      <div class="info-grid">
+        <div class="info-card">
+          <span class="card-label">调拨商品物料</span>
+          <strong class="card-val">{{ displayProductName }}</strong>
+          <span class="card-sub">{{ displaySku }} ({{ displayUom }})</span>
+          <span v-if="displayLotNo" class="card-tag">批次: {{ displayLotNo }}</span>
         </div>
 
-        <div class="info-grid">
-          <div class="info-card">
-            <span class="card-label">调拨商品物料</span>
-            <strong class="card-val">{{ displayProductName }}</strong>
-            <span class="card-sub">{{ displaySku }} ({{ displayUom }})</span>
-            <span v-if="displayLotNo" class="card-tag">批次: {{ displayLotNo }}</span>
+        <div class="info-card">
+          <span class="card-label">调拨数量</span>
+          <div class="qty-highlight">
+            <QuantityText :value="displayQty" :unit="displayUom" />
           </div>
-
-          <div class="info-card">
-            <span class="card-label">调拨数量</span>
-            <div class="qty-highlight">
-              <QuantityText :value="displayQty" :unit="displayUom" />
-            </div>
-            <span class="card-sub">企业总实物库存保持不变</span>
-          </div>
-        </div>
-
-        <div class="route-box">
-          <div class="route-point">
-            <span class="point-badge from">来源 (FROM)</span>
-            <strong class="point-name">{{ displayFromWarehouse }}</strong>
-            <span class="point-loc">{{ displayFromLocation }}</span>
-          </div>
-          <div class="route-arrow-icon">➔ 移位 ➔</div>
-          <div class="route-point">
-            <span class="point-badge to">目标 (TO)</span>
-            <strong class="point-name">{{ displayToWarehouse }}</strong>
-            <span class="point-loc">{{ displayToLocation }}</span>
-          </div>
-        </div>
-
-        <div class="meta-section">
-          <div class="meta-item">
-            <label>调拨原因：</label>
-            <span>{{ transfer.reason || '无特殊原因说明' }}</span>
-          </div>
-          <div class="meta-item">
-            <label>创建人员/时间：</label>
-            <span>{{ transfer.createdBy || 'wh.operator' }} / {{ transfer.createdAt }}</span>
-          </div>
-          <div v-if="transfer.confirmedAt" class="meta-item">
-            <label>确认人员/时间：</label>
-            <span class="confirmed-text">{{ transfer.confirmedBy || 'wh.operator' }} / {{ transfer.confirmedAt }}</span>
-          </div>
+          <span class="card-sub">企业总实物库存保持不变</span>
         </div>
       </div>
 
-      <div class="dialog-footer">
-        <button type="button" class="btn btn-secondary" @click="handleClose">关闭</button>
-        <button
-          v-if="canConfirm"
-          type="button"
-          class="btn btn-primary"
-          :disabled="confirming"
-          @click="isConfirmOpen = true"
-        >
-          <span>{{ confirming ? '⏳ 执行中...' : '确认执行调拨' }}</span>
-        </button>
+      <div class="route-box">
+        <div class="route-point">
+          <span class="point-badge from">来源 (FROM)</span>
+          <strong class="point-name">{{ displayFromWarehouse }}</strong>
+          <span class="point-loc">{{ displayFromLocation }}</span>
+        </div>
+        <div class="route-arrow-icon">➔ 移位 ➔</div>
+        <div class="route-point">
+          <span class="point-badge to">目标 (TO)</span>
+          <strong class="point-name">{{ displayToWarehouse }}</strong>
+          <span class="point-loc">{{ displayToLocation }}</span>
+        </div>
+      </div>
+
+      <div class="meta-section">
+        <div class="meta-item">
+          <label>调拨原因：</label>
+          <span>{{ transfer.reason || '无特殊原因说明' }}</span>
+        </div>
+        <div class="meta-item">
+          <label>创建人员/时间：</label>
+          <span>{{ transfer.createdBy || 'wh.operator' }} / {{ transfer.createdAt }}</span>
+        </div>
+        <div v-if="transfer.confirmedAt" class="meta-item">
+          <label>确认人员/时间：</label>
+          <span class="confirmed-text">{{ transfer.confirmedBy || 'wh.operator' }} / {{ transfer.confirmedAt }}</span>
+        </div>
       </div>
     </div>
 
-    <!-- 二次防误触确认对话框 -->
-    <ConfirmDialog
-      v-model:visible="isConfirmOpen"
-      title="确认执行库位调拨"
-      :message="`确定将 ${displayQty} ${displayUom} 的物料 ${displayProductName} 从 ${displayFromLocation} 调拨至 ${displayToLocation} 吗？确认后将同步更新库存余额并追加不可篡改流水。`"
-      :loading="confirming"
-      @confirm="executeConfirm"
-    />
-  </div>
+    <template #footer>
+      <el-button @click="handleClose">关闭</el-button>
+      <el-button
+        v-if="canConfirm"
+        type="primary"
+        :loading="confirming"
+        @click="isConfirmOpen = true"
+      >
+        确认执行调拨
+      </el-button>
+    </template>
+  </el-dialog>
+
+  <!-- 二次防误触确认对话框 -->
+  <ConfirmDialog
+    v-model:visible="isConfirmOpen"
+    title="确认执行库位调拨"
+    :message="`确定将 ${displayQty} ${displayUom} 的物料 ${displayProductName} 从 ${displayFromLocation} 调拨至 ${displayToLocation} 吗？确认后将同步更新库存余额并追加不可篡改流水。`"
+    :loading="confirming"
+    @confirm="executeConfirm"
+  />
 </template>
 
 <script setup lang="ts">

@@ -1,11 +1,15 @@
 <template>
-  <RouterView />
+  <!-- Element Plus 全局配置提供者：中文国际化 + 统一组件尺寸 -->
+  <el-config-provider :locale="zhCn" size="default">
+    <RouterView />
+  </el-config-provider>
 </template>
 
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "./stores/auth";
+import zhCn from "element-plus/es/locale/lang/zh-cn";
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -27,6 +31,8 @@ function handleUnauthorizedEvent(event: Event) {
 }
 
 onMounted(() => {
+  // 默认以暗色模式启动
+  document.documentElement.classList.add("dark");
   window.addEventListener("ai-learn:unauthorized", handleUnauthorizedEvent);
 });
 

@@ -7,10 +7,9 @@
       description="管理接入平台的机台物理设备。一期协议严格限定为 MQTT QoS 1，设备关联稳定的工作中心或区域，生命周期状态控制其是否允许连接接入。"
     >
       <template #actions>
-        <button type="button" class="btn btn-primary" @click="openCreateModal">
-          <span class="btn-icon">＋</span>
-          <span>新建设备</span>
-        </button>
+        <el-button type="primary" :icon="Plus" @click="openCreateModal">
+          新建设备
+        </el-button>
       </template>
     </PageHeader>
 
@@ -23,11 +22,17 @@
     >
       <div class="filter-select-group">
         <label class="filter-label">接入权限：</label>
-        <select v-model="queryParams.lifecycleStatus" class="filter-select" @change="handleSearch">
-          <option value="">全部</option>
-          <option value="ACTIVE">允许接入 (ACTIVE)</option>
-          <option value="DISABLED">已禁用 (DISABLED)</option>
-        </select>
+        <el-select
+          v-model="queryParams.lifecycleStatus"
+          placeholder="全部"
+          clearable
+          style="width: 170px"
+          @change="handleSearch"
+        >
+          <el-option label="全部" value="" />
+          <el-option label="允许接入 (ACTIVE)" value="ACTIVE" />
+          <el-option label="已禁用 (DISABLED)" value="DISABLED" />
+        </el-select>
       </div>
     </FilterBar>
 
@@ -107,116 +112,138 @@
       <template #actions="{ row }">
         <div class="action-btn-group">
           <!-- 查看详情 -->
-          <button type="button" class="btn-text text-primary" @click="$emit('select-detail', row)">
+          <el-button link type="primary" @click="$emit('select-detail', row)">
             详情
-          </button>
+          </el-button>
 
           <!-- 生成接入凭证 (唤起安全对话框) -->
-          <button
-            type="button"
-            class="btn-text text-warning"
+          <el-button
+            link
+            type="warning"
             :disabled="!isActionAllowed(row, 'credential')"
             :title="getActionDisabledReason(row, 'credential') || '签发 MQTT 接入凭证'"
             @click="openCredentialDialog(row)"
           >
             凭证
-          </button>
+          </el-button>
 
           <!-- 启停生命周期 -->
-          <button
-            type="button"
-            class="btn-text"
-            :class="row.lifecycleStatus === 'ACTIVE' ? 'text-danger' : 'text-success'"
+          <el-button
+            link
+            :type="row.lifecycleStatus === 'ACTIVE' ? 'danger' : 'success'"
             :disabled="!isActionAllowed(row, 'toggle-status')"
             :title="getActionDisabledReason(row, 'toggle-status') || (row.lifecycleStatus === 'ACTIVE' ? '停用设备' : '启用设备')"
             @click="promptToggleStatus(row)"
           >
             {{ row.lifecycleStatus === 'ACTIVE' ? '停用' : '启用' }}
-          </button>
+          </el-button>
         </div>
       </template>
     </DataTable>
 
     <!-- 新建设备模态框 -->
-    <div v-if="createModalVisible" class="modal-mask" @click.self="createModalVisible = false">
-      <div class="modal-card modal-large">
-        <div class="modal-header">
-          <h3 class="modal-title">新建设备台账</h3>
-          <button type="button" class="btn-close" @click="createModalVisible = false">✕</button>
-        </div>
-
-        <form class="modal-body" @submit.prevent="submitCreateDevice">
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>设备业务编码 (Device Code) <span class="req">*</span></label>
-              <input
+    <el-dialog
+      v-model="createModalVisible"
+      title="新建设备台账"
+      width="640px"
+      append-to-body
+      destroy-on-close
+    >
+      <el-form label-position="top" class="custom-el-form">
+        <el-alert
+          v-if="profileOptions.length === 0"
+          title="当前租户还没有设备模型，请先创建设备模型再登记设备。"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="profile-empty-alert"
+        >
+          <template #default>
+            <el-button link type="primary" @click="goToProfiles">前往设备模型维护</el-button>
+          </template>
+        </el-alert>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="设备业务编码 (Device Code)" required>
+              <el-input
                 v-model="createForm.deviceCode"
-                type="text"
-                class="form-input font-mono"
                 placeholder="例如 DEV-CNC-A03"
-                required
+                class="font-mono"
               />
-            </div>
-            <div class="form-item">
-              <label>设备名称 <span class="req">*</span></label>
-              <input
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="设备名称" required>
+              <el-input
                 v-model="createForm.deviceName"
-                type="text"
-                class="form-input"
                 placeholder="例如 精密立式加工中心 3 号机"
-                required
               />
-            </div>
-          </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
 
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>所属设备模型 (Profile) <span class="req">*</span></label>
-              <select v-model="createForm.deviceProfileId" class="form-input" required>
-                <option v-for="p in profileOptions" :key="p.id" :value="p.id">
-                  {{ p.profileName }} ({{ p.profileCode }})
-                </option>
-              </select>
-            </div>
-            <div class="form-item">
-              <label>协议类型 (Protocol) <span class="req">*</span></label>
-              <input
-                type="text"
-                class="form-input font-mono"
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="所属设备模型 (Profile)" required>
+              <el-select
+                v-model="createForm.deviceProfileId"
+                placeholder="请选择设备模型"
+                filterable
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="p in profileOptions"
+                  :key="p.id"
+                  :label="`${p.profileName} (${p.profileCode})`"
+                  :value="String(p.id)"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="协议类型 (Protocol)" required>
+              <el-input
                 value="MQTT (一期标准接入)"
                 disabled
+                class="font-mono"
               />
-            </div>
-          </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
 
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>归属工作中心 (WorkCenter)</label>
-              <input
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="归属工作中心 (WorkCenter)">
+              <el-input
                 v-model="createForm.workCenterId"
-                type="text"
-                class="form-input"
                 placeholder="例如 wc-02 (机加一车间)"
               />
-            </div>
-            <div class="form-item">
-              <label>归属厂区/车间区域 (Area)</label>
-              <input
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="归属厂区/车间区域 (Area)">
+              <el-input
                 v-model="createForm.areaId"
-                type="text"
-                class="form-input"
                 placeholder="例如 area-m-01"
               />
-            </div>
-          </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
 
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="createModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting">保存设备台账</button>
-          </div>
-        </form>
-      </div>
-    </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="createModalVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="isSubmitting"
+            @click="submitCreateDevice"
+          >
+            保存设备台账
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
 
     <!-- 设备接入凭证专用弹窗 (明文只展示一次，不持久化) -->
     <DeviceCredentialDialog
@@ -243,6 +270,9 @@
 import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
 import type { AllowedAction } from "../../types/common";
 import { ref, reactive, onMounted } from "vue";
+import { useRouter } from "vue-router";
+import { Plus } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import {
   PageHeader,
   FilterBar,
@@ -269,6 +299,8 @@ import DeviceCredentialDialog from "./DeviceCredentialDialog.vue";
 defineEmits<{
   (e: "select-detail", item: DeviceItem): void;
 }>();
+
+const router = useRouter();
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
@@ -323,16 +355,17 @@ const toggleConfirm = reactive({
   targetDevice: null as DeviceItem | null,
 });
 
-// 替换为调用 actionGuard 的版本
+/** 检查指定操作是否被后端或状态机允许 */
 function isActionAllowed(item: { allowedActions?: AllowedAction[] | null }, action: string): boolean {
   return checkAction(item.allowedActions, action);
 }
 
-// 替换为调用 actionGuard 的版本
+/** 获取指定操作被禁用的原因提示 */
 function getActionDisabledReason(item: { allowedActions?: AllowedAction[] | null }, action: string): string | undefined {
   return getDisabledReason(item.allowedActions, action);
 }
 
+/** 分页获取设备列表 */
 async function fetchDeviceList() {
   viewState.value = "loading";
   errorMessage.value = "";
@@ -354,6 +387,7 @@ async function fetchDeviceList() {
   }
 }
 
+/** 加载设备模型下拉候选列表 */
 async function fetchProfileOptions() {
   try {
     // 修改：设备档案下拉框一次读取当前租户完整候选目录，避免默认分页只返回前 20 条。
@@ -369,11 +403,13 @@ async function fetchProfileOptions() {
   }
 }
 
+/** 触发搜索 */
 function handleSearch() {
   queryParams.page = 1;
   fetchDeviceList();
 }
 
+/** 重置搜索条件 */
 function handleReset() {
   queryParams.keyword = "";
   queryParams.lifecycleStatus = "";
@@ -381,11 +417,13 @@ function handleReset() {
   fetchDeviceList();
 }
 
+/** 分页变更处理 */
 function handlePageChange(page: number) {
   queryParams.page = page;
   fetchDeviceList();
 }
 
+/** 打开新建设备台账对话框 */
 function openCreateModal() {
   createForm.deviceCode = "";
   createForm.deviceName = "";
@@ -397,20 +435,32 @@ function openCreateModal() {
   createModalVisible.value = true;
 }
 
+/** 关闭设备弹窗并进入设备模型维护页，解除首个设备创建的前置阻断。 */
+async function goToProfiles() {
+  createModalVisible.value = false;
+  await router.push({ name: "IotProfileList" });
+}
+
+/** 提交新建设备台账 */
 async function submitCreateDevice() {
-  if (!createForm.deviceCode || !createForm.deviceName || !createForm.deviceProfileId) return;
+  if (!createForm.deviceCode || !createForm.deviceName || !createForm.deviceProfileId) {
+    ElMessage.warning("请填写完整的设备信息");
+    return;
+  }
   isSubmitting.value = true;
   try {
     await createDevice(createForm);
     createModalVisible.value = false;
+    ElMessage.success("设备台账创建成功！");
     await fetchDeviceList();
   } catch (err: any) {
-    alert(`创建设备失败：${err.message}`);
+    ElMessage.error(`创建设备失败：${err.message}`);
   } finally {
     isSubmitting.value = false;
   }
 }
 
+/** 打开凭证生成弹窗 */
 function openCredentialDialog(item: DeviceItem) {
   credentialDialog.deviceId = item.id as string;
   credentialDialog.deviceCode = item.deviceCode;
@@ -418,10 +468,12 @@ function openCredentialDialog(item: DeviceItem) {
   credentialDialog.visible = true;
 }
 
+/** 凭证成功签发后刷新设备列表 */
 function handleCredentialIssued() {
   fetchDeviceList();
 }
 
+/** 提示启停生命周期状态确认对话框 */
 function promptToggleStatus(item: DeviceItem) {
   toggleConfirm.targetDevice = item;
   const isCurrentlyActive = item.lifecycleStatus.toLowerCase() === "active";
@@ -433,6 +485,7 @@ function promptToggleStatus(item: DeviceItem) {
   toggleConfirm.visible = true;
 }
 
+/** 执行启停生命周期状态切换 */
 async function handleConfirmToggle() {
   if (!toggleConfirm.targetDevice) return;
   toggleConfirm.loading = true;
@@ -440,9 +493,10 @@ async function handleConfirmToggle() {
     const nextStatus = toggleConfirm.targetDevice.lifecycleStatus.toLowerCase() === "active" ? "Disabled" : "Active";
     await toggleDeviceLifecycleStatus(toggleConfirm.targetDevice.id as string, nextStatus);
     toggleConfirm.visible = false;
+    ElMessage.success("设备生命周期状态更新成功！");
     await fetchDeviceList();
   } catch (err: any) {
-    alert(`状态切换失败：${err.message}`);
+    ElMessage.error(`状态切换失败：${err.message}`);
   } finally {
     toggleConfirm.loading = false;
   }
@@ -470,16 +524,6 @@ onMounted(() => {
 .filter-label {
   font-size: 13px;
   color: #94a3b8;
-}
-
-.filter-select {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  outline: none;
 }
 
 .highlight-code {
@@ -536,121 +580,9 @@ onMounted(() => {
   gap: 8px;
 }
 
-.btn-text {
-  background: none;
-  border: none;
-  font-size: 12px;
-  cursor: pointer;
-  padding: 2px 4px;
-}
-
-.btn-text:hover:not(:disabled) {
-  text-decoration: underline;
-}
-
-.btn-text:disabled {
-  color: #64748b;
-  cursor: not-allowed;
-  text-decoration: none;
-}
-
-.text-primary { color: #38bdf8 !important; }
-.text-warning { color: #fbbf24 !important; }
-.text-danger { color: #f87171 !important; }
-.text-success { color: #34d399 !important; }
-
-/* 模态框 */
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
-.modal-card {
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
-  width: 100%;
-  max-width: 520px;
-  box-shadow: 0 20px 30px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-}
-
-.modal-large { max-width: 640px; }
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.modal-title {
-  margin: 0;
-  font-size: 16px;
-  color: #f8fafc;
-}
-
-.modal-body {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.form-grid.two-col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.form-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-item label {
-  font-size: 12px;
+.custom-el-form :deep(.el-form-item__label) {
   color: #94a3b8;
-}
-
-.req { color: #f87171; }
-
-.form-input {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  padding: 8px 12px;
-  border-radius: 6px;
   font-size: 13px;
-  outline: none;
-}
-
-.form-input:focus { border-color: #38bdf8; }
-
-.modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 16px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.btn-close {
-  background: none;
-  border: none;
-  color: #94a3b8;
-  font-size: 16px;
-  cursor: pointer;
+  padding-bottom: 4px;
 }
 </style>

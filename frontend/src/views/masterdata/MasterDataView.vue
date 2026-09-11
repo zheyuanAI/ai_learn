@@ -7,9 +7,9 @@
       description="维护物料主数据、仓库与 6 类标准库位（ReceivingStaging, Storage, Picking, ShippingStaging, QualityHold, Adjustment）、往来客户与供应商档案。"
     >
       <template #actions>
-        <button type="button" class="btn-create" @click="openCreateModal">
-          <span>＋ 新建{{ currentTabLabel }}</span>
-        </button>
+        <el-button type="primary" :icon="Plus" @click="openCreateModal">
+          新建{{ currentTabLabel }}
+        </el-button>
       </template>
     </PageHeader>
 
@@ -37,28 +37,38 @@
     >
       <!-- 物料分类筛选 -->
       <template v-if="activeTab === 'products'">
-        <select v-model="selectedCategory" class="filter-select-input" @change="fetchCurrentTabData">
-          <option value="">全部分类</option>
-          <option value="产成品">产成品</option>
-          <option value="原材料">原材料</option>
-          <option value="半成品">半成品</option>
-          <option value="标准件">标准件</option>
-          <option value="电子料">电子料</option>
-          <option value="辅料包材">辅料包材</option>
-        </select>
+        <el-select
+          v-model="selectedCategory"
+          placeholder="全部分类"
+          style="width: 140px"
+          @change="fetchCurrentTabData"
+        >
+          <el-option label="全部分类" value="" />
+          <el-option label="产成品" value="产成品" />
+          <el-option label="原材料" value="原材料" />
+          <el-option label="半成品" value="半成品" />
+          <el-option label="标准件" value="标准件" />
+          <el-option label="电子料" value="电子料" />
+          <el-option label="辅料包材" value="辅料包材" />
+        </el-select>
       </template>
 
       <!-- 库位类型筛选 -->
       <template v-else-if="activeTab === 'locations'">
-        <select v-model="selectedLocationType" class="filter-select-input" @change="fetchCurrentTabData">
-          <option value="">全部库位类型</option>
-          <option value="ReceivingStaging">ReceivingStaging (收货暂存)</option>
-          <option value="Storage">Storage (常规存储)</option>
-          <option value="Picking">Picking (拣货备料)</option>
-          <option value="ShippingStaging">ShippingStaging (发货暂存)</option>
-          <option value="QualityHold">QualityHold (质量隔离)</option>
-          <option value="Adjustment">Adjustment (差异调整)</option>
-        </select>
+        <el-select
+          v-model="selectedLocationType"
+          placeholder="全部库位类型"
+          style="width: 200px"
+          @change="fetchCurrentTabData"
+        >
+          <el-option label="全部库位类型" value="" />
+          <el-option label="ReceivingStaging (收货暂存)" value="ReceivingStaging" />
+          <el-option label="Storage (常规存储)" value="Storage" />
+          <el-option label="Picking (拣货备料)" value="Picking" />
+          <el-option label="ShippingStaging (发货暂存)" value="ShippingStaging" />
+          <el-option label="QualityHold (质量隔离)" value="QualityHold" />
+          <el-option label="Adjustment (差异调整)" value="Adjustment" />
+        </el-select>
       </template>
     </FilterBar>
 
@@ -77,9 +87,9 @@
       :description="`当前筛选条件下未检索到任何${currentTabLabel}，您可以点击右上角新建。`"
     >
       <template #action>
-        <button type="button" class="btn-create-sm" @click="openCreateModal">
+        <el-button type="primary" size="small" @click="openCreateModal">
           立即新建{{ currentTabLabel }}
-        </button>
+        </el-button>
       </template>
     </EmptyState>
 
@@ -116,6 +126,8 @@
  */
 import { ref, computed, onMounted, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
+import { Plus } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import PageHeader from "@/components/common/PageHeader.vue";
 import FilterBar from "@/components/common/FilterBar.vue";
 import EmptyState from "@/components/common/EmptyState.vue";
@@ -328,13 +340,23 @@ async function fetchCurrentTabData() {
       totalCount.value = res.data.total;
       tabCounts.value.warehouses = res.data.total;
     } else if (activeTab.value === "locations") {
-      const res = await getLocations({
-        page: currentPage.value,
-        size: pageSize.value,
-        keyword: searchKeyword.value,
-        type: (selectedLocationType.value as any) || undefined,
-      });
-      tableData.value = res.data.records || [];
+      const [res, warehouseRes] = await Promise.all([
+        getLocations({
+          page: currentPage.value,
+          size: pageSize.value,
+          keyword: searchKeyword.value,
+          type: (selectedLocationType.value as any) || undefined,
+        }),
+        getWarehouses({ page: 1, size: 1000 }),
+      ]);
+      const warehouseNames = new Map(
+        (warehouseRes.data.records || []).map((warehouse: any) => [String(warehouse.id), warehouse.name]),
+      );
+      // 修改用途：库位领域响应只保证 warehouseId，页面用同租户仓库目录补齐可读名称。
+      tableData.value = (res.data.records || []).map((location: any) => ({
+        ...location,
+        warehouseName: location.warehouseName || warehouseNames.get(String(location.warehouseId)) || location.warehouseId,
+      }));
       totalCount.value = res.data.total;
       tabCounts.value.locations = res.data.total;
     } else if (activeTab.value === "uoms") {
@@ -443,9 +465,10 @@ async function handleSave(data: any) {
       }
     }
     closeEditor();
+    ElMessage.success("保存成功！");
     await fetchCurrentTabData();
   } catch (err: any) {
-    alert(err?.message || "保存失败");
+    ElMessage.error(err?.message || "保存失败");
   } finally {
     isSaving.value = false;
   }

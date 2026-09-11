@@ -7,9 +7,9 @@
       description="页面状态流转：未盘点 -> 盘点中 -> 已确认并调整。未盘点生成盘点范围并冻结系统数量快照；盘点中录入实盘数量与差异原因；确认并调整后按【实盘数量 - 系统数量】生成调整流水并更新余额。"
     >
       <template #actions>
-        <button type="button" class="btn-primary" @click="isCreateVisible = true">
-          <span>＋ 新建盘点任务</span>
-        </button>
+        <el-button type="primary" :icon="Plus" @click="isCreateVisible = true">
+          新建盘点任务
+        </el-button>
       </template>
     </PageHeader>
 
@@ -20,12 +20,18 @@
       @search="fetchStocktakes"
       @reset="resetFilter"
     >
-      <select v-model="queryParams.status" class="filter-select" @change="fetchStocktakes">
-        <option value="">全部盘点状态</option>
-        <option value="NotStarted">未盘点 (NotStarted)</option>
-        <option value="Counting">盘点中 (Counting)</option>
-        <option value="ConfirmedAdjusted">已确认并调整 (ConfirmedAdjusted)</option>
-      </select>
+      <el-select
+        v-model="queryParams.status"
+        placeholder="全部盘点状态"
+        clearable
+        style="width: 220px"
+        @change="fetchStocktakes"
+      >
+        <el-option label="全部盘点状态" value="" />
+        <el-option label="未盘点 (NotStarted)" value="NotStarted" />
+        <el-option label="盘点中 (Counting)" value="Counting" />
+        <el-option label="已确认并调整 (ConfirmedAdjusted)" value="ConfirmedAdjusted" />
+      </el-select>
     </FilterBar>
 
     <!-- 四态展示 -->
@@ -42,9 +48,9 @@
       description="当前未发现盘点任务，您可以点击右上角发起新的盘点计划并冻结快照。"
     >
       <template #action>
-        <button type="button" class="btn-create-sm" @click="isCreateVisible = true">
+        <el-button type="primary" size="small" :icon="Plus" @click="isCreateVisible = true">
           立即新建盘点
-        </button>
+        </el-button>
       </template>
     </EmptyState>
 
@@ -79,16 +85,14 @@
 
       <!-- 操作列 -->
       <template #actions="{ row }">
-        <div class="table-actions">
-          <button
-            type="button"
-            class="btn-link"
-            :class="{ 'highlight-act': row.status === 'Counting' }"
-            @click="openDetail(row)"
-          >
-            {{ row.status === 'Counting' ? '录入/调整' : '查看详情' }}
-          </button>
-        </div>
+        <el-button
+          type="primary"
+          link
+          size="small"
+          @click="openDetail(row)"
+        >
+          {{ row.status === 'Counting' ? '录入/调整' : '查看详情' }}
+        </el-button>
       </template>
     </DataTable>
 
@@ -103,40 +107,41 @@
     />
 
     <!-- 新建盘点计划弹窗 -->
-    <div v-if="isCreateVisible" class="modal-mask" @click.self="isCreateVisible = false">
-      <div class="modal-panel">
-        <div class="modal-header">
-          <h3 class="modal-title">新建差异盘点单</h3>
-          <button type="button" class="btn-close" @click="isCreateVisible = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="handleCreateSubmit">
-          <div class="form-item">
-            <label>目标仓库 <span class="req">*</span></label>
-            <select v-model="createForm.warehouseId" class="form-select" required>
-              <option value="">请选择仓库</option>
-              <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">
-                {{ warehouse.code }} - {{ warehouse.name }}
-              </option>
-            </select>
-          </div>
-          <div class="form-item">
-            <label>指定盘点库位 <span class="req">*</span></label>
-            <select v-model="createForm.locationId" class="form-select" required>
-              <option value="">请选择库位</option>
-              <option v-for="location in availableLocations" :key="location.id" :value="location.id">
-                {{ location.code }} - {{ location.name }}
-              </option>
-            </select>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn-secondary" @click="isCreateVisible = false">取消</button>
-            <button type="submit" class="btn-primary" :disabled="isCreating">
-              {{ isCreating ? '创建并冻结快照中...' : '确认生成盘点单' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog
+      v-model="isCreateVisible"
+      title="新建差异盘点单"
+      width="500px"
+      destroy-on-close
+    >
+      <el-form label-width="110px" @submit.prevent="handleCreateSubmit">
+        <el-form-item label="目标仓库" required>
+          <el-select v-model="createForm.warehouseId" placeholder="请选择仓库" style="width: 100%">
+            <el-option
+              v-for="warehouse in warehouses"
+              :key="warehouse.id"
+              :label="`${warehouse.code} - ${warehouse.name}`"
+              :value="warehouse.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="指定盘点库位" required>
+          <el-select v-model="createForm.locationId" placeholder="请选择库位" style="width: 100%">
+            <el-option
+              v-for="location in availableLocations"
+              :key="location.id"
+              :label="`${location.code} - ${location.name}`"
+              :value="location.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="isCreateVisible = false">取消</el-button>
+        <el-button type="primary" :loading="isCreating" @click="handleCreateSubmit">
+          {{ isCreating ? '创建并冻结快照中...' : '确认生成盘点单' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -146,6 +151,8 @@
  * 职责：展示盘点任务，支持冻结系统快照、进入实盘录入与调整流水生成
  */
 import { ref, reactive, onMounted, computed, watch } from "vue";
+import { Plus } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import PageHeader from "@/components/common/PageHeader.vue";
 import FilterBar from "@/components/common/FilterBar.vue";
 import DataTable, { type TableColumn } from "@/components/common/DataTable.vue";
@@ -250,7 +257,7 @@ async function openDetail(row: StocktakeOrder) {
     selectedStocktake.value = response.data;
     isDetailVisible.value = true;
   } catch (error: any) {
-    alert(error?.message || "读取盘点详情失败");
+    ElMessage.error(error?.message || "读取盘点详情失败");
   }
 }
 
@@ -266,8 +273,9 @@ async function handleConfirmAdjustment(payload: any) {
     selectedStocktake.value = res.data;
     await fetchStocktakes();
     isDetailVisible.value = false;
+    ElMessage.success("盘点调整确认成功！");
   } catch (err: any) {
-    alert(err?.message || "调整失败");
+    ElMessage.error(err?.message || "调整失败");
   } finally {
     isSubmitting.value = false;
   }
@@ -286,8 +294,9 @@ async function handleCreateSubmit() {
     isCreateVisible.value = false;
     await fetchStocktakes();
     isDetailVisible.value = true;
+    ElMessage.success("盘点单创建成功并已开始盘点！");
   } catch (err: any) {
-    alert(err?.message || "创建盘点单失败");
+    ElMessage.error(err?.message || "创建盘点单失败");
   } finally {
     isCreating.value = false;
   }

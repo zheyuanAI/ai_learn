@@ -14,20 +14,30 @@
       @search="fetchTasks"
       @reset="resetSearch"
     >
-      <select v-model="queryParams.status" class="filter-select" @change="fetchTasks">
-        <option value="">全部生命周期状态</option>
-        <option value="Approved">已审核 (Approved)</option>
-        <option value="Completed">已完成 (Completed)</option>
-        <option value="Submitted">已提交 (Submitted)</option>
-        <option value="Draft">草稿 (Draft)</option>
-      </select>
+      <el-select
+        v-model="queryParams.status"
+        placeholder="全部生命周期状态"
+        clearable
+        style="width: 180px"
+        @change="fetchTasks"
+      >
+        <el-option label="已审核 (Approved)" value="Approved" />
+        <el-option label="已完成 (Completed)" value="Completed" />
+        <el-option label="已提交 (Submitted)" value="Submitted" />
+        <el-option label="草稿 (Draft)" value="Draft" />
+      </el-select>
 
-      <select v-model="queryParams.fulfillmentStatus" class="filter-select" @change="fetchTasks">
-        <option value="">全部履约进度</option>
-        <option value="NotStarted">未开始 (NotStarted)</option>
-        <option value="InProgress">履约中 (InProgress)</option>
-        <option value="FullyShipped">全部发货 (FullyShipped)</option>
-      </select>
+      <el-select
+        v-model="queryParams.fulfillmentStatus"
+        placeholder="全部履约进度"
+        clearable
+        style="width: 180px"
+        @change="fetchTasks"
+      >
+        <el-option label="未开始 (NotStarted)" value="NotStarted" />
+        <el-option label="履约中 (InProgress)" value="InProgress" />
+        <el-option label="全部发货 (FullyShipped)" value="FullyShipped" />
+      </el-select>
     </FilterBar>
 
     <!-- 四态展示 -->
@@ -119,22 +129,23 @@
 
       <!-- 操作列 -->
       <template #actions="{ row }">
-        <div class="action-buttons">
-          <button
-            type="button"
-            class="btn-link"
+        <div style="display: flex; gap: 8px; justify-content: center">
+          <el-button
+            type="primary"
+            link
+            size="small"
             @click="openDetail(row)"
           >
             履约详情
-          </button>
-          <button
+          </el-button>
+          <el-button
             v-if="row.status === 'Approved' && hasUnfulfilled(row)"
-            type="button"
-            class="btn-action-primary"
+            type="primary"
+            size="small"
             @click="openDetail(row)"
           >
             直接拣货
-          </button>
+          </el-button>
         </div>
       </template>
     </DataTable>

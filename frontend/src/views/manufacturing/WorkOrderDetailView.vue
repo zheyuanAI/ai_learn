@@ -2,21 +2,22 @@
   <div class="wo-detail-container">
     <CommandFeedback :error="lastError" :can-retry="canRetry" :executing="isExecuting" @retry="retry" />
     <!-- 头部面包屑与状态导航 -->
-    <div class="detail-header-nav">
-      <button type="button" class="btn-back" @click="handleBack">
-        ‹ 返回工单列表
-      </button>
-      <div class="header-tags">
+    <div class="detail-header-nav" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px">
+      <el-button :icon="ArrowLeft" link @click="handleBack">
+        返回工单列表
+      </el-button>
+      <div class="header-tags" style="display: flex; align-items: center; gap: 12px">
         <span class="font-mono text-muted">工单 ID: {{ workOrder?.id || id }}</span>
-        <button
+        <el-button
           v-if="workOrder"
-          type="button"
-          class="btn-nav-trace"
+          type="primary"
+          link
+          :icon="Search"
           title="穿透前往全链路全闭环追溯中心"
           @click="handleGoTrace"
         >
-          <span>🔍 全链路追溯</span>
-        </button>
+          全链路追溯
+        </el-button>
       </div>
     </div>
 
@@ -53,87 +54,81 @@
           </div>
 
           <!-- 顶部状态驱动操作按钮组 (受 allowedActions 约束) -->
-          <div class="banner-actions">
+          <div class="banner-actions" style="display: flex; gap: 8px; flex-wrap: wrap">
             <!-- 去排产派工 (Released 状态快捷跳转) -->
-            <button
+            <el-button
               v-if="workOrder.status === 'Released'"
-              type="button"
-              class="btn btn-primary"
+              type="primary"
               title="前往生产派工页面创建工序派工"
               @click="router.push(`/mes/dispatch?workOrderId=${workOrder.id}`)"
             >
               去排产派工
-            </button>
+            </el-button>
 
             <!-- 办理成品入库 (已开工或已下达状态) -->
-            <!-- 修改用途：统一使用当前系统已注册的“成品完工入库”路由，避免跳转到废弃的 fg-receipt 路径。 -->
-            <button
+            <el-button
               v-if="workOrder.status === 'InProgress' || workOrder.status === 'Released'"
-              type="button"
-              class="btn btn-secondary"
+              type="primary"
+              plain
               title="前往产成品入库页面办理入库"
               @click="router.push(`/mes/receipts?workOrderId=${workOrder.id}`)"
             >
               办理成品入库
-            </button>
+            </el-button>
 
             <!-- 提交审核 -->
-            <button
+            <el-button
               v-if="workOrder.status === 'Draft' || workOrder.status === 'Rejected'"
-              type="button"
-              class="btn btn-primary"
+              type="primary"
               :disabled="!isActionAllowed('submit')"
               :title="getActionDisabledReason('submit') || '提交审核'"
               @click="promptAction('submit', '提交审核确认', '确认将工单提交至质检/计划主管审核？')"
             >
               提交审核
-            </button>
+            </el-button>
 
             <!-- 审批通过与驳回 -->
             <template v-if="workOrder.status === 'PendingApproval'">
-              <button
-                type="button"
-                class="btn btn-success"
+              <el-button
+                type="success"
                 :disabled="!isActionAllowed('approve')"
                 :title="getActionDisabledReason('approve') || '审核通过'"
                 @click="promptAction('approve', '审核通过确认', '确认审核通过此工单并正式下达排产？有效 BOM 与路线版本将被锁定。')"
               >
                 审核通过
-              </button>
-              <button
-                type="button"
-                class="btn btn-warning"
+              </el-button>
+              <el-button
+                type="warning"
                 :disabled="!isActionAllowed('reject')"
                 :title="getActionDisabledReason('reject') || '驳回审核'"
                 @click="openRejectModal"
               >
                 驳回
-              </button>
+              </el-button>
             </template>
 
             <!-- 正常完工 -->
-            <button
+            <el-button
               v-if="workOrder.status === 'InProgress'"
-              type="button"
-              class="btn btn-success"
+              type="success"
               :disabled="!isActionAllowed('complete')"
               :title="getActionDisabledReason('complete') || '正常完成工单'"
               @click="promptAction('complete', '正常完工确认', '确认全部工序报工合格并归档完成？')"
             >
               工单完工
-            </button>
+            </el-button>
 
             <!-- 手工强制结案 -->
-            <button
+            <el-button
               v-if="workOrder.status === 'Released' || workOrder.status === 'InProgress'"
-              type="button"
-              class="btn btn-secondary"
+              type="info"
+              plain
               :disabled="!isActionAllowed('manualComplete')"
               :title="getActionDisabledReason('manualComplete') || '手工强制结案'"
               @click="openManualCompleteModal"
             >
               手工结案
-            </button>
+            </el-button>
           </div>
         </div>
 
@@ -199,272 +194,239 @@
 
       <!-- 关联事实子单据标签页 -->
       <section class="tabs-container">
-        <div class="tabs-header">
-          <button
-            type="button"
-            class="tab-btn"
-            :class="{ 'is-active': activeTab === 'dispatch' }"
-            @click="activeTab = 'dispatch'"
-          >
-            派工安排 ({{ dispatchOrders.length }})
-          </button>
-          <button
-            type="button"
-            class="tab-btn"
-            :class="{ 'is-active': activeTab === 'execution' }"
-            @click="activeTab = 'execution'"
-          >
-            工序现场执行 ({{ executions.length }})
-          </button>
-          <button
-            type="button"
-            class="tab-btn"
-            :class="{ 'is-active': activeTab === 'quality' }"
-            @click="activeTab = 'quality'"
-          >
-            生产质检
-          </button>
-          <button
-            type="button"
-            class="tab-btn"
-            :class="{ 'is-active': activeTab === 'movement' }"
-            @click="activeTab = 'movement'"
-          >
-            生产领料 / 退料 ({{ materialIssues.length + materialReturns.length }})
-          </button>
-          <button
-            type="button"
-            class="tab-btn"
-            :class="{ 'is-active': activeTab === 'receipt' }"
-            @click="activeTab = 'receipt'"
-          >
-            成品入库 ({{ finishedReceipts.length }})
-          </button>
-        </div>
-
-        <!-- Tab 1: 派工单 -->
-        <div v-if="activeTab === 'dispatch'" class="tab-pane">
-          <table class="sub-table">
-            <thead>
-              <tr>
-                <th>派工单号</th>
-                <th>工序步骤</th>
-                <th>派工数量</th>
-                <th>责任操作员</th>
-                <th>绑定设备</th>
-                <th>派工状态</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="dispatchOrders.length === 0">
-                <td colspan="6" class="text-center text-muted">暂无派工安排</td>
-              </tr>
-              <tr v-for="d in dispatchOrders" :key="d.id">
-                <td class="font-mono highlight-code">{{ d.dispatchNo }}</td>
-                <td>{{ d.operationName }} (#{{ d.operationNo }})</td>
-                <td><QuantityText :value="d.dispatchQty" unit="件" /></td>
-                <td>{{ d.operatorName || d.operatorId }}</td>
-                <td class="font-mono">{{ d.deviceName || d.deviceCode || "通用人工工位" }}</td>
-                <td>
+        <el-tabs v-model="activeTab" class="wo-tabs">
+          <!-- Tab 1: 派工单 -->
+          <el-tab-pane :label="`派工安排 (${dispatchOrders.length})`" name="dispatch">
+            <el-table :data="dispatchOrders" border style="width: 100%">
+              <el-table-column prop="dispatchNo" label="派工单号" width="180">
+                <template #default="{ row }">
+                  <span class="font-mono highlight-code">{{ row.dispatchNo }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="工序步骤" min-width="160">
+                <template #default="{ row }">
+                  {{ row.operationName }} (#{{ row.operationNo }})
+                </template>
+              </el-table-column>
+              <el-table-column label="派工数量" width="120" align="right">
+                <template #default="{ row }">
+                  <QuantityText :value="row.dispatchQty" unit="件" />
+                </template>
+              </el-table-column>
+              <el-table-column label="责任操作员" width="140">
+                <template #default="{ row }">
+                  {{ row.operatorName || row.operatorId }}
+                </template>
+              </el-table-column>
+              <el-table-column label="绑定设备" min-width="160">
+                <template #default="{ row }">
+                  <span class="font-mono">{{ row.deviceName || row.deviceCode || "通用人工工位" }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="派工状态" width="120" align="center">
+                <template #default="{ row }">
                   <StatusBadge
-                    :type="d.status === 'Completed' ? 'success' : d.status === 'Processing' ? 'primary' : 'info'"
-                    :text="d.status"
+                    :type="row.status === 'Completed' ? 'success' : row.status === 'Processing' ? 'primary' : 'info'"
+                    :text="row.status"
                   />
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-tab-pane>
 
-        <!-- Tab 2: 现场执行与报工 -->
-        <div v-if="activeTab === 'execution'" class="tab-pane">
-          <table class="sub-table">
-            <thead>
-              <tr>
-                <th>执行编号</th>
-                <th>执行工序</th>
-                <th>执行人</th>
-                <th>执行状态</th>
-                <th>实际开始时间</th>
-                <th>实际完工时间</th>
-                <th>累计报工数</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="executions.length === 0">
-                <td colspan="7" class="text-center text-muted">尚未生成工序执行事实</td>
-              </tr>
-              <tr v-for="e in executions" :key="e.id">
-                <td class="font-mono highlight-code">{{ e.executionNo }}</td>
-                <td>{{ e.operationName }}</td>
-                <td>{{ e.operatorName || e.operatorId }}</td>
-                <td>
+          <!-- Tab 2: 现场执行与报工 -->
+          <el-tab-pane :label="`工序现场执行 (${executions.length})`" name="execution">
+            <el-table :data="executions" border style="width: 100%">
+              <el-table-column prop="executionNo" label="执行编号" width="180">
+                <template #default="{ row }">
+                  <span class="font-mono highlight-code">{{ row.executionNo }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="operationName" label="执行工序" min-width="160" />
+              <el-table-column label="执行人" width="130">
+                <template #default="{ row }">
+                  {{ row.operatorName || row.operatorId }}
+                </template>
+              </el-table-column>
+              <el-table-column label="执行状态" width="120" align="center">
+                <template #default="{ row }">
                   <StatusBadge
-                    :type="e.status === 'Running' ? 'primary' : e.status === 'Completed' ? 'success' : 'default'"
-                    :text="e.status"
-                    :pulsing="e.status === 'Running'"
+                    :type="row.status === 'Running' ? 'primary' : row.status === 'Completed' ? 'success' : 'default'"
+                    :text="row.status"
+                    :pulsing="row.status === 'Running'"
                   />
-                </td>
-                <td class="font-mono text-muted">{{ e.startedAt || "-" }}</td>
-                <td class="font-mono text-muted">{{ e.completedAt || "-" }}</td>
-                <td><QuantityText :value="e.reportedQty || '0.00'" unit="件" /></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="startedAt" label="实际开始时间" width="160">
+                <template #default="{ row }">
+                  <span class="font-mono text-muted">{{ row.startedAt || "-" }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="completedAt" label="实际完工时间" width="160">
+                <template #default="{ row }">
+                  <span class="font-mono text-muted">{{ row.completedAt || "-" }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="累计报工数" width="130" align="right">
+                <template #default="{ row }">
+                  <QuantityText :value="row.reportedQty || '0.00'" unit="件" />
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-tab-pane>
 
-        <!-- Tab 3: 生产质检 -->
-        <div v-if="activeTab === 'quality'" class="tab-pane">
-          <ProductionQualityPanel :work-order-id="workOrder.id" @refresh="loadAllData" />
-        </div>
+          <!-- Tab 3: 生产质检 -->
+          <el-tab-pane label="生产质检" name="quality">
+            <ProductionQualityPanel :work-order-id="workOrder.id" @refresh="loadAllData" />
+          </el-tab-pane>
 
-        <!-- Tab 4: 领退料 -->
-        <div v-if="activeTab === 'movement'" class="tab-pane">
-          <div class="movement-split">
-            <div class="split-card">
-              <h4 class="sub-title">领料单 (Material Issues)</h4>
-              <table class="sub-table">
-                <thead>
-                  <tr>
-                    <th>单号</th>
-                    <th>状态</th>
-                    <th>物料项数</th>
-                    <th>出库确认时间</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-if="materialIssues.length === 0">
-                    <td colspan="4" class="text-center text-muted">暂无领料单</td>
-                  </tr>
-                  <tr v-for="m in materialIssues" :key="m.id">
-                    <td class="font-mono highlight-code">{{ m.issueNo }}</td>
-                    <td>
-                      <StatusBadge :type="m.status === 'Confirmed' ? 'success' : 'warning'" :text="m.status" />
-                    </td>
-                    <td>{{ m.items?.length || 0 }} 项原料</td>
-                    <td class="font-mono text-muted">{{ m.confirmedAt || "待出库" }}</td>
-                  </tr>
-                </tbody>
-              </table>
+          <!-- Tab 4: 领退料 -->
+          <el-tab-pane :label="`生产领料 / 退料 (${materialIssues.length + materialReturns.length})`" name="movement">
+            <div class="movement-split" style="display: flex; gap: 16px; flex-wrap: wrap">
+              <div class="split-card" style="flex: 1; min-width: 320px">
+                <h4 class="sub-title" style="margin-bottom: 10px; color: #f1f5f9">领料单 (Material Issues)</h4>
+                <el-table :data="materialIssues" border style="width: 100%" empty-text="暂无领料单">
+                  <el-table-column prop="issueNo" label="单号" min-width="140">
+                    <template #default="{ row }">
+                      <span class="font-mono highlight-code">{{ row.issueNo }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="状态" width="100" align="center">
+                    <template #default="{ row }">
+                      <StatusBadge :type="row.status === 'Confirmed' ? 'success' : 'warning'" :text="row.status" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="物料项数" width="110" align="right">
+                    <template #default="{ row }">
+                      {{ row.items?.length || 0 }} 项原料
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="confirmedAt" label="出库确认时间" width="150">
+                    <template #default="{ row }">
+                      <span class="font-mono text-muted">{{ row.confirmedAt || "待出库" }}</span>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+
+              <div class="split-card" style="flex: 1; min-width: 320px">
+                <h4 class="sub-title" style="margin-bottom: 10px; color: #f1f5f9">退料单 (Material Returns)</h4>
+                <el-table :data="materialReturns" border style="width: 100%" empty-text="暂无退料单">
+                  <el-table-column prop="returnNo" label="单号" min-width="140">
+                    <template #default="{ row }">
+                      <span class="font-mono highlight-code">{{ row.returnNo }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="状态" width="100" align="center">
+                    <template #default="{ row }">
+                      <StatusBadge :type="row.status === 'Confirmed' ? 'success' : 'warning'" :text="row.status" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="退料项数" width="110" align="right">
+                    <template #default="{ row }">
+                      {{ row.items?.length || 0 }} 项原料
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="confirmedAt" label="退库确认时间" width="150">
+                    <template #default="{ row }">
+                      <span class="font-mono text-muted">{{ row.confirmedAt || "待入库" }}</span>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
             </div>
+          </el-tab-pane>
 
-            <div class="split-card">
-              <h4 class="sub-title">退料单 (Material Returns)</h4>
-              <table class="sub-table">
-                <thead>
-                  <tr>
-                    <th>单号</th>
-                    <th>状态</th>
-                    <th>退料项数</th>
-                    <th>退库确认时间</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-if="materialReturns.length === 0">
-                    <td colspan="4" class="text-center text-muted">暂无退料单</td>
-                  </tr>
-                  <tr v-for="r in materialReturns" :key="r.id">
-                    <td class="font-mono highlight-code">{{ r.returnNo }}</td>
-                    <td>
-                      <StatusBadge :type="r.status === 'Confirmed' ? 'success' : 'warning'" :text="r.status" />
-                    </td>
-                    <td>{{ r.items?.length || 0 }} 项原料</td>
-                    <td class="font-mono text-muted">{{ r.confirmedAt || "待入库" }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- Tab 4: 成品入库 -->
-        <div v-if="activeTab === 'receipt'" class="tab-pane">
-          <table class="sub-table">
-            <thead>
-              <tr>
-                <th>入库单号</th>
-                <th>入库数量</th>
-                <th>目标仓库 / 库位</th>
-                <th>状态</th>
-                <th>库存流水关联</th>
-                <th>确认时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="finishedReceipts.length === 0">
-                <td colspan="6" class="text-center text-muted">暂无成品入库单记录</td>
-              </tr>
-              <tr v-for="fg in finishedReceipts" :key="fg.id">
-                <td class="font-mono highlight-code">{{ fg.receiptNo }}</td>
-                <td><QuantityText :value="fg.receiptQty" unit="件" /></td>
-                <td>{{ fg.warehouseName || fg.warehouseId }} / {{ fg.locationCode || fg.locationId }}</td>
-                <td>
-                  <StatusBadge :type="fg.status === 'Confirmed' ? 'success' : 'warning'" :text="fg.status" />
-                </td>
-                <td class="font-mono text-muted">{{ fg.inventoryTransactionId || "-" }}</td>
-                <td class="font-mono text-muted">{{ fg.confirmedAt || "待确认" }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+          <!-- Tab 5: 成品入库 -->
+          <el-tab-pane :label="`成品入库 (${finishedReceipts.length})`" name="receipt">
+            <el-table :data="finishedReceipts" border style="width: 100%" empty-text="暂无成品入库单记录">
+              <el-table-column prop="receiptNo" label="入库单号" width="180">
+                <template #default="{ row }">
+                  <span class="font-mono highlight-code">{{ row.receiptNo }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="入库数量" width="120" align="right">
+                <template #default="{ row }">
+                  <QuantityText :value="row.receiptQty" unit="件" />
+                </template>
+              </el-table-column>
+              <el-table-column label="目标仓库 / 库位" min-width="180">
+                <template #default="{ row }">
+                  {{ row.warehouseName || row.warehouseId }} / {{ row.locationCode || row.locationId }}
+                </template>
+              </el-table-column>
+              <el-table-column label="状态" width="100" align="center">
+                <template #default="{ row }">
+                  <StatusBadge :type="row.status === 'Confirmed' ? 'success' : 'warning'" :text="row.status" />
+                </template>
+              </el-table-column>
+              <el-table-column prop="inventoryTransactionId" label="库存流水关联" min-width="160">
+                <template #default="{ row }">
+                  <span class="font-mono text-muted">{{ row.inventoryTransactionId || "-" }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="confirmedAt" label="确认时间" width="160">
+                <template #default="{ row }">
+                  <span class="font-mono text-muted">{{ row.confirmedAt || "待确认" }}</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-tab-pane>
+        </el-tabs>
       </section>
     </div>
 
     <!-- 审核驳回弹窗 -->
-    <div v-if="rejectModalVisible" class="modal-mask" @click.self="rejectModalVisible = false">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">退回驳回工单审核</h3>
-          <button type="button" class="btn-close" @click="rejectModalVisible = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitReject">
-          <div class="form-item">
-            <label>驳回退回原因 <span class="req">*</span></label>
-            <textarea
-              v-model="rejectionReason"
-              class="form-input"
-              rows="3"
-              placeholder="请输入退回审批的具体原因..."
-              required
-            ></textarea>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="rejectModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-warning" :disabled="isSubmitting">
-              {{ isSubmitting ? "处理中..." : "确认退回" }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog
+      v-model="rejectModalVisible"
+      title="退回驳回工单审核"
+      width="520px"
+      destroy-on-close
+      append-to-body
+    >
+      <el-form label-width="110px" @submit.prevent="submitReject">
+        <el-form-item label="驳回退回原因" required>
+          <el-input
+            v-model="rejectionReason"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入退回审批的具体原因..."
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="rejectModalVisible = false">取消</el-button>
+        <el-button type="warning" :loading="isSubmitting" @click="submitReject">
+          {{ isSubmitting ? "处理中..." : "确认退回" }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 手工强制结案弹窗 -->
-    <div v-if="manualModalVisible" class="modal-mask" @click.self="manualModalVisible = false">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">工单提前结案确认</h3>
-          <button type="button" class="btn-close" @click="manualModalVisible = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitManualComplete">
-          <div class="form-item">
-            <label>强制截单/完工原因说明 <span class="req">*</span></label>
-            <textarea
-              v-model="manualCompleteReason"
-              class="form-input"
-              rows="3"
-              placeholder="请填写手工结案原因..."
-              required
-            ></textarea>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="manualModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-danger" :disabled="isSubmitting">
-              {{ isSubmitting ? "结案中..." : "确认强制完工" }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog
+      v-model="manualModalVisible"
+      title="工单提前结案确认"
+      width="520px"
+      destroy-on-close
+      append-to-body
+    >
+      <el-form label-width="120px" @submit.prevent="submitManualComplete">
+        <el-form-item label="强制结案原因" required>
+          <el-input
+            v-model="manualCompleteReason"
+            type="textarea"
+            :rows="3"
+            placeholder="请填写手工结案原因..."
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="manualModalVisible = false">取消</el-button>
+        <el-button type="danger" :loading="isSubmitting" @click="submitManualComplete">
+          {{ isSubmitting ? "结案中..." : "确认强制完工" }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 统一二次确认弹窗 -->
     <ConfirmDialog
@@ -479,6 +441,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from "vue";
+import { ArrowLeft, Search } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import { useCommand } from "@/composables/useCommand";
 import CommandFeedback from "@/components/common/CommandFeedback.vue";
 import { useRoute, useRouter } from "vue-router";
@@ -664,7 +628,7 @@ async function executePromptAction() {
     confirmState.visible = false;
     await loadAllData();
   } catch (err: any) {
-    alert(`操作失败：${err.message}`);
+    ElMessage.error(`操作失败：${err.message}`);
   } finally {
     confirmState.loading = false;
   }
@@ -686,7 +650,7 @@ async function submitReject() {
       await loadAllData();
     }, { onConflict: loadAllData });
   } catch (err: any) {
-    alert(`退回失败：${err.message}`);
+    ElMessage.error(`退回失败：${err.message}`);
   } finally {
     isSubmitting.value = false;
   }
@@ -704,7 +668,7 @@ async function submitManualComplete() {
     manualModalVisible.value = false;
     await loadAllData();
   } catch (err: any) {
-    alert(`结案失败：${err.message}`);
+    ElMessage.error(`结案失败：${err.message}`);
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 

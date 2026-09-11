@@ -11,7 +11,7 @@
       @retry="loadTransfer"
     >
       <template #actions>
-        <button type="button" class="btn btn-secondary" @click="handleClose">返回调拨列表</button>
+        <el-button @click="handleClose">返回调拨列表</el-button>
       </template>
     </ErrorState>
 
@@ -29,6 +29,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
 import ErrorState from "@/components/common/ErrorState.vue";
 import { confirmTransfer, getTransferById } from "@/api/inventory";
 import { ApiError } from "@/utils/request";
@@ -108,9 +109,10 @@ async function handleConfirm(id: string | number) {
   try {
     const response = await confirmTransfer(id);
     transfer.value = response.data;
+    ElMessage.success("调拨确认成功！");
   } catch (error: any) {
     console.error("[TransferDetailPage] 确认调拨失败:", error);
-    window.alert(error?.message || "确认调拨失败，请稍后重试。");
+    ElMessage.error(error?.message || "确认调拨失败，请稍后重试。");
   } finally {
     confirming.value = false;
   }

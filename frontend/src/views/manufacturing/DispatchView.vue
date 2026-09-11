@@ -8,15 +8,14 @@
       description="将已下达工单中的工序任务、派工数量分配给现场操作员及机台设备。下达派工仅表达安排生效，不代表现场已实际开工。"
     >
       <template #actions>
-        <button
+        <el-button
           v-if="hasPermission('mes:dispatch:manage')"
-          type="button"
-          class="btn btn-primary"
+          type="primary"
+          :icon="Plus"
           @click="openCreateModal"
         >
-          <span class="btn-icon">＋</span>
-          <span>新建派工单</span>
-        </button>
+          新建派工单
+        </el-button>
       </template>
     </PageHeader>
 
@@ -27,16 +26,18 @@
       @search="handleSearch"
       @reset="handleReset"
     >
-      <div class="filter-select-group">
-        <label class="filter-label">状态：</label>
-        <select v-model="queryParams.status" class="filter-select" @change="handleSearch">
-          <option value="">全部状态</option>
-          <option value="Draft">草稿安排 (Draft)</option>
-          <option value="Released">已下达 (Released)</option>
-          <option value="Processing">加工中 (Processing)</option>
-          <option value="Completed">已完成 (Completed)</option>
-        </select>
-      </div>
+      <el-select
+        v-model="queryParams.status"
+        placeholder="全部状态"
+        clearable
+        style="width: 180px"
+        @change="handleSearch"
+      >
+        <el-option label="草稿安排 (Draft)" value="Draft" />
+        <el-option label="已下达 (Released)" value="Released" />
+        <el-option label="加工中 (Processing)" value="Processing" />
+        <el-option label="已完成 (Completed)" value="Completed" />
+      </el-select>
     </FilterBar>
 
     <!-- 错误异常提示 -->
@@ -109,124 +110,151 @@
 
       <!-- 操作列 (受 allowedActions 约束) -->
       <template #actions="{ row }">
-        <div class="action-btn-group">
+        <div style="display: flex; gap: 8px; justify-content: center">
           <!-- 下达派工 (Draft -> Released) -->
-          <button
+          <el-button
             v-if="row.status === 'Draft'"
-            type="button"
-            class="btn-text text-primary"
+            type="primary"
+            link
+            size="small"
             :disabled="!isActionAllowed(row, 'release')"
             :title="getActionDisabledReason(row, 'release') || '下达派工单'"
             @click="promptRelease(row)"
           >
             下达
-          </button>
+          </el-button>
           <!-- 前往执行 (Released -> Executions) -->
-          <button
+          <el-button
             v-else-if="row.status === 'Released'"
-            type="button"
-            class="btn-text text-primary font-bold"
+            type="primary"
+            link
+            size="small"
+            style="font-weight: bold"
             title="前往工序执行页面并开始加工"
             @click="goToExecution(row)"
           >
             前往执行
-          </button>
-          <span v-else class="text-muted font-xs">已执行</span>
+          </el-button>
+          <span v-else class="text-muted" style="font-size: 12px">已执行</span>
         </div>
       </template>
     </DataTable>
 
     <!-- 新建派工单对话框 -->
-    <div v-if="createModalVisible" class="modal-mask" @click.self="createModalVisible = false">
-      <div class="modal-card modal-large">
-        <div class="modal-header">
-          <h3 class="modal-title">新建工序派工安排</h3>
-          <button type="button" class="btn-close" @click="createModalVisible = false">✕</button>
-        </div>
+    <el-dialog
+      v-model="createModalVisible"
+      title="新建工序派工安排"
+      width="760px"
+      destroy-on-close
+      append-to-body
+    >
+      <div v-if="isLoadingOptions" style="margin-bottom: 10px; font-size: 12px; color: #8ca2b8">
+        ⏳ 正在拉取已下达工单与设备台账...
+      </div>
 
-        <form class="modal-body" @submit.prevent="submitCreateDispatch">
-          <div v-if="isLoadingOptions" class="text-muted text-sm" style="margin-bottom: 8px;">
-            ⏳ 正在拉取已下达工单与设备台账...
-          </div>
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>关联已下达工单 <span class="req">*</span></label>
-              <select
+      <el-form label-width="110px" @submit.prevent="submitCreateDispatch">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="已下达工单" required>
+              <el-select
                 v-model="createForm.workOrderId"
-                class="form-select"
-                required
+                placeholder="请选择已下达工单"
+                filterable
+                style="width: 100%"
                 @change="onWorkOrderChange"
               >
-                <option value="">请选择已下达工单 (Released)</option>
-                <option v-for="wo in releasedWorkOrders" :key="wo.id" :value="wo.id">
-                  {{ wo.workOrderNo || wo.woNo }} - {{ wo.productName || '工单' }} (计划: {{ wo.plannedQty }}件)
-                </option>
-              </select>
-            </div>
-            <div class="form-item">
-              <label>指派工序步骤 <span class="req">*</span></label>
-              <select
+                <el-option
+                  v-for="wo in releasedWorkOrders"
+                  :key="wo.id"
+                  :value="wo.id"
+                  :label="`${wo.workOrderNo || wo.woNo} - ${wo.productName || '工单'} (计划: ${wo.plannedQty}件)`"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="指派工序步骤" required>
+              <el-select
                 v-model="createForm.operationId"
-                class="form-select"
-                required
+                placeholder="请选择执行工序"
+                filterable
+                style="width: 100%"
                 :disabled="!createForm.workOrderId || isLoadingOperations"
               >
-                <option value="">
-                  {{ !createForm.workOrderId ? '请先选择左侧工单' : isLoadingOperations ? '正在加载工序...' : availableOperations.length === 0 ? '该工单暂无可用工序' : '请选择执行工序' }}
-                </option>
-                <option v-for="op in availableOperations" :key="op.id" :value="op.id">
-                  #{{ op.operationNo }} - {{ op.operationName }} (标准工时: {{ op.standardTimeMinutes || 0 }}分)
-                </option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>责任操作工 <span class="req">*</span></label>
-              <select v-model="createForm.operatorId" class="form-select" required :disabled="!operatorDirectoryAvailable">
-                <option value="">{{ operatorDirectoryAvailable ? "请选择责任操作工" : "正在加载同租户操作员目录..." }}</option>
-                <option v-for="operator in operators" :key="operator.id" :value="operator.id">
-                  {{ operator.userNo || operator.username }} - {{ operator.realName }}
-                </option>
-              </select>
-              <small v-if="!operatorDirectoryAvailable" class="form-hint text-warning">
+                <el-option
+                  v-for="op in availableOperations"
+                  :key="op.id"
+                  :value="op.id"
+                  :label="`#${op.operationNo} - ${op.operationName} (标准工时: ${op.standardTimeMinutes || 0}分)`"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="责任操作工" required>
+              <el-select
+                v-model="createForm.operatorId"
+                placeholder="请选择责任操作工"
+                filterable
+                style="width: 100%"
+                :disabled="!operatorDirectoryAvailable"
+              >
+                <el-option
+                  v-for="operator in operators"
+                  :key="operator.id"
+                  :value="operator.id"
+                  :label="`${operator.userNo || operator.username} - ${operator.realName}`"
+                />
+              </el-select>
+              <div v-if="!operatorDirectoryAvailable" style="font-size: 12px; color: #f59e0b; margin-top: 4px">
                 未读取到可用的同租户操作员目录，派工创建暂不可提交。
-              </small>
-            </div>
-            <div class="form-item">
-              <label>派工指派数量 <span class="req">*</span></label>
-              <input
+              </div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="派工数量" required>
+              <el-input
                 v-model="createForm.dispatchQty"
                 type="number"
                 min="0.01"
                 step="0.01"
-                class="form-input font-mono"
                 placeholder="例如 100.00"
-                required
               />
-            </div>
-          </div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="指定加工设备">
+              <el-select
+                v-model="createForm.deviceId"
+                placeholder="人工通用工位 (无需专用设备)"
+                clearable
+                style="width: 100%"
+              >
+                <el-option value="" label="人工通用工位 (无需专用设备)" />
+                <el-option
+                  v-for="dev in availableDevices"
+                  :key="dev.id"
+                  :value="dev.id"
+                  :label="`${dev.deviceCode} - ${dev.deviceName} (${dev.status || 'ACTIVE'})`"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
 
-          <div class="form-item">
-            <label>指定加工设备 (可选，未指定为人工通用工位)</label>
-            <select v-model="createForm.deviceId" class="form-select">
-              <option value="">人工通用工位 (无需专用设备)</option>
-              <option v-for="dev in availableDevices" :key="dev.id" :value="dev.id">
-                {{ dev.deviceCode }} - {{ dev.deviceName }} ({{ dev.status || 'ACTIVE' }})
-              </option>
-            </select>
-          </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="createModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting || !operatorDirectoryAvailable || !createForm.operatorId">
-              {{ isSubmitting ? "创建中..." : "保存派工单 (Draft)" }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      <template #footer>
+        <el-button @click="createModalVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="isSubmitting"
+          :disabled="!operatorDirectoryAvailable || !createForm.operatorId"
+          @click="submitCreateDispatch"
+        >
+          {{ isSubmitting ? "创建中..." : "保存派工单 (Draft)" }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 下达确认对话框 -->
     <ConfirmDialog
@@ -241,6 +269,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
+import { Plus } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import { useCommand } from "@/composables/useCommand";
 import CommandFeedback from "@/components/common/CommandFeedback.vue";
 import { useRoute, useRouter } from "vue-router";
@@ -276,6 +306,7 @@ import {
 } from "../../api/manufacturing";
 import { getDevices } from "../../api/iot";
 import { getOperatorDirectory, type OperatorDirectoryItem } from "../../api/auth";
+import { getProducts } from "../../api/masterData";
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
@@ -348,7 +379,41 @@ async function fetchDispatchList() {
       status: queryParams.status || undefined,
     });
     if (res.data) {
-      let list = res.data.records || [];
+      const [workOrderResult, deviceResult, operatorResult, productResult] = await Promise.allSettled([
+        getWorkOrders({ page: 1, size: 1000 }),
+        getDevices({ page: 1, size: 1000 }),
+        getOperatorDirectory({ page: 1, size: 1000 }),
+        getProducts({ page: 1, size: 1000, status: "ACTIVE" }),
+      ]);
+      const records = <T>(result: PromiseSettledResult<any>): T[] =>
+        result.status === "fulfilled" ? result.value.data?.records || [] : [];
+      const workOrders = records<any>(workOrderResult);
+      const devices = records<any>(deviceResult);
+      const operatorItems = records<any>(operatorResult);
+      const products = records<any>(productResult);
+      const routingIds = [...new Set(workOrders.map((item) => String(item.routingId || "")).filter(Boolean))];
+      const routingResults = await Promise.allSettled(routingIds.map((id) => getRoutingById(id)));
+      const routings = routingResults.flatMap((result) =>
+        result.status === "fulfilled" && result.value.data ? [result.value.data] : [],
+      );
+      let list = (res.data.records || []).map((dispatch) => {
+        const workOrder = workOrders.find((item) => String(item.id) === String(dispatch.workOrderId));
+        const routing = routings.find((item) => String(item.id) === String(workOrder?.routingId));
+        const operation = routing?.operations?.find((item: any) => String(item.id) === String(dispatch.operationId));
+        const product = products.find((item) => String(item.id) === String(workOrder?.productId));
+        const operator = operatorItems.find((item) => String(item.id) === String(dispatch.operatorId));
+        const device = devices.find((item) => String(item.id) === String(dispatch.deviceId));
+        return {
+          ...dispatch,
+          workOrderNo: dispatch.workOrderNo || workOrder?.workOrderNo || String(dispatch.workOrderId),
+          productName: dispatch.productName || product?.name || String(workOrder?.productId || ""),
+          operationNo: dispatch.operationNo || operation?.operationNo,
+          operationName: dispatch.operationName || operation?.operationName || String(dispatch.operationId),
+          operatorName: dispatch.operatorName || operator?.realName || operator?.username || String(dispatch.operatorId),
+          deviceName: dispatch.deviceName || device?.deviceName,
+          deviceCode: dispatch.deviceCode || device?.deviceCode,
+        };
+      });
       if (queryParams.keyword.trim()) {
         const kw = queryParams.keyword.toLowerCase();
         list = list.filter(
@@ -472,7 +537,7 @@ async function onWorkOrderChange() {
 
 async function submitCreateDispatch() {
   if (!operatorDirectoryAvailable.value) {
-    alert("当前没有可用的同租户操作员目录，派工创建已阻止。");
+    ElMessage.warning("当前没有可用的同租户操作员目录，派工创建已阻止。");
     return;
   }
   if (!createForm.workOrderId || !createForm.operationId || !createForm.operatorId || !createForm.dispatchQty) return;
@@ -486,7 +551,7 @@ async function submitCreateDispatch() {
       await fetchDispatchList();
     }, { onConflict: fetchDispatchList });
   } catch (err: any) {
-    alert(`创建派工单失败：${err.message}`);
+    ElMessage.error(`创建派工单失败：${err.message}`);
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
@@ -505,7 +570,7 @@ async function handleConfirmRelease() {
       await fetchDispatchList();
     }, { onConflict: fetchDispatchList });
   } catch (err: any) {
-    alert(`下达失败：${err.message}`);
+    ElMessage.error(`下达失败：${err.message}`);
   } finally {
     releaseConfirm.loading = false;
   }

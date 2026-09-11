@@ -2,23 +2,22 @@
   <div class="device-detail-container">
     <!-- 头部返回与导航 -->
     <div class="detail-top-nav">
-      <button type="button" class="btn-back" @click="handleBack">
-        ‹ 返回设备列表
-      </button>
+      <el-button :icon="ArrowLeft" @click="handleBack">
+        返回设备列表
+      </el-button>
       <div class="top-nav-actions">
         <!-- 穿透全链路追溯中心 -->
-        <button
+        <el-button
           v-if="device"
-          type="button"
-          class="btn btn-secondary"
+          :icon="Search"
           title="穿透前往全链路全闭环追溯中心"
           @click="goToTraceability"
         >
-          <span>🔍 全链路追溯</span>
-        </button>
-        <button type="button" class="btn btn-warning" @click="credentialDialogVisible = true">
-          <span>签发新凭证</span>
-        </button>
+          全链路追溯
+        </el-button>
+        <el-button type="warning" :icon="Key" @click="credentialDialogVisible = true">
+          签发新凭证
+        </el-button>
       </div>
     </div>
 
@@ -98,9 +97,9 @@
       <section class="telemetry-preview-section">
         <div class="section-header">
           <h3 class="section-title">最新遥测指标快照 (Latest Telemetry)</h3>
-          <button type="button" class="btn-link" @click="$emit('go-telemetry', device)">
+          <el-button link type="primary" @click="$emit('go-telemetry', device)">
             查看完整遥测时序 ›
-          </button>
+          </el-button>
         </div>
 
         <div class="telemetry-cards-grid">
@@ -150,15 +149,15 @@
                 </td>
                 <td class="font-mono text-muted">{{ c.createdAt }}</td>
                 <td>
-                  <button
+                  <el-button
                     v-if="c.credentialStatus === 'ACTIVE'"
-                    type="button"
-                    class="btn-text text-danger"
+                    link
+                    type="danger"
                     :disabled="!isActionAllowed(c, 'revoke')"
                     @click="promptRevokeCredential(c)"
                   >
                     撤销
-                  </button>
+                  </el-button>
                   <span v-else class="text-muted font-xs">已失效</span>
                 </td>
               </tr>
@@ -236,6 +235,8 @@
 import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
 import type { AllowedAction } from "../../types/common";
 import { ref, reactive, onMounted, watch } from "vue";
+import { ArrowLeft, Search, Key } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import { useRouter } from "vue-router";
 import {
   StatusBadge,
@@ -272,11 +273,13 @@ const emit = defineEmits<{
 
 const router = useRouter();
 
+/** 返回设备列表 */
 function handleBack() {
   emit("back");
   router.push("/iot/devices");
 }
 
+/** 穿透跳转至全链路追溯中心 */
 function goToTraceability() {
   if (!device.value) return;
   const targetAlarmId = activeAlarms.value.length > 0 ? (activeAlarms.value[0].id as string) : undefined;
@@ -321,11 +324,12 @@ const revokeConfirm = reactive({
   item: null as DeviceCredentialItem | null,
 });
 
-// 替换为调用 actionGuard 的版本
+/** 检查指定操作是否被后端或状态机允许 */
 function isActionAllowed(item: { allowedActions?: AllowedAction[] | null }, action: string): boolean {
   return checkAction(item.allowedActions, action);
 }
 
+/** 加载设备完整全景数据（详情、状态、凭证、遥测快照、告警） */
 async function loadDeviceData() {
   viewState.value = "loading";
   errorMessage.value = "";
@@ -359,20 +363,23 @@ async function loadDeviceData() {
   }
 }
 
+/** 提示撤销接入凭证对话框 */
 function promptRevokeCredential(item: DeviceCredentialItem) {
   revokeConfirm.item = item;
   revokeConfirm.visible = true;
 }
 
+/** 执行撤销接入凭证 */
 async function handleConfirmRevoke() {
   if (!revokeConfirm.item || !device.value) return;
   revokeConfirm.loading = true;
   try {
     await revokeDeviceCredential(device.value.id as string, revokeConfirm.item.id as string);
     revokeConfirm.visible = false;
+    ElMessage.success("凭证已成功撤销！");
     await loadDeviceData();
   } catch (err: any) {
-    alert(`撤销失败：${err.message}`);
+    ElMessage.error(`撤销失败：${err.message}`);
   } finally {
     revokeConfirm.loading = false;
   }
@@ -400,20 +407,10 @@ onMounted(() => {
   justify-content: space-between;
 }
 
-.btn-back {
-  background: none;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #cbd5e1;
-  padding: 6px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s;
-}
-
-.btn-back:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f8fafc;
+.top-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .loading-box {
@@ -520,18 +517,6 @@ onMounted(() => {
   color: #f8fafc;
 }
 
-.btn-link {
-  background: none;
-  border: none;
-  color: #38bdf8;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.btn-link:hover {
-  text-decoration: underline;
-}
-
 .telemetry-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -629,24 +614,6 @@ onMounted(() => {
 .level-minor { background: rgba(250, 204, 21, 0.2); color: #facc15; }
 .level-warning { background: rgba(96, 165, 250, 0.2); color: #60a5fa; }
 
-.btn-text {
-  background: none;
-  border: none;
-  font-size: 12px;
-  cursor: pointer;
-  padding: 2px 4px;
-}
-
-.btn-text:hover:not(:disabled) {
-  text-decoration: underline;
-}
-
-.btn-text:disabled {
-  color: #64748b;
-  cursor: not-allowed;
-}
-
-.text-danger { color: #f87171 !important; }
-.text-primary { color: #38bdf8 !important; }
 .font-xs { font-size: 11px; }
+.text-center { text-align: center; }
 </style>

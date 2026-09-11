@@ -12,6 +12,28 @@ import java.util.UUID;
 public interface FoundationRepository extends BomFactsPort, RoutingFactsPort,
         SalesFactsPort, WorkOrderSourcePort {
 
+    /**
+     * 采购来源允许引用工单产出品或该工单锁定 BOM 中的组件物料。
+     * 该关联只表达人工供需与追溯关系，不触发 MRP，也不修改制造事实。
+     */
+    @Override
+    default Optional<WorkOrderSourceFact> findActiveForProcurement(UUID tenantId, UUID workOrderId,
+                                                                   UUID productId) {
+        Optional<WorkOrderSourceFact> source = findActiveWorkOrder(tenantId, workOrderId);
+        if (source.isEmpty()) {
+            return Optional.empty();
+        }
+        if (source.get().matches(tenantId, productId)) {
+            return source;
+        }
+        return findWorkOrder(tenantId, workOrderId)
+                .filter(workOrder -> !workOrder.deleted() && workOrder.bomId() != null)
+                .flatMap(workOrder -> findActiveBom(tenantId, workOrder.bomId()))
+                .filter(bom -> bom.components().stream()
+                        .anyMatch(component -> component.componentProductId().equals(productId)))
+                .map(ignored -> source.get());
+    }
+
     /** 保存 BOM 事实。 */
     BomFact saveBom(BomFact bom);
 

@@ -100,7 +100,7 @@ class PurchasingApplicationServiceTest {
         lenient().when(referencePort.findActiveLocation(tenantId, holdLocationId))
                 .thenReturn(Optional.of(new PurchasingLocationFact(holdLocationId, tenantId, warehouseId,
                         "QualityHold", "ACTIVE")));
-        lenient().when(workOrderSourcePort.findActiveForProduct(any(), any(), any())).thenReturn(Optional.empty());
+        lenient().when(workOrderSourcePort.findActiveForProcurement(any(), any(), any())).thenReturn(Optional.empty());
         lenient().when(inventoryCommandService.increase(any(InventoryIncreaseCommand.class))).thenAnswer(invocation -> {
             InventoryIncreaseCommand command = invocation.getArgument(0, InventoryIncreaseCommand.class);
             return new InventoryMutationResult("INCREASE", command.quantity(), List.of(), null, List.of(),
@@ -286,7 +286,7 @@ class PurchasingApplicationServiceTest {
                 () -> service.create(sourceRequest, "create-source-invalid"));
         assertEquals(PurchasingErrorCode.PO_004.businessCode(), sourceException.getBusinessCode());
 
-        when(workOrderSourcePort.findActiveForProduct(tenantId, workOrderId, productId))
+        when(workOrderSourcePort.findActiveForProcurement(tenantId, workOrderId, productId))
                 .thenReturn(Optional.of(new WorkOrderSourceFact(workOrderId, tenantId, productId,
                         "WO-001", new BigDecimal("2.000000"), WorkOrderStatus.Draft, false)));
         PurchaseOrderView sourceAccepted = service.create(sourceRequest, "create-source-valid");

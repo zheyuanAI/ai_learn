@@ -74,17 +74,39 @@
       <header class="topbar">
         <div class="topbar-left">
           <span class="topbar-module-tag">AI-LEARN / WORKSPACE</span>
-          <span class="topbar-tenant-tag">🏢 {{ authStore.activeTenant }}</span>
+          <el-tag type="info" effect="dark" size="small" class="topbar-tenant-tag-ep">
+            🏢 {{ authStore.activeTenant }}
+          </el-tag>
+          <!-- 面包屑导航 -->
+          <el-breadcrumb separator="/" class="topbar-breadcrumb">
+            <el-breadcrumb-item :to="{ path: '/' }">首页</el-breadcrumb-item>
+            <el-breadcrumb-item v-if="route.meta.title">
+              {{ route.meta.title }}
+            </el-breadcrumb-item>
+          </el-breadcrumb>
         </div>
 
         <div class="topbar-right">
-          <div class="user-profile-badge">
-            <span class="user-avatar-icon">👤</span>
-            <div class="user-meta">
-              <span class="user-name">{{ authStore.user?.realName || authStore.user?.username || "访客" }}</span>
-              <span class="user-role-badge">{{ authStore.currentRoleName }}</span>
+          <!-- 用户下拉交互 -->
+          <el-dropdown trigger="click">
+            <div class="user-profile-badge" style="cursor: pointer;">
+              <span class="user-avatar-icon">👤</span>
+              <div class="user-meta">
+                <span class="user-name">{{ authStore.user?.realName || authStore.user?.username || "访客" }}</span>
+                <span class="user-role-badge">{{ authStore.currentRoleName }}</span>
+              </div>
             </div>
-          </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item disabled>
+                  <span>账号：{{ authStore.user?.username }}</span>
+                </el-dropdown-item>
+                <el-dropdown-item divided @click="handleLogout">
+                  <span style="color: var(--el-color-danger);">退出登录</span>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
 
           <button
             type="button"

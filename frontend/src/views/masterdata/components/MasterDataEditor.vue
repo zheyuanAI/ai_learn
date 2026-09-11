@@ -1,270 +1,229 @@
 <template>
-  <div v-if="visible" class="editor-mask" @click.self="handleClose">
-    <div class="editor-panel">
-      <div class="editor-header">
-        <h3 class="editor-title">{{ title }}</h3>
-        <button type="button" class="btn-close" @click="handleClose">✕</button>
+  <el-dialog
+    :model-value="visible"
+    :title="title"
+    width="680px"
+    append-to-body
+    destroy-on-close
+    @close="handleClose"
+  >
+    <div class="editor-body">
+      <!-- 1. 物料表单 -->
+      <div v-if="type === 'product'" class="form-grid">
+        <div class="form-item">
+          <label>物料编码 (SKU) <span class="req">*</span></label>
+          <el-input v-model="formData.sku" :disabled="isEdit" placeholder="如: RM-SERVO-01" />
+        </div>
+        <div class="form-item">
+          <label>物料名称 <span class="req">*</span></label>
+          <el-input v-model="formData.name" placeholder="如: 定子转子组件" />
+        </div>
+        <div class="form-item">
+          <label>规格型号</label>
+          <el-input v-model="formData.spec" placeholder="如: ST-80 / 精密铜组" />
+        </div>
+        <div class="form-item">
+          <label>计量单位 (UOM) <span class="req">*</span></label>
+          <el-select v-model="formData.uom" placeholder="请选择计量单位" style="width: 100%">
+            <el-option v-for="u in uomList" :key="u.code" :label="`${u.code} (${u.name})`" :value="u.code" />
+            <el-option v-if="formData.uom && !uomList.some((u) => u.code === formData.uom)" :label="`${formData.uom} (已选用)`" :value="formData.uom" />
+          </el-select>
+        </div>
+        <div class="form-item">
+          <label>物料分类</label>
+          <el-select v-model="formData.category" style="width: 100%">
+            <el-option label="产成品" value="产成品" />
+            <el-option label="原材料" value="原材料" />
+            <el-option label="半成品" value="半成品" />
+            <el-option label="标准件" value="标准件" />
+            <el-option label="电子料" value="电子料" />
+            <el-option label="辅料包材" value="辅料包材" />
+          </el-select>
+        </div>
+        <div class="form-item">
+          <label>参考单价 (元)</label>
+          <el-input v-model="formData.unitPrice" placeholder="0.00" />
+        </div>
+        <div class="form-item">
+          <label>最低库存预警值</label>
+          <el-input v-model="formData.minStock" placeholder="0" />
+        </div>
+        <div class="form-item">
+          <label>安全库存量</label>
+          <el-input v-model="formData.safetyStock" placeholder="0" />
+        </div>
+        <div class="form-item full-width">
+          <el-checkbox v-model="formData.batchMgmt" label="启用批次管理 (Lot Management)" />
+        </div>
+        <div class="form-item full-width">
+          <label>备注说明</label>
+          <el-input v-model="formData.remark" type="textarea" :rows="2" placeholder="填写物料补充说明..." />
+        </div>
       </div>
 
-      <div class="editor-body">
-        <!-- 1. 物料表单 -->
-        <form v-if="type === 'product'" class="form-grid" @submit.prevent="handleSubmit">
-          <div class="form-item">
-            <label>物料编码 (SKU) <span class="req">*</span></label>
-            <input v-model="formData.sku" type="text" class="form-input" required :disabled="isEdit" placeholder="如: RM-SERVO-01" />
-          </div>
-          <div class="form-item">
-            <label>物料名称 <span class="req">*</span></label>
-            <input v-model="formData.name" type="text" class="form-input" required placeholder="如: 定子转子组件" />
-          </div>
-          <div class="form-item">
-            <label>规格型号</label>
-            <input v-model="formData.spec" type="text" class="form-input" placeholder="如: ST-80 / 精密铜组" />
-          </div>
-          <div class="form-item">
-            <label>计量单位 (UOM) <span class="req">*</span></label>
-            <input
-              v-model="uomKeyword"
-              type="search"
-              class="form-input form-input-sm"
-              placeholder="输入单位编码或名称后回车搜索"
-              @keyup.enter="loadUoms"
-            />
-            <select v-model="formData.uom" class="form-select" required>
-              <option value="">请选择计量单位</option>
-              <option v-if="uomList.length === 0" value="" disabled>暂无可用计量单位</option>
-              <option v-for="u in uomList" :key="u.code" :value="u.code">
-                {{ u.code }} ({{ u.name }})
-              </option>
-              <!-- 兜底显示已选但不在活跃列表中的历史 UOM -->
-              <option v-if="formData.uom && !uomList.some((u) => u.code === formData.uom)" :value="formData.uom">
-                {{ formData.uom }} (已选用)
-              </option>
-            </select>
-          </div>
-          <div class="form-item">
-            <label>物料分类</label>
-            <select v-model="formData.category" class="form-select">
-              <option value="产成品">产成品</option>
-              <option value="原材料">原材料</option>
-              <option value="半成品">半成品</option>
-              <option value="标准件">标准件</option>
-              <option value="电子料">电子料</option>
-              <option value="辅料包材">辅料包材</option>
-            </select>
-          </div>
-          <div class="form-item">
-            <label>参考单价 (元)</label>
-            <input v-model="formData.unitPrice" type="text" class="form-input" placeholder="0.00" />
-          </div>
-          <div class="form-item">
-            <label>最低库存预警值</label>
-            <input v-model="formData.minStock" type="text" class="form-input" placeholder="0" />
-          </div>
-          <div class="form-item">
-            <label>安全库存量</label>
-            <input v-model="formData.safetyStock" type="text" class="form-input" placeholder="0" />
-          </div>
-          <div class="form-item full-width">
-            <label class="checkbox-label">
-              <input v-model="formData.batchMgmt" type="checkbox" />
-              <span>启用批次管理 (Lot Management)</span>
-            </label>
-          </div>
-          <div class="form-item full-width">
-            <label>备注说明</label>
-            <textarea v-model="formData.remark" class="form-textarea" rows="2" placeholder="填写物料补充说明..."></textarea>
-          </div>
-        </form>
-
-        <!-- 2. 库位表单 -->
-        <form v-else-if="type === 'location'" class="form-grid" @submit.prevent="handleSubmit">
-          <div class="form-item">
-            <label>库位编码 <span class="req">*</span></label>
-            <input v-model="formData.code" type="text" class="form-input" required :disabled="isEdit" placeholder="如: ST-A-01" />
-          </div>
-          <div class="form-item">
-            <label>库位名称 <span class="req">*</span></label>
-            <input v-model="formData.name" type="text" class="form-input" required placeholder="如: 原料常规存储位A01" />
-          </div>
-          <div class="form-item">
-            <label>所属仓库 <span class="req">*</span></label>
-            <input
-              v-model="warehouseKeyword"
-              type="search"
-              class="form-input form-input-sm"
-              placeholder="输入仓库编码或名称后回车搜索"
-              @keyup.enter="loadWarehouses"
-            />
-            <select v-model="formData.warehouseId" class="form-select" required>
-              <option value="">请选择仓库</option>
-              <option v-if="warehouses.length === 0" value="" disabled>暂无可用仓库</option>
-              <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">
-                {{ warehouse.code }} - {{ warehouse.name }}
-              </option>
-              <option
-                v-if="formData.warehouseId && !warehouses.some((warehouse) => String(warehouse.id) === String(formData.warehouseId))"
-                :value="formData.warehouseId"
-              >
-                {{ formData.warehouseId }} (当前已选历史值)
-              </option>
-            </select>
-          </div>
-          <div class="form-item">
-            <label>标准库位类型 <span class="req">*</span></label>
-            <select v-model="formData.type" class="form-select" required>
-              <option value="ReceivingStaging">ReceivingStaging (采购收货暂存位)</option>
-              <option value="Storage">Storage (常规存储位)</option>
-              <option value="Picking">Picking (拣货备料位)</option>
-              <option value="ShippingStaging">ShippingStaging (发货暂存位)</option>
-              <option value="QualityHold">QualityHold (质量隔离位)</option>
-              <option value="Adjustment">Adjustment (差异调整位)</option>
-            </select>
-          </div>
-          <div class="form-item">
-            <label>库位容量</label>
-            <input v-model="formData.capacity" type="text" class="form-input" placeholder="1000" />
-          </div>
-          <div class="form-item">
-            <label>状态</label>
-            <select v-model="formData.status" class="form-select">
-              <option value="ACTIVE">ACTIVE (启用)</option>
-              <option value="INACTIVE">INACTIVE (停用)</option>
-            </select>
-          </div>
-          <div class="form-item full-width">
-            <label>规则描述与用途</label>
-            <textarea v-model="formData.description" class="form-textarea" rows="2" placeholder="如: 到货实际接收但未放行或不合格暂存位..."></textarea>
-          </div>
-        </form>
-
-        <!-- 3. 仓库表单 (修复 F05) -->
-        <form v-else-if="type === 'warehouse'" class="form-grid" @submit.prevent="handleSubmit">
-          <div class="form-item">
-            <label>仓库编码 <span class="req">*</span></label>
-            <input v-model="formData.code" type="text" class="form-input" required :disabled="isEdit" placeholder="如: WH-MAIN" />
-          </div>
-          <div class="form-item">
-            <label>仓库名称 <span class="req">*</span></label>
-            <input v-model="formData.name" type="text" class="form-input" required placeholder="如: 主厂区综合仓库" />
-          </div>
-          <div class="form-item">
-            <label>仓库类型 <span class="req">*</span></label>
-            <select v-model="formData.type" class="form-select" required>
-              <option value="STORAGE">STORAGE (综合存储仓)</option>
-              <option value="RAW">RAW (原材料专属仓)</option>
-              <option value="FINISHED">FINISHED (产成品仓)</option>
-              <option value="WIP">WIP (线边缓冲仓)</option>
-            </select>
-          </div>
-          <div class="form-item">
-            <label>负责人</label>
-            <input v-model="formData.manager" type="text" class="form-input" placeholder="如: 张仓管" />
-          </div>
-          <div class="form-item">
-            <label>联系电话</label>
-            <input v-model="formData.contact" type="text" class="form-input" placeholder="手机或固话" />
-          </div>
-          <div class="form-item">
-            <label>状态</label>
-            <select v-model="formData.status" class="form-select">
-              <option value="ACTIVE">ACTIVE (启用)</option>
-              <option value="INACTIVE">INACTIVE (停用)</option>
-            </select>
-          </div>
-          <div class="form-item full-width">
-            <label>仓库物理地址</label>
-            <input v-model="formData.address" type="text" class="form-input" placeholder="如: 工业园区 A 区 1 号库房" />
-          </div>
-          <div class="form-item full-width">
-            <label>备注说明</label>
-            <textarea v-model="formData.remark" class="form-textarea" rows="2" placeholder="填写仓库管理制度或补充说明..."></textarea>
-          </div>
-        </form>
-
-        <!-- 4. 计量单位表单 (修复 F05) -->
-        <form v-else-if="type === 'uom'" class="form-grid" @submit.prevent="handleSubmit">
-          <div class="form-item">
-            <label>单位编码 (Code) <span class="req">*</span></label>
-            <input v-model="formData.code" type="text" class="form-input" required :disabled="isEdit" placeholder="如: PCS, KG, M, SET" />
-          </div>
-          <div class="form-item">
-            <label>单位名称 <span class="req">*</span></label>
-            <input v-model="formData.name" type="text" class="form-input" required placeholder="如: 件, 千克, 米, 套" />
-          </div>
-          <div class="form-item">
-            <label>显示符号 (Symbol)</label>
-            <input v-model="formData.symbol" type="text" class="form-input" placeholder="如: pcs, kg, m" />
-          </div>
-          <div class="form-item">
-            <label>小数位数 (0-6)</label>
-            <input v-model.number="formData.decimalScale" type="number" min="0" max="6" class="form-input" placeholder="0" />
-          </div>
-          <div class="form-item">
-            <label>状态</label>
-            <select v-model="formData.status" class="form-select">
-              <option value="ACTIVE">ACTIVE (启用)</option>
-              <option value="INACTIVE">INACTIVE (停用)</option>
-            </select>
-          </div>
-          <div class="form-item full-width">
-            <label>备注说明</label>
-            <textarea v-model="formData.remark" class="form-textarea" rows="2" placeholder="填写计量规则说明..."></textarea>
-          </div>
-        </form>
-
-        <!-- 5. 客商通用表单 (客户/供应商) -->
-        <form v-else-if="type === 'customer' || type === 'supplier'" class="form-grid" @submit.prevent="handleSubmit">
-          <div class="form-item">
-            <label>{{ type === 'customer' ? '客户编码' : '供应商编码' }} <span class="req">*</span></label>
-            <input
-              v-model="formData[type === 'customer' ? 'customerCode' : 'supplierCode']"
-              type="text"
-              class="form-input"
-              required
-              :disabled="isEdit"
-              :placeholder="type === 'customer' ? 'CUS-NC-021' : 'SUP-HD-001'"
-            />
-          </div>
-          <div class="form-item">
-            <label>{{ type === 'customer' ? '客户名称' : '供应商名称' }} <span class="req">*</span></label>
-            <input
-              v-model="formData[type === 'customer' ? 'customerName' : 'supplierName']"
-              type="text"
-              class="form-input"
-              required
-              placeholder="输入完整公司名称"
-            />
-          </div>
-          <div class="form-item">
-            <label>联系人</label>
-            <input v-model="formData.contactPerson" type="text" class="form-input" placeholder="联系人姓名" />
-          </div>
-          <div class="form-item">
-            <label>联系电话</label>
-            <input v-model="formData.contactPhone" type="text" class="form-input" placeholder="手机或固话" />
-          </div>
-          <div class="form-item full-width">
-            <label>地址信息</label>
-            <input
-              v-model="formData[type === 'customer' ? 'shippingAddress' : 'address']"
-              type="text"
-              class="form-input"
-              placeholder="填写详细送货或注册地址"
-            />
-          </div>
-        </form>
+      <!-- 2. 库位表单 -->
+      <div v-else-if="type === 'location'" class="form-grid">
+        <div class="form-item">
+          <label>库位编码 <span class="req">*</span></label>
+          <el-input v-model="formData.code" :disabled="isEdit" placeholder="如: ST-A-01" />
+        </div>
+        <div class="form-item">
+          <label>库位名称 <span class="req">*</span></label>
+          <el-input v-model="formData.name" placeholder="如: 原料常规存储位A01" />
+        </div>
+        <div class="form-item">
+          <label>所属仓库 <span class="req">*</span></label>
+          <el-select v-model="formData.warehouseId" placeholder="请选择仓库" style="width: 100%">
+            <el-option v-for="warehouse in warehouses" :key="warehouse.id" :label="`${warehouse.code} - ${warehouse.name}`" :value="warehouse.id" />
+            <el-option v-if="formData.warehouseId && !warehouses.some((w) => String(w.id) === String(formData.warehouseId))" :label="`${formData.warehouseId} (当前已选历史值)`" :value="formData.warehouseId" />
+          </el-select>
+        </div>
+        <div class="form-item">
+          <label>标准库位类型 <span class="req">*</span></label>
+          <el-select v-model="formData.type" style="width: 100%">
+            <el-option label="ReceivingStaging (采购收货暂存位)" value="ReceivingStaging" />
+            <el-option label="Storage (常规存储位)" value="Storage" />
+            <el-option label="Picking (拣货备料位)" value="Picking" />
+            <el-option label="ShippingStaging (发货暂存位)" value="ShippingStaging" />
+            <el-option label="QualityHold (质量隔离位)" value="QualityHold" />
+            <el-option label="Adjustment (差异调整位)" value="Adjustment" />
+          </el-select>
+        </div>
+        <div class="form-item">
+          <label>库位容量</label>
+          <el-input v-model="formData.capacity" placeholder="1000" />
+        </div>
+        <div class="form-item">
+          <label>状态</label>
+          <el-select v-model="formData.status" style="width: 100%">
+            <el-option label="ACTIVE (启用)" value="ACTIVE" />
+            <el-option label="INACTIVE (停用)" value="INACTIVE" />
+          </el-select>
+        </div>
+        <div class="form-item full-width">
+          <label>规则描述与用途</label>
+          <el-input v-model="formData.description" type="textarea" :rows="2" placeholder="如: 到货实际接收但未放行或不合格暂存位..." />
+        </div>
       </div>
 
-      <div class="editor-footer">
-        <button type="button" class="btn btn-secondary" @click="handleClose">取消</button>
-        <button type="button" class="btn btn-primary" :disabled="saving" @click="handleSubmit">
-          <span v-if="saving">⏳ 保存中...</span>
-          <span v-else>确认保存</span>
-        </button>
+      <!-- 3. 仓库表单 (修复 F05) -->
+      <div v-else-if="type === 'warehouse'" class="form-grid">
+        <div class="form-item">
+          <label>仓库编码 <span class="req">*</span></label>
+          <el-input v-model="formData.code" :disabled="isEdit" placeholder="如: WH-MAIN" />
+        </div>
+        <div class="form-item">
+          <label>仓库名称 <span class="req">*</span></label>
+          <el-input v-model="formData.name" placeholder="如: 主厂区综合仓库" />
+        </div>
+        <div class="form-item">
+          <label>仓库类型 <span class="req">*</span></label>
+          <el-select v-model="formData.type" style="width: 100%">
+            <el-option label="STORAGE (综合存储仓)" value="STORAGE" />
+            <el-option label="RAW (原材料专属仓)" value="RAW" />
+            <el-option label="FINISHED (产成品仓)" value="FINISHED" />
+          </el-select>
+        </div>
+        <div class="form-item">
+          <label>负责人</label>
+          <el-input v-model="formData.manager" placeholder="如: 张仓管" />
+        </div>
+        <div class="form-item">
+          <label>联系电话</label>
+          <el-input v-model="formData.contact" placeholder="手机或固话" />
+        </div>
+        <div class="form-item">
+          <label>状态</label>
+          <el-select v-model="formData.status" style="width: 100%">
+            <el-option label="ACTIVE (启用)" value="ACTIVE" />
+            <el-option label="INACTIVE (停用)" value="INACTIVE" />
+          </el-select>
+        </div>
+        <div class="form-item full-width">
+          <label>仓库物理地址</label>
+          <el-input v-model="formData.address" placeholder="如: 工业园区 A 区 1 号库房" />
+        </div>
+        <div class="form-item full-width">
+          <label>备注说明</label>
+          <el-input v-model="formData.remark" type="textarea" :rows="2" placeholder="填写仓库管理制度或补充说明..." />
+        </div>
+      </div>
+
+      <!-- 4. 计量单位表单 (修复 F05) -->
+      <div v-else-if="type === 'uom'" class="form-grid">
+        <div class="form-item">
+          <label>单位编码 (Code) <span class="req">*</span></label>
+          <el-input v-model="formData.code" :disabled="isEdit" placeholder="如: PCS, KG, M, SET" />
+        </div>
+        <div class="form-item">
+          <label>单位名称 <span class="req">*</span></label>
+          <el-input v-model="formData.name" placeholder="如: 件, 千克, 米, 套" />
+        </div>
+        <div class="form-item">
+          <label>显示符号 (Symbol)</label>
+          <el-input v-model="formData.symbol" placeholder="如: pcs, kg, m" />
+        </div>
+        <div class="form-item">
+          <label>小数位数 (0-6)</label>
+          <el-input-number v-model="formData.decimalScale" :min="0" :max="6" style="width: 100%" />
+        </div>
+        <div class="form-item">
+          <label>状态</label>
+          <el-select v-model="formData.status" style="width: 100%">
+            <el-option label="ACTIVE (启用)" value="ACTIVE" />
+            <el-option label="INACTIVE (停用)" value="INACTIVE" />
+          </el-select>
+        </div>
+        <div class="form-item full-width">
+          <label>备注说明</label>
+          <el-input v-model="formData.remark" type="textarea" :rows="2" placeholder="填写计量规则说明..." />
+        </div>
+      </div>
+
+      <!-- 5. 客商通用表单 (客户/供应商) -->
+      <div v-else-if="type === 'customer' || type === 'supplier'" class="form-grid">
+        <div class="form-item">
+          <label>{{ type === 'customer' ? '客户编码' : '供应商编码' }} <span class="req">*</span></label>
+          <el-input
+            v-model="formData[type === 'customer' ? 'customerCode' : 'supplierCode']"
+            :disabled="isEdit"
+            :placeholder="type === 'customer' ? 'CUS-NC-021' : 'SUP-HD-001'"
+          />
+        </div>
+        <div class="form-item">
+          <label>{{ type === 'customer' ? '客户名称' : '供应商名称' }} <span class="req">*</span></label>
+          <el-input
+            v-model="formData[type === 'customer' ? 'customerName' : 'supplierName']"
+            placeholder="输入完整公司名称"
+          />
+        </div>
+        <div class="form-item">
+          <label>联系人</label>
+          <el-input v-model="formData.contactPerson" placeholder="联系人姓名" />
+        </div>
+        <div class="form-item">
+          <label>联系电话</label>
+          <el-input v-model="formData.contactPhone" placeholder="手机或固话" />
+        </div>
+        <div class="form-item full-width">
+          <label>地址信息</label>
+          <el-input
+            v-model="formData[type === 'customer' ? 'shippingAddress' : 'address']"
+            placeholder="填写详细送货或注册地址"
+          />
+        </div>
       </div>
     </div>
-  </div>
+
+    <template #footer>
+      <div class="dialog-footer">
+        <el-button @click="handleClose">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSubmit">
+          确认保存
+        </el-button>
+      </div>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">

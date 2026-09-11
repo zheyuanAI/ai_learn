@@ -28,30 +28,32 @@
         <span v-else class="live-badge">● 实时</span>
 
         <!-- 单卡片独立刷新按钮 -->
-        <button
-          type="button"
+        <el-button
+          circle
+          size="small"
           class="btn-card-refresh"
           :title="`刷新【${card.title}】单项数据`"
           :disabled="loading"
+          :loading="loading"
+          :icon="Refresh"
           @click="$emit('refresh', card.summaryType)"
-        >
-          <span :class="{ 'is-spinning': loading }">🔄</span>
-        </button>
+        />
       </div>
     </div>
 
     <!-- 单卡片异常态隔离 -->
-      <div v-if="card.error" class="card-error-body">
-        <span class="err-icon">⚠️</span>
-        <p class="err-msg">{{ card.error }}</p>
-        <p v-if="card.requestId" class="err-request-id">请求号：{{ card.requestId }}</p>
-        <button
-        type="button"
+    <div v-if="card.error" class="card-error-body">
+      <span class="err-icon">⚠️</span>
+      <p class="err-msg">{{ card.error }}</p>
+      <p v-if="card.requestId" class="err-request-id">请求号：{{ card.requestId }}</p>
+      <el-button
+        type="danger"
+        size="small"
         class="btn-card-retry"
         @click="$emit('refresh', card.summaryType)"
       >
         重试该项
-      </button>
+      </el-button>
     </div>
 
     <!-- 核心指标网格 (3~5 个核心指标) -->
@@ -89,16 +91,18 @@
         </span>
       </div>
 
-      <button
+      <el-button
         v-if="card.linkedRoute"
-        type="button"
+        type="primary"
+        link
+        size="small"
         class="btn-jump-domain"
         title="进入源业务领域控制台"
         @click="$emit('penetrate', card.linkedRoute)"
       >
         <span>穿透</span>
-        <span class="jump-arrow">➔</span>
-      </button>
+        <el-icon class="jump-arrow"><ArrowRight /></el-icon>
+      </el-button>
     </div>
   </div>
 </template>
@@ -113,6 +117,7 @@
  * 4. 复用 QuantityText 防止数量失真。
  */
 
+import { Refresh, ArrowRight } from "@element-plus/icons-vue";
 import type { DashboardCardData, DashboardCardType } from "../../../types/insights";
 import QuantityText from "../../../components/common/QuantityText.vue";
 

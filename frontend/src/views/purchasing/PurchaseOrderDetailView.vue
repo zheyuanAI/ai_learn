@@ -1,234 +1,227 @@
 <template>
-  <div v-if="visible" class="detail-drawer-mask" @click.self="handleClose">
-    <div class="detail-drawer">
-      <CommandFeedback :error="lastError" :can-retry="canRetry" :executing="isExecuting" @retry="retry" />
-      <!-- 头部 -->
-      <div class="drawer-header">
-        <div class="header-info">
+  <el-drawer
+    :model-value="visible"
+    size="840px"
+    destroy-on-close
+    @close="handleClose"
+  >
+    <template #header>
+      <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding-right: 12px">
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
           <span class="meta-tag">PURCHASE ORDER</span>
-          <div class="title-row">
-            <h2 class="po-title">{{ order?.poNo || '采购订单详情' }}</h2>
-            <StatusBadge
-              v-if="order"
-              :type="statusBadgeType(order.status)"
-              :text="statusText(order.status)"
-            />
-            <span v-if="order?.completionType === 'Manual'" class="badge-manual">
-              人工完成 (未收余量已终止)
-            </span>
-          </div>
-        </div>
-        <div class="header-right-btns">
-          <button
+          <h3 style="margin: 0; font-size: 18px; color: #f1f5f9">{{ order?.poNo || '采购订单详情' }}</h3>
+          <StatusBadge
             v-if="order"
-            type="button"
-            class="btn-act-trace"
-            title="穿透前往全链路全闭环追溯中心"
-            @click="handleGoTrace"
+            :type="statusBadgeType(order.status)"
+            :text="statusText(order.status)"
+          />
+          <el-tag v-if="order?.completionType === 'Manual'" type="warning" size="small">
+            人工完成 (未收余量已终止)
+          </el-tag>
+        </div>
+        <el-button
+          v-if="order"
+          type="primary"
+          link
+          :icon="Search"
+          title="穿透前往全链路全闭环追溯中心"
+          @click="handleGoTrace"
+        >
+          全链路追溯
+        </el-button>
+      </div>
+    </template>
+
+    <CommandFeedback :error="lastError" :can-retry="canRetry" :executing="isExecuting" @retry="retry" />
+
+    <!-- 四态展示 -->
+    <div v-if="viewState === 'loading'" class="loading-state">
+      <span>⏳ 正在加载订单履约事实...</span>
+    </div>
+
+    <ErrorState
+      v-else-if="viewState === 'error'"
+      title="获取采购订单失败"
+      :message="errorMessage"
+      @retry="fetchDetail"
+    />
+
+    <!-- 核心内容 -->
+    <div v-else-if="order" class="drawer-body">
+      <!-- 操作按钮工具栏 (严格依据 allowedActions 控制) -->
+      <div class="action-bar" style="margin-bottom: 16px; padding: 12px; background: rgba(30, 41, 59, 0.4); border-radius: 8px;">
+        <span class="bar-title" style="margin-right: 12px; font-weight: 500; font-size: 13px; color: #8ca2b8;">可用业务动作：</span>
+        <div class="bar-buttons" style="display: inline-flex; gap: 8px; flex-wrap: wrap">
+          <!-- 提交 -->
+          <el-button
+            v-if="isActionEnabled('submit')"
+            type="primary"
+            :loading="actionLoading"
+            @click="handleSubmitOrder"
           >
-            <span>🔍 全链路追溯</span>
-          </button>
-          <button type="button" class="btn-close" @click="handleClose">✕</button>
+            提交订单
+          </el-button>
+
+          <!-- 审核 -->
+          <el-button
+            v-if="isActionEnabled('approve')"
+            type="primary"
+            :loading="actionLoading"
+            @click="handleApproveOrder"
+          >
+            审核通过
+          </el-button>
+
+          <!-- 到货验收与实际接收 -->
+          <el-button
+            v-if="isActionEnabled('confirmReceipt') && hasPermission('pur:receipt:confirm')"
+            type="warning"
+            :loading="actionLoading"
+            @click="isReceiptConfirmOpen = true"
+          >
+            外观验收与接收 (进QH)
+          </el-button>
+
+          <!-- 上架 -->
+          <el-button
+            v-if="isActionEnabled('putaway')"
+            type="success"
+            :loading="actionLoading"
+            @click="isPutawayOpen = true"
+          >
+            执行上架 (RS ➔ Storage)
+          </el-button>
+
+          <!-- 人工完成 -->
+          <el-button
+            v-if="isActionEnabled('complete')"
+            type="danger"
+            :loading="actionLoading"
+            @click="isCompleteDialogOpen = true"
+          >
+            人工完成 (终止待收余量)
+          </el-button>
         </div>
       </div>
 
-      <!-- 四态展示 -->
-      <div v-if="viewState === 'loading'" class="loading-state">
-        <span>⏳ 正在加载订单履约事实...</span>
-      </div>
+      <!-- 基础资料卡片 -->
+      <el-descriptions :column="2" border style="margin-bottom: 20px">
+        <el-descriptions-item label="供应商">
+          <strong>{{ order.supplierName }}</strong>
+          <span style="color: #8ca2b8; margin-left: 6px">({{ order.supplierCode }})</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="计划到货日期">
+          {{ order.expectedArrivalDate }}
+          <span style="color: #8ca2b8; margin-left: 6px">(采购员: {{ order.owner || order.createdBy }})</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="质量隔离库位">
+          <span v-if="order.qualityHoldLocationCode" class="loc-code">{{ order.qualityHoldLocationCode }}</span>
+          <span v-else class="text-muted text-sm">待到货分配</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="收货暂存过渡位">
+          <span v-if="order.receivingStagingLocationCode" class="loc-code">{{ order.receivingStagingLocationCode }}</span>
+          <span v-else class="text-muted text-sm">待质检放行后分配</span>
+        </el-descriptions-item>
+      </el-descriptions>
 
-      <ErrorState
-        v-else-if="viewState === 'error'"
-        title="获取采购订单失败"
-        :message="errorMessage"
-        @retry="fetchDetail"
+      <!-- 人工完成说明 -->
+      <el-alert
+        v-if="order.completionReason"
+        type="warning"
+        show-icon
+        style="margin-bottom: 20px"
+        :title="`人工完成原因说明：${order.completionReason}（完成于 ${order.completedAt} 由 ${order.completedBy}）`"
       />
 
-      <!-- 核心内容 -->
-      <div v-else-if="order" class="drawer-body">
-        <!-- 操作按钮工具栏 (严格依据 allowedActions 控制) -->
-        <div class="action-bar">
-          <span class="bar-title">可用业务动作：</span>
-          <div class="bar-buttons">
-            <!-- 提交 -->
-            <button
-              v-if="isActionEnabled('submit')"
-              type="button"
-              class="btn-act btn-primary"
-              :disabled="actionLoading"
-              @click="handleSubmitOrder"
-            >
-              提交订单
-            </button>
-
-            <!-- 审核 -->
-            <button
-              v-if="isActionEnabled('approve')"
-              type="button"
-              class="btn-act btn-primary"
-              :disabled="actionLoading"
-              @click="handleApproveOrder"
-            >
-              审核通过
-            </button>
-
-            <!-- 到货验收与实际接收 -->
-            <!-- 修改用途：后端动作名为 confirmReceipt，且只有仓库收货权限可见。 -->
-            <button
-              v-if="isActionEnabled('confirmReceipt') && hasPermission('pur:receipt:confirm')"
-              type="button"
-              class="btn-act btn-warning"
-              :disabled="actionLoading"
-              @click="isReceiptConfirmOpen = true"
-            >
-              外观验收与接收 (进QH)
-            </button>
-
-            <!-- 上架 -->
-            <button
-              v-if="isActionEnabled('putaway')"
-              type="button"
-              class="btn-act btn-success"
-              :disabled="actionLoading"
-              @click="isPutawayOpen = true"
-            >
-              执行上架 (RS ➔ Storage)
-            </button>
-
-            <!-- 人工完成 -->
-            <button
-              v-if="isActionEnabled('complete')"
-              type="button"
-              class="btn-act btn-danger"
-              :disabled="actionLoading"
-              @click="isCompleteDialogOpen = true"
-            >
-              人工完成 (终止待收余量)
-            </button>
-          </div>
-        </div>
-
-        <!-- 基础资料卡片 -->
-        <div class="info-card-row">
-          <div class="meta-card">
-            <span class="lbl">供应商</span>
-            <strong>{{ order.supplierName }}</strong>
-            <span class="sub">{{ order.supplierCode }}</span>
-          </div>
-          <div class="meta-card">
-            <span class="lbl">计划到货日期</span>
-            <strong>{{ order.expectedArrivalDate }}</strong>
-            <span class="sub">采购员: {{ order.owner || order.createdBy }}</span>
-          </div>
-          <div class="meta-card">
-            <span class="lbl">质量隔离库位</span>
-            <span v-if="order.qualityHoldLocationCode" class="loc-code">{{ order.qualityHoldLocationCode }}</span>
-            <span v-else class="text-muted text-sm">待到货分配</span>
-            <span class="sub">实际到货接管进入此库位</span>
-          </div>
-          <div class="meta-card">
-            <span class="lbl">收货暂存过渡位</span>
-            <span v-if="order.receivingStagingLocationCode" class="loc-code">{{ order.receivingStagingLocationCode }}</span>
-            <span v-else class="text-muted text-sm">待质检放行后分配</span>
-            <span class="sub">质检放行后上架前库位</span>
-          </div>
-        </div>
-
-        <!-- 人工完成说明 -->
-        <div v-if="order.completionReason" class="reason-banner">
-          <strong>人工完成原因说明：</strong>
-          <span>{{ order.completionReason }}</span>
-          <span class="reason-time">（完成于 {{ order.completedAt }} 由 {{ order.completedBy }}）</span>
-        </div>
-
-        <!-- 订单明细行表格 -->
-        <div class="lines-section">
-          <h3>采购订单行项与履约事实</h3>
-          <div class="table-scroll">
-            <table class="lines-table">
-              <thead>
-                <tr>
-                  <th>物料 SKU / 名称</th>
-                  <th>规格型号</th>
-                  <th style="text-align: right;">采购要求</th>
-                  <th style="text-align: right;">累计到货</th>
-                  <th style="text-align: right;">外观拒收</th>
-                  <th style="text-align: right;">实际接收(QH)</th>
-                  <th style="text-align: right;">质检合格</th>
-                  <th style="text-align: right;">放行移位(RS)</th>
-                  <th style="text-align: right;">已上架</th>
-                  <th style="text-align: right;">待收余量</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="line in order.lines" :key="line.id">
-                  <td>
-                    <div class="sku-cell">
-                      <span class="sku">{{ line.sku }}</span>
-                      <span class="name">{{ line.productName }}</span>
-                    </div>
-                  </td>
-                  <td>{{ line.spec || '-' }}</td>
-                  <td style="text-align: right;">
-                    <QuantityText :value="line.orderedQty" :unit="line.uom" />
-                  </td>
-                  <td style="text-align: right;">
-                    <QuantityText :value="line.arrivedQty" :unit="line.uom" />
-                  </td>
-                  <td style="text-align: right;">
-                    <span :class="parseFloat(line.rejectedQty) > 0 ? 'text-danger' : ''">
-                      <QuantityText :value="line.rejectedQty" :unit="line.uom" />
-                    </span>
-                  </td>
-                  <td style="text-align: right;">
-                    <QuantityText :value="line.receivedQty" :unit="line.uom" />
-                  </td>
-                  <td style="text-align: right;">
-                    <span class="text-success">
-                      <QuantityText :value="line.qualifiedQty" :unit="line.uom" />
-                    </span>
-                  </td>
-                  <td style="text-align: right;">
-                    <QuantityText :value="line.releaseExecutedQty" :unit="line.uom" />
-                  </td>
-                  <td style="text-align: right;">
-                    <QuantityText :value="line.putawayQty" :unit="line.uom" />
-                  </td>
-                  <td style="text-align: right;">
-                    <span :class="parseFloat(line.pendingQty) > 0 ? 'text-amber font-bold' : 'text-muted'">
-                      <QuantityText :value="line.pendingQty" :unit="line.uom" />
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- 历史事件时间线 -->
-        <div v-if="order.events && order.events.length > 0" class="events-section">
-          <h3>采购履约与质量审计时间线</h3>
-          <div class="timeline">
-            <div v-for="(ev, idx) in order.events" :key="idx" class="timeline-item">
-              <div class="timeline-point"></div>
-              <div class="timeline-content">
-                <div class="ev-header">
-                  <strong>{{ ev.action }}</strong>
-                  <span class="ev-time">{{ ev.time }}</span>
-                  <span class="ev-actor">{{ ev.actor }}</span>
-                </div>
-                <p class="ev-impact">{{ ev.impact }}</p>
+      <!-- 订单明细行表格 -->
+      <div class="lines-section" style="margin-bottom: 24px">
+        <h4 style="margin-bottom: 12px; color: #f1f5f9">采购订单行项与履约事实</h4>
+        <el-table :data="order.lines" stripe border style="width: 100%">
+          <el-table-column label="物料 SKU / 名称" min-width="160">
+            <template #default="{ row }">
+              <div class="sku-cell">
+                <span class="sku" style="font-family: monospace; color: #67d2ff">{{ row.sku }}</span>
+                <span class="name" style="display: block; font-size: 12px; color: #cbd5e1">{{ row.productName }}</span>
               </div>
-            </div>
-          </div>
-        </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="spec" label="规格型号" width="100" />
+          <el-table-column label="采购要求" width="90" align="right">
+            <template #default="{ row }">
+              <QuantityText :value="row.orderedQty" :unit="row.uom" />
+            </template>
+          </el-table-column>
+          <el-table-column label="累计到货" width="90" align="right">
+            <template #default="{ row }">
+              <QuantityText :value="row.arrivedQty" :unit="row.uom" />
+            </template>
+          </el-table-column>
+          <el-table-column label="外观拒收" width="90" align="right">
+            <template #default="{ row }">
+              <span :class="parseFloat(row.rejectedQty) > 0 ? 'text-danger' : ''">
+                <QuantityText :value="row.rejectedQty" :unit="row.uom" />
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="实际接收(QH)" width="110" align="right">
+            <template #default="{ row }">
+              <QuantityText :value="row.receivedQty" :unit="row.uom" />
+            </template>
+          </el-table-column>
+          <el-table-column label="质检合格" width="90" align="right">
+            <template #default="{ row }">
+              <span class="text-success">
+                <QuantityText :value="row.qualifiedQty" :unit="row.uom" />
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="放行移位(RS)" width="110" align="right">
+            <template #default="{ row }">
+              <QuantityText :value="row.releaseExecutedQty" :unit="row.uom" />
+            </template>
+          </el-table-column>
+          <el-table-column label="已上架" width="80" align="right">
+            <template #default="{ row }">
+              <QuantityText :value="row.putawayQty" :unit="row.uom" />
+            </template>
+          </el-table-column>
+          <el-table-column label="待收余量" width="90" align="right">
+            <template #default="{ row }">
+              <span :class="parseFloat(row.pendingQty) > 0 ? 'text-amber font-bold' : 'text-muted'">
+                <QuantityText :value="row.pendingQty" :unit="row.uom" />
+              </span>
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
 
-      <!-- 抽屉底部 -->
-      <div class="drawer-footer">
-        <button type="button" class="btn btn-secondary" @click="handleClose">关闭抽屉</button>
+      <!-- 历史事件时间线 -->
+      <div v-if="order.events && order.events.length > 0" class="events-section">
+        <h4 style="margin-bottom: 14px; color: #f1f5f9">采购履约与质量审计时间线</h4>
+        <el-timeline>
+          <el-timeline-item
+            v-for="(ev, idx) in order.events"
+            :key="idx"
+            :timestamp="ev.time"
+            placement="top"
+            type="primary"
+          >
+            <el-card shadow="never" style="background: rgba(30, 41, 59, 0.4)">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 6px">
+                <strong style="color: #67d2ff">{{ ev.action }}</strong>
+                <span style="font-size: 12px; color: #8ca2b8">{{ ev.actor }}</span>
+              </div>
+              <p style="margin: 0; font-size: 13px; color: #cbd5e1">{{ ev.impact }}</p>
+            </el-card>
+          </el-timeline-item>
+        </el-timeline>
       </div>
     </div>
+
+    <template #footer>
+      <el-button @click="handleClose">关闭抽屉</el-button>
+    </template>
+  </el-drawer>
 
     <!-- 到货验收弹窗 -->
     <ReceiptConfirmView
@@ -257,7 +250,6 @@
         ></textarea>
       </div>
     </ConfirmDialog>
-  </div>
 </template>
 
 <script setup lang="ts">
@@ -268,6 +260,8 @@ import type { AllowedAction } from "../../types/common";
  * 职责：展示采购订单生命周期、明细数量不变量、操作权限入口与审计时间线
  */
 import { ref, watch } from "vue";
+import { Search } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { ApiError } from "@/utils/request";
 import { useCommand } from "@/composables/useCommand";
 import CommandFeedback from "@/components/common/CommandFeedback.vue";
@@ -411,9 +405,10 @@ async function handleSubmitOrder() {
   try {
     await execute((key) => submitPurchaseOrder(order.value!.id, key), { onConflict: fetchDetail });
     await fetchDetail();
+    ElMessage.success("采购订单提交成功！");
     emit("refresh");
   } catch (err: any) {
-    alert(err?.message || "提交失败");
+    ElMessage.error(err?.message || "提交失败");
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
@@ -422,9 +417,10 @@ async function handleApproveOrder() {
   try {
     await execute((key) => approvePurchaseOrder(order.value!.id, key), { onConflict: fetchDetail });
     await fetchDetail();
+    ElMessage.success("采购订单审核通过！");
     emit("refresh");
   } catch (err: any) {
-    alert(err?.message || "审核失败");
+    ElMessage.error(err?.message || "审核失败");
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
@@ -445,10 +441,19 @@ async function handleConfirmReceipt(payload: any) {
       throw new Error("收货接口未返回 receiptId 或收货行 ID，已停止进入质检流程。");
     }
 
-    // 成功提示并引导进入质检（修复 F04）
+    // 成功提示并引导进入质检（使用 ElMessageBox 替代原生 confirm）
     const poNo = order.value?.poNo || "";
     const orderId = String(order.value?.id || "");
-    if (confirm(`采购到货验收成功！实收货物已送入 QualityHold 质量隔离位。\n\n订单号: ${poNo}\n收货凭证号: ${payload.receiptNo || returnedReceiptId}\n\n是否立即前往【采购到货质检】录入检验事实？`)) {
+    try {
+      await ElMessageBox.confirm(
+        `采购到货验收成功！实收货物已送入 QualityHold 质量隔离位。\n\n订单号: ${poNo}\n收货凭证号: ${payload.receiptNo || returnedReceiptId}\n\n是否立即前往【采购到货质检】录入检验事实？`,
+        "到货验收成功",
+        {
+          confirmButtonText: "前往质检",
+          cancelButtonText: "留在此页",
+          type: "success",
+        }
+      );
       router.push({
         path: "/purchasing/quality",
         query: {
@@ -462,16 +467,18 @@ async function handleConfirmReceipt(payload: any) {
           productId: String(persistedReceipt.lines[0].productId || ""),
         },
       });
+    } catch {
+      // 用户留在当前抽屉
     }
   } catch (err: any) {
-    alert(err?.message || "收货确认失败");
+    ElMessage.error(err?.message || "收货确认失败");
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 
 async function handleConfirmManualComplete() {
   if (!order.value) return;
   if (!manualCompleteReason.value.trim()) {
-    alert("必须填写人工完成原因！");
+    ElMessage.warning("必须填写人工完成原因！");
     return;
   }
   try {
@@ -480,10 +487,11 @@ async function handleConfirmManualComplete() {
     }, key), { onConflict: fetchDetail });
     isCompleteDialogOpen.value = false;
     manualCompleteReason.value = "";
+    ElMessage.success("采购订单已人工完成！");
     await fetchDetail();
     emit("refresh");
   } catch (err: any) {
-    alert(err?.message || "人工完成失败");
+    ElMessage.error(err?.message || "人工完成失败");
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
 }
 </script>

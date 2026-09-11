@@ -7,46 +7,49 @@
       description="销售订单采用生命周期与履约进度双轴模型。正常路径只保留【直接拣货】与【发货确认】；直接拣货在同一事务内自动补足来源库位预留并移入发货暂存位（ShippingStaging），发货出库正式扣减实物库存并释放业务预留。"
     >
       <template #actions>
-        <button v-if="hasPermission('sales:order:create')" type="button" class="btn-primary" @click="isCreateModalOpen = true">
-          <span>＋ 新建销售订单</span>
-        </button>
+        <el-button
+          v-if="hasPermission('sales:order:create')"
+          type="primary"
+          :icon="Plus"
+          @click="isCreateModalOpen = true"
+        >
+          新建销售订单
+        </el-button>
       </template>
     </PageHeader>
 
     <!-- 双轴过滤导航条 -->
-    <div class="dual-filter-bar">
+    <div class="dual-filter-bar" style="margin-bottom: 16px; display: flex; flex-direction: column; gap: 10px;">
       <!-- 轴一：生命周期筛选 -->
-      <div class="filter-group">
-        <span class="group-title">生命周期 (Status)：</span>
-        <div class="filter-buttons">
-          <button
+      <div class="filter-group" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+        <span class="group-title" style="font-size: 13px; color: #8ca2b8; min-width: 150px">生命周期 (Status)：</span>
+        <el-radio-group
+          v-model="queryParams.status"
+          @change="(val) => setLifecycleFilter(String(val || ''))"
+        >
+          <el-radio-button
             v-for="opt in lifecycleFilters"
             :key="opt.value"
-            type="button"
-            class="filter-tab-btn"
-            :class="{ 'is-active': queryParams.status === opt.value }"
-            @click="setLifecycleFilter(opt.value)"
-          >
-            {{ opt.label }}
-          </button>
-        </div>
+            :value="opt.value"
+            :label="opt.label"
+          />
+        </el-radio-group>
       </div>
 
       <!-- 轴二：派生履约进度筛选 -->
-      <div class="filter-group">
-        <span class="group-title">履约进度 (Fulfillment)：</span>
-        <div class="filter-buttons">
-          <button
+      <div class="filter-group" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+        <span class="group-title" style="font-size: 13px; color: #8ca2b8; min-width: 150px">履约进度 (Fulfillment)：</span>
+        <el-radio-group
+          v-model="queryParams.fulfillmentStatus"
+          @change="(val) => setFulfillmentFilter(String(val || ''))"
+        >
+          <el-radio-button
             v-for="opt in fulfillmentFilters"
             :key="opt.value"
-            type="button"
-            class="filter-tab-btn"
-            :class="{ 'is-active': queryParams.fulfillmentStatus === opt.value }"
-            @click="setFulfillmentFilter(opt.value)"
-          >
-            {{ opt.label }}
-          </button>
-        </div>
+            :value="opt.value"
+            :label="opt.label"
+          />
+        </el-radio-group>
       </div>
     </div>
 
@@ -72,9 +75,15 @@
       description="当前筛选条件下未发现符合的销售订单，您可以调整筛选条件或新建订单。"
     >
       <template #action>
-        <button v-if="hasPermission('sales:order:create')" type="button" class="btn-create-sm" @click="isCreateModalOpen = true">
+        <el-button
+          v-if="hasPermission('sales:order:create')"
+          type="primary"
+          size="small"
+          :icon="Plus"
+          @click="isCreateModalOpen = true"
+        >
           立即新建销售单
-        </button>
+        </el-button>
       </template>
     </EmptyState>
 
@@ -136,11 +145,9 @@
 
       <!-- 操作列 -->
       <template #actions="{ row }">
-        <div class="table-actions">
-          <button type="button" class="btn-link" @click="openOrderDetail(row)">
-            详情 / 履约
-          </button>
-        </div>
+        <el-button type="primary" link size="small" @click="openOrderDetail(row)">
+          详情 / 履约
+        </el-button>
       </template>
     </DataTable>
 
@@ -153,54 +160,60 @@
     />
 
     <!-- 新建销售单弹窗 -->
-    <div v-if="isCreateModalOpen" class="modal-mask" @click.self="isCreateModalOpen = false">
-      <div class="modal-panel">
-        <div class="modal-header">
-          <h3 class="modal-title">新建销售订单</h3>
-          <button type="button" class="btn-close" @click="isCreateModalOpen = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitCreateOrder">
-          <div class="form-item">
-            <label>往来客户 <span class="req">*</span></label>
-            <select v-model="createForm.customerId" class="form-select" required :disabled="masterDataLoading">
-              <option value="">请选择真实客户</option>
-              <option v-if="customers.length === 0" value="" disabled>暂无可用客户，请检查权限或 ACTIVE 主数据</option>
-              <option v-for="customer in customers" :key="customer.id" :value="String(customer.id)">
-                {{ customer.customerName }} ({{ customer.customerCode }})
-              </option>
-            </select>
-          </div>
-          <div class="form-item">
-            <label>计划发货日期 <span class="req">*</span></label>
-            <input v-model="createForm.plannedShipDate" type="date" class="form-input" required />
-          </div>
-          <div class="form-item">
-            <label>订购物料 <span class="req">*</span></label>
-            <select v-model="createForm.productId" class="form-select" required :disabled="masterDataLoading">
-              <option value="">请选择真实产品</option>
-              <option v-if="products.length === 0" value="" disabled>暂无可用物料，请先维护 ACTIVE 主数据</option>
-              <option v-for="product in products" :key="product.id" :value="String(product.id)">
-                {{ product.sku }} ({{ product.name }}) · 单位 {{ product.uom }}
-              </option>
-            </select>
-          </div>
-          <div class="form-item">
-            <label>订购数量 <span class="req">*</span></label>
-            <input v-model="createForm.orderedQty" type="text" class="form-input" required placeholder="如: 40" />
-          </div>
-          <div class="form-item">
-            <label>发运备注</label>
-            <textarea v-model="createForm.remark" class="form-textarea" rows="2" placeholder="客户交付要求与注意事项..."></textarea>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn-secondary" @click="isCreateModalOpen = false">取消</button>
-            <button type="submit" class="btn-primary" :disabled="isCreating">
-              {{ isCreating ? '创建中...' : '生成销售订单' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog
+      v-model="isCreateModalOpen"
+      title="新建销售订单"
+      width="580px"
+      destroy-on-close
+    >
+      <el-form label-width="120px" @submit.prevent="submitCreateOrder">
+        <el-form-item label="往来客户" required>
+          <el-select v-model="createForm.customerId" placeholder="请选择真实客户" filterable style="width: 100%" :disabled="masterDataLoading">
+            <el-option
+              v-for="customer in customers"
+              :key="customer.id"
+              :label="`${customer.customerName} (${customer.customerCode})`"
+              :value="String(customer.id)"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="计划发货日期" required>
+          <el-date-picker
+            v-model="createForm.plannedShipDate"
+            type="date"
+            placeholder="选择计划发货日期"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+          />
+        </el-form-item>
+
+        <el-form-item label="订购物料" required>
+          <el-select v-model="createForm.productId" placeholder="请选择真实产品" filterable style="width: 100%" :disabled="masterDataLoading">
+            <el-option
+              v-for="product in products"
+              :key="product.id"
+              :label="`${product.sku} (${product.name}) · 单位 ${product.uom}`"
+              :value="String(product.id)"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="订购数量" required>
+          <el-input v-model="createForm.orderedQty" placeholder="如: 40" />
+        </el-form-item>
+
+        <el-form-item label="发运备注">
+          <el-input v-model="createForm.remark" type="textarea" :rows="2" placeholder="客户交付要求与注意事项..." />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="isCreateModalOpen = false">取消</el-button>
+        <el-button type="primary" :loading="isCreating" @click="submitCreateOrder">
+          {{ isCreating ? '创建中...' : '生成销售订单' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -210,6 +223,8 @@
  * 职责：并列双轴过滤（生命周期状态 + 履约进度），展示各订单履约事实与抽屉交互
  */
 import { ref, reactive, onMounted } from "vue";
+import { Plus } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import PageHeader from "@/components/common/PageHeader.vue";
 import FilterBar from "@/components/common/FilterBar.vue";
 import DataTable, { type TableColumn } from "@/components/common/DataTable.vue";
@@ -370,7 +385,7 @@ function openOrderDetail(row: SalesOrder) {
 async function submitCreateOrder() {
   const product = products.value.find((item) => String(item.id) === String(createForm.productId));
   if (!createForm.customerId || !product || !product.uom || !createForm.orderedQty) {
-    alert("请选择真实客户、物料并确认物料单位已加载");
+    ElMessage.warning("请选择真实客户、物料并确认物料单位已加载");
     return;
   }
   isCreating.value = true;
@@ -389,9 +404,10 @@ async function submitCreateOrder() {
       ],
     });
     isCreateModalOpen.value = false;
+    ElMessage.success("销售订单创建成功！");
     await fetchOrders();
   } catch (err: any) {
-    alert(err?.message || "创建销售单失败");
+    ElMessage.error(err?.message || "创建销售单失败");
   } finally {
     isCreating.value = false;
   }

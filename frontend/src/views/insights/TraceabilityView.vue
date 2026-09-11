@@ -29,35 +29,25 @@
       <!-- 切入类型选择 -->
       <div class="filter-field">
         <label class="filter-label">切入实体类型</label>
-        <select v-model="queryParams.entryType" class="filter-select">
-          <option value="SALES_ORDER">🛒 销售订单 (SO)</option>
-          <option value="WORK_ORDER">📋 制造工单 (WO)</option>
-          <option value="DEVICE_ALARM">🚨 设备告警 (ALARM)</option>
-          <option value="INVENTORY_BATCH">📦 库存批次 (LOT)</option>
-        </select>
+        <el-select v-model="queryParams.entryType" style="width: 190px">
+          <el-option label="🛒 销售订单 (SO)" value="SALES_ORDER" />
+          <el-option label="📋 制造工单 (WO)" value="WORK_ORDER" />
+          <el-option label="🚨 设备告警 (ALARM)" value="DEVICE_ALARM" />
+          <el-option label="📦 库存批次 (LOT)" value="INVENTORY_BATCH" />
+        </el-select>
       </div>
 
       <!-- 追溯方向选择 -->
       <div class="filter-field">
         <label class="filter-label">追溯方向</label>
-        <div class="direction-switch">
-          <button
-            type="button"
-            class="dir-btn"
-            :class="{ 'is-active': queryParams.direction === 'FORWARD' }"
-            @click="setDirection('FORWARD')"
-          >
-            ➔ 正向推导
-          </button>
-          <button
-            type="button"
-            class="dir-btn"
-            :class="{ 'is-active': queryParams.direction === 'REVERSE' }"
-            @click="setDirection('REVERSE')"
-          >
-            ← 反向溯源
-          </button>
-        </div>
+        <el-radio-group
+          v-model="queryParams.direction"
+          size="small"
+          @change="(val: any) => setDirection(val)"
+        >
+          <el-radio-button value="FORWARD">➔ 正向推导</el-radio-button>
+          <el-radio-button value="REVERSE">← 反向溯源</el-radio-button>
+        </el-radio-group>
       </div>
 
     </FilterBar>
@@ -112,7 +102,7 @@
     <div class="content-area">
       <!-- 1. 加载态 (Loading) -->
       <div v-if="viewState === 'loading'" class="state-loading">
-        <div class="loading-spinner">⏳</div>
+        <el-icon class="is-loading loading-spinner"><Loading /></el-icon>
         <p class="loading-text">正在跨 ERP、WMS、MES、IoT 多域深度装载追溯拓扑关系链...</p>
       </div>
 
@@ -159,68 +149,64 @@
       </div>
     </div>
 
-    <!-- 侧边节点详情与审计抽屉 -->
-    <div v-if="selectedNode" class="node-drawer-mask" @click.self="selectedNode = null">
-      <div class="node-drawer-panel">
-        <div class="drawer-header">
-          <div class="drawer-title-box">
-            <span class="drawer-tag">NODE FACT DETAILS</span>
-            <h3 class="drawer-title">{{ selectedNode.title }} ({{ selectedNode.nodeCode }})</h3>
-          </div>
-          <button type="button" class="drawer-close" @click="selectedNode = null">✕</button>
+    <!-- 侧边节点详情与审计抽屉 (el-drawer) -->
+    <el-drawer
+      :model-value="!!selectedNode"
+      :title="selectedNode ? `${selectedNode.title} (${selectedNode.nodeCode})` : '节点事实明细'"
+      direction="rtl"
+      size="500px"
+      append-to-body
+      destroy-on-close
+      @close="selectedNode = null"
+    >
+      <div v-if="selectedNode" class="drawer-inner-body">
+        <div v-if="selectedNode.isGap" class="drawer-alert-gap">
+          <strong>⚠️ 断链缺口警示：</strong>
+          <p>{{ selectedNode.gapReason }}</p>
         </div>
 
-        <div class="drawer-body">
-          <div v-if="selectedNode.isGap" class="drawer-alert-gap">
-            <strong>⚠️ 断链缺口警示：</strong>
-            <p>{{ selectedNode.gapReason }}</p>
+        <div class="drawer-info-grid">
+          <div class="info-row">
+            <span class="row-k">发生时间：</span>
+            <span class="row-v font-mono">{{ selectedNode.timestamp }}</span>
           </div>
-
-          <div class="drawer-info-grid">
-            <div class="info-row">
-              <span class="row-k">发生时间：</span>
-              <span class="row-v">{{ selectedNode.timestamp }}</span>
-            </div>
-            <div class="info-row">
-              <span class="row-k">当前状态：</span>
-              <StatusBadge :type="selectedNode.statusType || 'default'" :text="selectedNode.status" />
-            </div>
-            <div class="info-row">
-              <span class="row-k">查看权限：</span>
-              <span :class="selectedNode.hasPermission ? 'text-success' : 'text-warn'">
-                {{ selectedNode.hasPermission ? '✓ 具备查看权限' : '🔒 无该实体细粒度权限' }}
-              </span>
-            </div>
+          <div class="info-row">
+            <span class="row-k">当前状态：</span>
+            <StatusBadge :type="selectedNode.statusType || 'default'" :text="selectedNode.status" />
           </div>
-
-          <h4 class="drawer-sub-title">业务明细事实</h4>
-          <div class="drawer-detail-table">
-            <div v-for="(item, idx) in selectedNode.details" :key="idx" class="table-row">
-              <span class="table-col-label">{{ item.label }}</span>
-              <span class="table-col-val" :class="{ 'is-warn': item.warn }">
-                <QuantityText v-if="item.isQuantity" :value="item.value" :unit="item.unit" />
-                <template v-else>{{ item.value }}</template>
-              </span>
-            </div>
+          <div class="info-row">
+            <span class="row-k">查看权限：</span>
+            <span :class="selectedNode.hasPermission ? 'text-success' : 'text-warn'">
+              {{ selectedNode.hasPermission ? '✓ 具备查看权限' : '🔒 无该实体细粒度权限' }}
+            </span>
           </div>
         </div>
 
-        <div class="drawer-footer">
-          <button
-            v-if="selectedNode.hasPermission && selectedNode.linkedRoute"
-            type="button"
-            class="btn-drawer-jump"
-            @click="navigateToRoute(selectedNode.linkedRoute)"
-          >
-            <span>前往业务页面查看原始凭据</span>
-            <span>➔</span>
-          </button>
-          <button type="button" class="btn-drawer-close" @click="selectedNode = null">
-            关闭
-          </button>
+        <h4 class="drawer-sub-title">业务明细事实</h4>
+        <div class="drawer-detail-table">
+          <div v-for="(item, idx) in selectedNode.details" :key="idx" class="table-row">
+            <span class="table-col-label">{{ item.label }}</span>
+            <span class="table-col-val" :class="{ 'is-warn': item.warn }">
+              <QuantityText v-if="item.isQuantity" :value="item.value" :unit="item.unit" />
+              <template v-else>{{ item.value }}</template>
+            </span>
+          </div>
         </div>
       </div>
-    </div>
+
+      <template #footer>
+        <div class="drawer-footer">
+          <el-button
+            v-if="selectedNode?.hasPermission && selectedNode?.linkedRoute"
+            type="primary"
+            @click="navigateToRoute(selectedNode.linkedRoute)"
+          >
+            前往业务页面查看原始凭据 ➔
+          </el-button>
+          <el-button @click="selectedNode = null">关闭</el-button>
+        </div>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -237,6 +223,7 @@
 
 import { ref, reactive, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { Loading } from "@element-plus/icons-vue";
 import type {
   TraceabilityChainResult,
   TraceNodeType,

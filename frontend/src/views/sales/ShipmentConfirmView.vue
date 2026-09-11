@@ -1,106 +1,109 @@
 <template>
-  <div v-if="visible && order" class="dialog-mask" @click.self="handleClose">
-    <div class="dialog-panel">
-      <div class="dialog-header">
-        <div class="header-left">
-          <h3 class="dialog-title">销售发货确认与库存扣减</h3>
-          <span class="mono-no">{{ order.soNo }}</span>
-        </div>
-        <button type="button" class="btn-close" @click="handleClose">✕</button>
+  <el-dialog
+    :model-value="visible"
+    width="840px"
+    destroy-on-close
+    append-to-body
+    @close="handleClose"
+  >
+    <template #header>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="font-weight: 600; font-size: 16px; color: #f1f5f9">销售发货确认与库存扣减</span>
+        <el-tag v-if="order" type="info" size="small">{{ order.soNo }}</el-tag>
       </div>
+    </template>
 
-      <div class="dialog-body">
-        <!-- 业务规则提示 -->
-        <div class="rule-box">
-          <div class="rule-icon">🚚</div>
-          <div class="rule-text">
-            <strong>发货出库与库存扣减规则：</strong>
-            <span>确认发货将从发货暂存位（{{ order.shippingLocationCode || '未返回真实库位' }}）移出货物，正式扣减企业实物在库库存，并将对应有效预留转入已释放（released_qty）。当全部订单行均满足 shipped_qty = ordered_qty 时，系统自动进入【已完成 (Completed / FullyShipped / Normal)】。</span>
-          </div>
-        </div>
+    <div v-if="order" class="dialog-body">
+      <!-- 业务规则提示 -->
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px"
+        title="发货出库与库存扣减规则"
+        :description="`确认发货将从发货暂存位（${order.shippingLocationCode || '未返回真实库位'}）移出货物，正式扣减企业实物在库库存，并将对应有效预留转入已释放（released_qty）。当全部订单行均满足 shipped_qty = ordered_qty 时，系统自动进入【已完成 (Completed / FullyShipped / Normal)】。`"
+      />
 
-        <!-- 基础发运参数 -->
-        <div class="form-grid">
-          <div class="form-item">
-            <label>客户全称</label>
-            <input :value="order.customerName" type="text" class="form-input" disabled />
-          </div>
-          <div class="form-item">
-            <label>发货时间 <span class="req">*</span></label>
-            <input v-model="shipTime" type="datetime-local" class="form-input" required />
-          </div>
-          <div class="form-item">
-            <label>承运物流商 <span class="req">*</span></label>
-            <select v-model="carrierName" class="form-select" required>
-              <option value="顺丰冷链物流">顺丰冷链物流</option>
-              <option value="跨越速运">跨越速运</option>
-              <option value="德邦精准汽运">德邦精准汽运</option>
-              <option value="客户自提">客户自提 (专车直运)</option>
-            </select>
-          </div>
-          <div class="form-item">
-            <label>物流运单号</label>
-            <input v-model="trackingNo" type="text" class="form-input mono-text" placeholder="如: SF20260826001" />
-          </div>
-        </div>
+      <!-- 基础发运参数 -->
+      <el-form label-width="100px" style="margin-bottom: 16px">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="客户全称">
+              <el-input :model-value="order.customerName" disabled />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="发货时间" required>
+              <el-input v-model="shipTime" type="datetime-local" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="承运物流商" required>
+              <el-select v-model="carrierName" style="width: 100%">
+                <el-option label="顺丰冷链物流" value="顺丰冷链物流" />
+                <el-option label="跨越速运" value="跨越速运" />
+                <el-option label="德邦精准汽运" value="德邦精准汽运" />
+                <el-option label="客户自提 (专车直运)" value="客户自提" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="物流运单号">
+              <el-input v-model="trackingNo" placeholder="如: SF20260826001" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
 
-        <!-- 发货行项明细 -->
-        <div class="lines-box">
-          <h4>可发货行项清单 (依据发货暂存位占用数量)</h4>
-          <div class="table-scroll">
-            <table class="shipment-table">
-              <thead>
-                <tr>
-                  <th>物料 SKU / 名称</th>
-                  <th style="text-align: right;">订单订购量</th>
-                  <th style="text-align: right;">累计已发货</th>
-                  <th style="text-align: right;">发货暂存可用</th>
-                  <th style="text-align: right; width: 120px;">本次发货数量 <span class="req">*</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="line in editableShipLines" :key="line.salesOrderLineId">
-                  <td>
-                    <div class="sku-cell">
-                      <span class="sku">{{ line.sku }}</span>
-                      <span class="name">{{ line.productName }}</span>
-                    </div>
-                  </td>
-                  <td style="text-align: right;">
-                    <QuantityText :value="line.orderedQty" :unit="line.uom" />
-                  </td>
-                  <td style="text-align: right;">
-                    <QuantityText :value="line.shippedQty" :unit="line.uom" />
-                  </td>
-                  <td style="text-align: right;">
-                    <span class="text-cyan font-bold">
-                      <QuantityText :value="line.shippingStagedQty" :unit="line.uom" />
-                    </span>
-                  </td>
-                  <td style="text-align: right;">
-                    <input
-                      v-model="line.shipQty"
-                      type="text"
-                      class="qty-input"
-                      :disabled="parseFloat(line.shippingStagedQty) <= 0"
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <div class="dialog-footer">
-        <button type="button" class="btn btn-secondary" @click="handleClose">取消</button>
-        <button type="button" class="btn btn-primary" :disabled="submitting" @click="submitShipment">
-          <span v-if="submitting">⏳ 发货出库中...</span>
-          <span v-else>确认发货并扣减实物库存</span>
-        </button>
+      <!-- 发货行项明细 -->
+      <div class="lines-box">
+        <h4 style="margin-bottom: 10px; color: #f1f5f9; font-size: 14px">可发货行项清单 (依据发货暂存位占用数量)</h4>
+        <el-table :data="editableShipLines" border style="width: 100%">
+          <el-table-column label="物料 SKU / 名称" min-width="180">
+            <template #default="{ row }">
+              <div>
+                <div style="font-family: monospace; font-weight: bold; color: #67d2ff">{{ row.sku }}</div>
+                <div style="font-size: 12px; color: #8ca2b8">{{ row.productName }}</div>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="订单订购量" width="110" align="right">
+            <template #default="{ row }">
+              <QuantityText :value="row.orderedQty" :unit="row.uom" />
+            </template>
+          </el-table-column>
+          <el-table-column label="累计已发货" width="110" align="right">
+            <template #default="{ row }">
+              <QuantityText :value="row.shippedQty" :unit="row.uom" />
+            </template>
+          </el-table-column>
+          <el-table-column label="发货暂存可用" width="120" align="right">
+            <template #default="{ row }">
+              <span class="text-cyan font-bold">
+                <QuantityText :value="row.shippingStagedQty" :unit="row.uom" />
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="本次发货数量" width="140" align="right">
+            <template #default="{ row }">
+              <el-input
+                v-model="row.shipQty"
+                size="small"
+                :disabled="parseFloat(row.shippingStagedQty) <= 0"
+              />
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
     </div>
-  </div>
+
+    <template #footer>
+      <el-button @click="handleClose">取消</el-button>
+      <el-button type="primary" :loading="submitting" @click="submitShipment">
+        确认发货并扣减实物库存
+      </el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -109,9 +112,11 @@
  * 职责：指定物流承运商与单号，录入各行发货数量并校验不超过发货暂存量
  */
 import { ref, watch } from "vue";
+import { ElMessage } from "element-plus";
 import QuantityText from "@/components/common/QuantityText.vue";
 import type { SalesOrder } from "@/types/sales";
 import { stringCompare } from "@/types/inventory";
+import { currentLocalDateTimeValue } from "@/utils/dateTime";
 
 interface EditableShipLine {
   salesOrderLineId: string | number;
@@ -144,7 +149,7 @@ const emit = defineEmits<{
   (e: "close"): void;
 }>();
 
-const shipTime = ref(new Date().toISOString().slice(0, 16));
+const shipTime = ref(currentLocalDateTimeValue());
 const carrierName = ref("顺丰冷链物流");
 const trackingNo = ref("");
 const editableShipLines = ref<EditableShipLine[]>([]);
@@ -153,6 +158,7 @@ watch(
   () => props.order,
   (val) => {
     if (val && val.lines) {
+      shipTime.value = currentLocalDateTimeValue();
       editableShipLines.value = val.lines.map((l) => ({
         salesOrderLineId: l.id,
         productId: l.productId,
@@ -179,13 +185,13 @@ function submitShipment() {
 
   const linesToShip = editableShipLines.value.filter((l) => parseFloat(l.shipQty) > 0);
   if (linesToShip.length === 0) {
-    alert("至少需要输入一条发货数量大于0的行项！");
+    ElMessage.warning("至少需要输入一条发货数量大于0的行项！");
     return;
   }
 
   for (const l of linesToShip) {
     if (stringCompare(l.shipQty, l.shippingStagedQty) > 0) {
-      alert(`物料 ${l.sku} 的发货数量 (${l.shipQty}) 不能超过发货暂存数量 (${l.shippingStagedQty})`);
+      ElMessage.warning(`物料 ${l.sku} 的发货数量 (${l.shipQty}) 不能超过发货暂存数量 (${l.shippingStagedQty})`);
       return;
     }
   }

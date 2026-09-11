@@ -17,36 +17,54 @@
       <!-- 严重级别 -->
       <div class="filter-select-group">
         <label class="filter-label">告警级别：</label>
-        <select v-model="queryParams.alarmLevel" class="filter-select" @change="handleSearch">
-          <option value="">全部级别</option>
-          <option value="CRITICAL">紧急 (CRITICAL)</option>
-          <option value="MAJOR">重要 (MAJOR)</option>
-          <option value="MINOR">次要 (MINOR)</option>
-          <option value="WARNING">预警 (WARNING)</option>
-        </select>
+        <el-select
+          v-model="queryParams.alarmLevel"
+          placeholder="全部级别"
+          clearable
+          style="width: 160px"
+          @change="handleSearch"
+        >
+          <el-option label="全部级别" value="" />
+          <el-option label="紧急 (CRITICAL)" value="CRITICAL" />
+          <el-option label="重要 (MAJOR)" value="MAJOR" />
+          <el-option label="次要 (MINOR)" value="MINOR" />
+          <el-option label="预警 (WARNING)" value="WARNING" />
+        </el-select>
       </div>
 
       <!-- 生命周期状态 -->
       <div class="filter-select-group">
         <label class="filter-label">生命周期：</label>
-        <select v-model="queryParams.status" class="filter-select" @change="handleSearch">
-          <option value="">全部状态</option>
-          <option value="Triggered">新触发 (Triggered)</option>
-          <option value="Acked">已确认未恢复 (Acked)</option>
-          <option value="RecoveredUnacked">已自愈待确认 (RecoveredUnacked)</option>
-          <option value="Recovered">已归档恢复 (Recovered)</option>
-        </select>
+        <el-select
+          v-model="queryParams.status"
+          placeholder="全部状态"
+          clearable
+          style="width: 170px"
+          @change="handleSearch"
+        >
+          <el-option label="全部状态" value="" />
+          <el-option label="新触发 (Triggered)" value="Triggered" />
+          <el-option label="已确认未恢复 (Acked)" value="Acked" />
+          <el-option label="已自愈待确认 (RecoveredUnacked)" value="RecoveredUnacked" />
+          <el-option label="已归档恢复 (Recovered)" value="Recovered" />
+        </el-select>
       </div>
 
       <!-- 上下文状态 -->
       <div class="filter-select-group">
         <label class="filter-label">生产上下文：</label>
-        <select v-model="queryParams.contextStatus" class="filter-select" @change="handleSearch">
-          <option value="">全部</option>
-          <option value="Linked">已绑定 (Linked)</option>
-          <option value="Pending">待补充 (Pending)</option>
-          <option value="Unlinked">未关联合同/工单 (Unlinked)</option>
-        </select>
+        <el-select
+          v-model="queryParams.contextStatus"
+          placeholder="全部"
+          clearable
+          style="width: 170px"
+          @change="handleSearch"
+        >
+          <el-option label="全部" value="" />
+          <el-option label="已绑定 (Linked)" value="Linked" />
+          <el-option label="待补充 (Pending)" value="Pending" />
+          <el-option label="未关联合同/工单 (Unlinked)" value="Unlinked" />
+        </el-select>
       </div>
     </FilterBar>
 
@@ -123,109 +141,121 @@
       <template #actions="{ row }">
         <div class="action-btn-group">
           <!-- 详情 -->
-          <button type="button" class="btn-text" @click="$emit('select-detail', row)">
+          <el-button link type="primary" @click="$emit('select-detail', row)">
             详情
-          </button>
+          </el-button>
 
           <!-- 告警确认 (Triggered / RecoveredUnacked) -->
-          <button
+          <el-button
             v-if="row.status === 'Triggered' || row.status === 'RecoveredUnacked'"
-            type="button"
-            class="btn-text text-warning"
+            link
+            type="warning"
             :disabled="!isActionAllowed(row, 'ack')"
             :title="getActionDisabledReason(row, 'ack') || '确认告警'"
             @click="openAckModal(row)"
           >
             确认
-          </button>
+          </el-button>
 
           <!-- 补充上下文 -->
-          <button
+          <el-button
             v-if="row.status !== 'Recovered'"
-            type="button"
-            class="btn-text text-primary"
+            link
+            type="primary"
             :disabled="!isActionAllowed(row, 'update-context')"
             :title="getActionDisabledReason(row, 'update-context') || '人工补充生产上下文'"
             @click="openContextModal(row)"
           >
             关联工单
-          </button>
+          </el-button>
         </div>
       </template>
     </DataTable>
 
     <!-- 弹窗 1：告警确认 -->
-    <div v-if="ackModalVisible" class="modal-mask" @click.self="ackModalVisible = false">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">设备告警人工确认</h3>
-          <button type="button" class="btn-close" @click="ackModalVisible = false">✕</button>
+    <el-dialog
+      v-model="ackModalVisible"
+      title="设备告警人工确认"
+      width="520px"
+      append-to-body
+      destroy-on-close
+    >
+      <div class="modal-body-content">
+        <div class="modal-hint">
+          正在确认告警 <strong>{{ activeAlarm?.alarmNo }}</strong>（{{ activeAlarm?.alarmType }}）。确认后将记录当前操作员与确认时间：
         </div>
 
-        <form class="modal-body" @submit.prevent="submitAck">
-          <p class="modal-hint">
-            正在确认告警 <strong>{{ activeAlarm?.alarmNo }}</strong>（{{ activeAlarm?.alarmType }}）。确认后将记录当前操作员与确认时间：
-          </p>
-
-          <div class="form-item">
-            <label>确认处理说明 / 现场排查情况 <span class="req">*</span></label>
-            <textarea
+        <el-form label-position="top" class="custom-el-form" @submit.prevent="submitAck">
+          <el-form-item label="确认处理说明 / 现场排查情况" required>
+            <el-input
               v-model="ackComment"
-              class="form-input"
-              rows="3"
+              type="textarea"
+              :rows="3"
               placeholder="例如：主轴温度已现场复查，机床主轴降速至 8000rpm 运行冷却..."
-              required
-            ></textarea>
-          </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="ackModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-warning" :disabled="isSubmitting">提交确认</button>
-          </div>
-        </form>
+            />
+          </el-form-item>
+        </el-form>
       </div>
-    </div>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="ackModalVisible = false">取消</el-button>
+          <el-button
+            type="warning"
+            :loading="isSubmitting"
+            @click="submitAck"
+          >
+            提交确认
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
 
     <!-- 弹窗 2：补充生产业务上下文 -->
-    <div v-if="contextModalVisible" class="modal-mask" @click.self="contextModalVisible = false">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">补充告警生产业务上下文</h3>
-          <button type="button" class="btn-close" @click="contextModalVisible = false">✕</button>
+    <el-dialog
+      v-model="contextModalVisible"
+      title="补充告警生产业务上下文"
+      width="520px"
+      append-to-body
+      destroy-on-close
+    >
+      <div class="modal-body-content">
+        <div class="modal-hint">
+          为告警 <strong>{{ activeAlarm?.alarmNo }}</strong> 人工关联受影响的生产工单或现场工序执行实例：
         </div>
 
-        <form class="modal-body" @submit.prevent="submitContext">
-          <p class="modal-hint">
-            为告警 <strong>{{ activeAlarm?.alarmNo }}</strong> 人工关联受影响的生产工单或现场工序执行实例：
-          </p>
-
-          <div class="form-item">
-            <label>关联生产工单 ID</label>
-            <input
+        <el-form label-position="top" class="custom-el-form" @submit.prevent="submitContext">
+          <el-form-item label="关联生产工单 ID">
+            <el-input
               v-model="contextForm.workOrderId"
-              type="text"
-              class="form-input font-mono"
               placeholder="请输入工单 UUID"
+              class="font-mono"
             />
-          </div>
+          </el-form-item>
 
-          <div class="form-item">
-            <label>关联工序执行编号 / ID</label>
-            <input
+          <el-form-item label="关联工序执行编号 / ID">
+            <el-input
               v-model="contextForm.operationExecutionId"
-              type="text"
-              class="form-input font-mono"
               placeholder="请输入工序执行 UUID"
+              class="font-mono"
             />
-          </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="contextModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting">保存关联上下文</button>
-          </div>
-        </form>
+          </el-form-item>
+        </el-form>
       </div>
-    </div>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="contextModalVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="isSubmitting"
+            @click="submitContext"
+          >
+            保存关联上下文
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -233,6 +263,7 @@
 import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
 import type { AllowedAction } from "../../types/common";
 import { ref, reactive, onMounted } from "vue";
+import { ElMessage } from "element-plus";
 import {
   PageHeader,
   FilterBar,
@@ -294,6 +325,7 @@ const contextForm = reactive({
 
 const isSubmitting = ref(false);
 
+/** 获取告警状态对应的徽标类型 */
 function getAlarmStatusBadge(status: AlarmLifecycleStatus): BadgeType {
   switch (status) {
     case "Triggered": return "danger";
@@ -304,6 +336,7 @@ function getAlarmStatusBadge(status: AlarmLifecycleStatus): BadgeType {
   }
 }
 
+/** 获取告警状态中文显示文本 */
 function getAlarmStatusText(status: AlarmLifecycleStatus): string {
   switch (status) {
     case "Triggered": return "新触发待处理";
@@ -314,16 +347,17 @@ function getAlarmStatusText(status: AlarmLifecycleStatus): string {
   }
 }
 
-// 替换为调用 actionGuard 的版本
+/** 检查指定操作是否被后端或状态机允许 */
 function isActionAllowed(item: { allowedActions?: AllowedAction[] | null }, action: string): boolean {
   return checkAction(item.allowedActions, action);
 }
 
-// 替换为调用 actionGuard 的版本
+/** 获取指定操作被禁用的原因提示 */
 function getActionDisabledReason(item: { allowedActions?: AllowedAction[] | null }, action: string): string | undefined {
   return getDisabledReason(item.allowedActions, action);
 }
 
+/** 分页获取告警列表 */
 async function fetchAlarmList() {
   viewState.value = "loading";
   errorMessage.value = "";
@@ -356,11 +390,13 @@ async function fetchAlarmList() {
   }
 }
 
+/** 触发搜索 */
 function handleSearch() {
   queryParams.page = 1;
   fetchAlarmList();
 }
 
+/** 重置筛选条件 */
 function handleReset() {
   queryParams.keyword = "";
   queryParams.alarmLevel = "";
@@ -370,31 +406,39 @@ function handleReset() {
   fetchAlarmList();
 }
 
+/** 分页变更处理 */
 function handlePageChange(page: number) {
   queryParams.page = page;
   fetchAlarmList();
 }
 
+/** 打开人工确认告警对话框 */
 function openAckModal(item: DeviceAlarmItem) {
   activeAlarm.value = item;
   ackComment.value = "";
   ackModalVisible.value = true;
 }
 
+/** 提交人工确认告警 */
 async function submitAck() {
-  if (!activeAlarm.value || !ackComment.value.trim()) return;
+  if (!activeAlarm.value || !ackComment.value.trim()) {
+    ElMessage.warning("请填写现场排查说明");
+    return;
+  }
   isSubmitting.value = true;
   try {
     await ackDeviceAlarm(activeAlarm.value.id as string, { ackComment: ackComment.value.trim() });
     ackModalVisible.value = false;
+    ElMessage.success("告警确认已提交！");
     await fetchAlarmList();
   } catch (err: any) {
-    alert(`确认失败：${err.message}`);
+    ElMessage.error(`确认失败：${err.message}`);
   } finally {
     isSubmitting.value = false;
   }
 }
 
+/** 打开补充业务上下文对话框 */
 function openContextModal(item: DeviceAlarmItem) {
   activeAlarm.value = item;
   contextForm.workOrderId = item.workOrderId || "";
@@ -402,19 +446,21 @@ function openContextModal(item: DeviceAlarmItem) {
   contextModalVisible.value = true;
 }
 
+/** 提交补充业务上下文 */
 async function submitContext() {
   if (!activeAlarm.value) return;
   if (!contextForm.workOrderId.trim() && !contextForm.operationExecutionId.trim()) {
-    errorMessage.value = "请填写至少一个后端已分配的工单或工序执行 UUID";
+    ElMessage.warning("请填写至少一个后端已分配的工单或工序执行 UUID");
     return;
   }
   isSubmitting.value = true;
   try {
     await updateAlarmBusinessContext(activeAlarm.value.id as string, contextForm);
     contextModalVisible.value = false;
+    ElMessage.success("生产业务上下文关联已保存！");
     await fetchAlarmList();
   } catch (err: any) {
-    alert(`绑定上下文失败：${err.message}`);
+    ElMessage.error(`绑定上下文失败：${err.message}`);
   } finally {
     isSubmitting.value = false;
   }
@@ -441,16 +487,6 @@ onMounted(() => {
 .filter-label {
   font-size: 13px;
   color: #94a3b8;
-}
-
-.filter-select {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  outline: none;
 }
 
 .highlight-code {
@@ -498,119 +534,25 @@ onMounted(() => {
   gap: 6px;
 }
 
-.btn-text {
-  background: none;
-  border: none;
-  font-size: 12px;
-  cursor: pointer;
-  padding: 2px 4px;
-}
-
-.btn-text:hover:not(:disabled) {
-  text-decoration: underline;
-}
-
-.btn-text:disabled {
-  color: #64748b;
-  cursor: not-allowed;
-  text-decoration: none;
-}
-
 .text-primary { color: #38bdf8 !important; }
 .text-warning { color: #fbbf24 !important; }
 .font-xs { font-size: 11px; }
 
-/* 模态框 */
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
-.modal-card {
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
-  width: 100%;
-  max-width: 500px;
-  box-shadow: 0 20px 30px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.modal-title {
-  margin: 0;
-  font-size: 16px;
-  color: #f8fafc;
-}
-
-.modal-body {
-  padding: 20px;
+.modal-body-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .modal-hint {
-  margin: 0;
   font-size: 13px;
   color: #cbd5e1;
   line-height: 1.5;
 }
 
-.form-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-item label {
-  font-size: 12px;
+.custom-el-form :deep(.el-form-item__label) {
   color: #94a3b8;
-}
-
-.req { color: #f87171; }
-
-.form-input {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  padding: 8px 12px;
-  border-radius: 6px;
   font-size: 13px;
-  outline: none;
-}
-
-.form-input:focus { border-color: #38bdf8; }
-
-.modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 16px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.btn-close {
-  background: none;
-  border: none;
-  color: #94a3b8;
-  font-size: 16px;
-  cursor: pointer;
+  padding-bottom: 4px;
 }
 </style>

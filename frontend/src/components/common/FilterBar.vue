@@ -2,26 +2,31 @@
   <div class="filter-bar-card">
     <div class="filter-inputs">
       <div v-if="showSearch" class="search-box">
-        <span class="search-icon">🔍</span>
-        <input
-          :value="modelValue"
-          type="text"
-          class="search-input"
+        <el-input
+          :model-value="modelValue"
           :placeholder="placeholder || '输入关键词搜索...'"
-          @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
+          clearable
+          style="width: 260px;"
+          @update:model-value="$emit('update:modelValue', String($event || ''))"
           @keyup.enter="$emit('search')"
-        />
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
       </div>
 
       <slot></slot>
 
       <div class="filter-actions">
-        <button type="button" class="btn btn-primary" @click="$emit('search')">
+        <el-button type="primary" @click="$emit('search')">
+          <el-icon><Search /></el-icon>
           <span>查询</span>
-        </button>
-        <button type="button" class="btn btn-secondary" @click="$emit('reset')">
+        </el-button>
+        <el-button @click="$emit('reset')">
+          <el-icon><Refresh /></el-icon>
           <span>重置</span>
-        </button>
+        </el-button>
       </div>
     </div>
 
@@ -34,8 +39,11 @@
 <script setup lang="ts">
 /**
  * 统一筛选栏组件 (FilterBar)
+ * 集成 Element Plus el-input 与 el-button
  * 支持搜索输入双向绑定、自定义筛选项插槽、查询/重置触发与右侧快捷操作
  */
+import { Search, Refresh } from "@element-plus/icons-vue";
+
 withDefaults(
   defineProps<{
     modelValue?: string;

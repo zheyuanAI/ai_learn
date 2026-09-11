@@ -18,12 +18,12 @@
       </div>
 
       <div class="forbidden-actions">
-        <button type="button" class="btn btn-primary" @click="goHome">
+        <el-button type="primary" @click="goHome">
           返回首页
-        </button>
-        <button type="button" class="btn btn-secondary" @click="goBack">
+        </el-button>
+        <el-button @click="goBack">
           返回上一页
-        </button>
+        </el-button>
       </div>
 
       <p class="forbidden-hint">

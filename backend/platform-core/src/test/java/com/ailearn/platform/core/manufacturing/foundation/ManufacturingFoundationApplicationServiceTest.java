@@ -116,6 +116,20 @@ class ManufacturingFoundationApplicationServiceTest {
         assertEquals(3, repository.countWorkOrders(TENANT_A));
     }
 
+    /** 采购来源既可引用工单产出品，也可引用该工单锁定 BOM 中的组件物料。 */
+    @Test
+    void acceptsOutputAndBomComponentAsProcurementSource() {
+        BomFact bom = createBom(PRODUCT_A, "V1", BomStatus.ACTIVE, "bom-procurement-source");
+        RoutingFact routing = createRouting(PRODUCT_A, "V1", RoutingStatus.ACTIVE,
+                "routing-procurement-source");
+        WorkOrderFact workOrder = service.createWorkOrder(
+                workOrder(PRODUCT_A, bom.id(), routing.id(), null), "wo-procurement-source");
+
+        assertTrue(repository.findActiveForProcurement(TENANT_A, workOrder.id(), PRODUCT_A).isPresent());
+        assertTrue(repository.findActiveForProcurement(TENANT_A, workOrder.id(), PRODUCT_B).isPresent());
+        assertTrue(repository.findActiveForProcurement(TENANT_B, workOrder.id(), PRODUCT_B).isEmpty());
+    }
+
     /** 销售来源跨租户或产品不一致时拒绝，不向工单仓储写入事实。 */
     @Test
     void rejectsCrossTenantAndProductMismatchSource() {

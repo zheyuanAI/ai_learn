@@ -7,9 +7,14 @@
       description="按租户、产品、仓库、库位与批次维度精确维护。遵循统一公式：available_qty = on_hand_qty - reserved_qty >= 0。质量隔离位（QualityHold）货物禁止正常销售预留与生产领料。"
     >
       <template #actions>
-        <button type="button" class="btn-refresh" :disabled="viewState === 'loading'" @click="fetchBalances">
-          <span>🔄 刷新余额</span>
-        </button>
+        <el-button
+          type="primary"
+          :loading="viewState === 'loading'"
+          @click="fetchBalances"
+        >
+          <el-icon><Refresh /></el-icon>
+          <span>刷新余额</span>
+        </el-button>
       </template>
     </PageHeader>
 
@@ -59,22 +64,37 @@
       @search="fetchBalances"
       @reset="resetFilter"
     >
-      <select v-model="queryParams.locationType" class="filter-select" @change="fetchBalances">
-        <option value="">全部标准库位类型</option>
-        <option value="ReceivingStaging">ReceivingStaging (收货暂存位)</option>
-        <option value="Storage">Storage (常规存储位)</option>
-        <option value="Picking">Picking (拣货备料位)</option>
-        <option value="ShippingStaging">ShippingStaging (发货暂存位)</option>
-        <option value="QualityHold">QualityHold (质量隔离位)</option>
-        <option value="Adjustment">Adjustment (差异调整位)</option>
-      </select>
+      <el-select
+        v-model="queryParams.locationType"
+        placeholder="全部标准库位类型"
+        clearable
+        style="width: 220px"
+        @change="fetchBalances"
+      >
+        <el-option label="全部标准库位类型" value="" />
+        <el-option label="ReceivingStaging (收货暂存位)" value="ReceivingStaging" />
+        <el-option label="Storage (常规存储位)" value="Storage" />
+        <el-option label="Picking (拣货备料位)" value="Picking" />
+        <el-option label="ShippingStaging (发货暂存位)" value="ShippingStaging" />
+        <el-option label="QualityHold (质量隔离位)" value="QualityHold" />
+        <el-option label="Adjustment (差异调整位)" value="Adjustment" />
+      </el-select>
 
-      <select v-model="queryParams.warehouseId" class="filter-select" @change="fetchBalances">
-        <option value="">全部仓库</option>
-        <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">
-          {{ warehouse.code }} - {{ warehouse.name }}
-        </option>
-      </select>
+      <el-select
+        v-model="queryParams.warehouseId"
+        placeholder="全部仓库"
+        clearable
+        style="width: 180px"
+        @change="fetchBalances"
+      >
+        <el-option label="全部仓库" value="" />
+        <el-option
+          v-for="warehouse in warehouses"
+          :key="warehouse.id"
+          :label="`${warehouse.code} - ${warehouse.name}`"
+          :value="warehouse.id"
+        />
+      </el-select>
     </FilterBar>
 
     <!-- 四态渲染 -->
@@ -140,6 +160,7 @@
  * 数量精度：全部通过 QuantityText 严格字符串展示
  */
 import { ref, reactive, computed, onMounted } from "vue";
+import { Refresh } from "@element-plus/icons-vue";
 import PageHeader from "@/components/common/PageHeader.vue";
 import FilterBar from "@/components/common/FilterBar.vue";
 import DataTable, { type TableColumn } from "@/components/common/DataTable.vue";
@@ -148,8 +169,8 @@ import QuantityText from "@/components/common/QuantityText.vue";
 import EmptyState from "@/components/common/EmptyState.vue";
 import ErrorState from "@/components/common/ErrorState.vue";
 import type { ViewState } from "@/types/common";
-import { type InventoryBalance, type Warehouse, stringAdd, stringSub } from "@/types/inventory";
-import { getWarehouses } from "@/api/masterData";
+import { type InventoryBalance, type Location, type Product, type Warehouse, stringAdd, stringSub } from "@/types/inventory";
+import { getLocations, getProducts, getWarehouses } from "@/api/masterData";
 import { getInventoryBalances } from "@/api/inventory";
 
 const viewState = ref<ViewState>("loading");
@@ -157,6 +178,8 @@ const errorMessage = ref("");
 const balanceList = ref<InventoryBalance[]>([]);
 const totalCount = ref(0);
 const warehouses = ref<Warehouse[]>([]);
+const products = ref<Product[]>([]);
+const locations = ref<Location[]>([]);
 
 const queryParams = reactive({
   page: 1,
@@ -227,14 +250,45 @@ async function fetchBalances() {
   errorMessage.value = "";
   try {
     const res = await getInventoryBalances({
-      page: queryParams.page,
-      size: queryParams.size,
-      keyword: queryParams.keyword,
-      locationType: queryParams.locationType,
+      page: 1,
+      size: 1000,
       warehouseId: queryParams.warehouseId,
     });
-    balanceList.value = res.data.records;
-    totalCount.value = res.data.total;
+    const productMap = new Map(products.value.map((item) => [String(item.id), item]));
+    const warehouseMap = new Map(warehouses.value.map((item) => [String(item.id), item]));
+    const locationMap = new Map(locations.value.map((item) => [String(item.id), item]));
+    const keyword = queryParams.keyword.trim().toLowerCase();
+    const normalized = (res.data.records || []).map((balance) => {
+      const dimension = balance.dimension;
+      const productId = String(balance.productId || dimension?.productId || "");
+      const warehouseId = String(balance.warehouseId || dimension?.warehouseId || "");
+      const locationId = String(balance.locationId || dimension?.locationId || "");
+      const product = productMap.get(productId);
+      const warehouse = warehouseMap.get(warehouseId);
+      const location = locationMap.get(locationId);
+      return {
+        ...balance,
+        productId,
+        sku: product?.sku || productId,
+        productName: product?.name || productId,
+        spec: product?.spec,
+        uom: product?.uom,
+        warehouseId,
+        warehouseName: warehouse?.name || warehouseId,
+        locationId,
+        locationCode: location?.code || locationId,
+        locationType: location?.type,
+        lotNo: balance.lotNo ?? dimension?.lotNo,
+      } as InventoryBalance;
+    }).filter((balance) => {
+      if (queryParams.locationType && balance.locationType !== queryParams.locationType) return false;
+      if (!keyword) return true;
+      return [balance.sku, balance.productName, balance.locationCode, balance.warehouseName]
+        .some((value) => String(value || "").toLowerCase().includes(keyword));
+    });
+    totalCount.value = normalized.length;
+    const start = (queryParams.page - 1) * queryParams.size;
+    balanceList.value = normalized.slice(start, start + queryParams.size);
     viewState.value = balanceList.value.length === 0 ? "empty" : "ready";
   } catch (err: any) {
     console.error("[InventoryBalanceView] 获取失败:", err);
@@ -261,16 +315,22 @@ function resetFilter() {
  */
 async function loadWarehouses() {
   try {
-    const response = await getWarehouses({ page: 1, size: 1000, status: "ACTIVE" });
-    warehouses.value = response.data.records;
+    const [warehouseResponse, productResponse, locationResponse] = await Promise.all([
+      getWarehouses({ page: 1, size: 1000, status: "ACTIVE" }),
+      getProducts({ page: 1, size: 1000, status: "ACTIVE" }),
+      getLocations({ page: 1, size: 1000, status: "ACTIVE" }),
+    ]);
+    warehouses.value = warehouseResponse.data.records;
+    products.value = productResponse.data.records;
+    locations.value = locationResponse.data.records;
   } catch (error) {
-    console.error("[InventoryBalanceView] 加载仓库失败", error);
+    console.error("[InventoryBalanceView] 加载主数据失败", error);
   }
 }
 
-onMounted(() => {
-  fetchBalances();
-  loadWarehouses();
+onMounted(async () => {
+  await loadWarehouses();
+  await fetchBalances();
 });
 </script>
 

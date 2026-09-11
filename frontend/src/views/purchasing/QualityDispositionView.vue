@@ -8,32 +8,30 @@
       description="生产质检人员执行到货检验（inspected_qty = qualified_qty + unqualified_qty），质检只生成质量事实不改变库存；合格品决定放行，不合格品决定退回或报废；仓库人员确认处置执行后，放行货物从质量隔离位（QH）移至收货暂存位（RS），报废与退回扣减 QH 实物库存。"
     >
       <template #actions>
-        <button v-if="hasPermission('pur:quality:inspect')" type="button" class="btn-primary" @click="openInspectModal">
-          <span>＋ 录入到货质检结果</span>
-        </button>
+        <el-button
+          v-if="hasPermission('pur:quality:inspect')"
+          type="primary"
+          :icon="Plus"
+          @click="openInspectModal"
+        >
+          录入到货质检结果
+        </el-button>
       </template>
     </PageHeader>
 
     <!-- 顶部分类切换 -->
-    <div class="tab-nav">
-      <button
-        type="button"
-        class="tab-item"
-        :class="{ 'is-active': activeTab === 'inspections' }"
-        @click="switchQualityTab('inspections')"
+    <div class="tab-nav" style="margin-bottom: 16px">
+      <el-radio-group
+        v-model="activeTab"
+        @change="(val) => switchQualityTab(val as 'inspections' | 'dispositions')"
       >
-        <span>质检检验事实记录</span>
-        <span class="count-badge">{{ inspections.length }}</span>
-      </button>
-      <button
-        type="button"
-        class="tab-item"
-        :class="{ 'is-active': activeTab === 'dispositions' }"
-        @click="switchQualityTab('dispositions')"
-      >
-        <span>质量处置决定与执行</span>
-        <span class="count-badge">{{ dispositions.length }}</span>
-      </button>
+        <el-radio-button value="inspections">
+          质检检验事实记录 ({{ inspections.length }})
+        </el-radio-button>
+        <el-radio-button value="dispositions">
+          质量处置决定与执行 ({{ dispositions.length }})
+        </el-radio-button>
+      </el-radio-group>
     </div>
 
     <!-- 1. 检验记录表格 -->
@@ -69,14 +67,15 @@
           </span>
         </template>
         <template #actions="{ row }">
-          <button
+          <el-button
             v-if="hasAnyPermission('pur:quality:release', 'pur:quality:return', 'pur:quality:scrap')"
-            type="button"
-            class="btn-link"
+            type="primary"
+            link
+            size="small"
             @click="openDecideModal(row)"
           >
             做出处置决定
-          </button>
+          </el-button>
           <span v-else class="text-muted">无处置权限</span>
         </template>
       </DataTable>
@@ -114,14 +113,15 @@
           />
         </template>
         <template #actions="{ row }">
-          <button
+          <el-button
             v-if="row.status === 'PendingExecution' && hasPermission('pur:disposition:confirm')"
-            type="button"
-            class="btn-link confirm-act"
+            type="success"
+            link
+            size="small"
             @click="openExecuteConfirm(row)"
           >
             确认执行实物处置
-          </button>
+          </el-button>
           <span v-else-if="row.status === 'PendingExecution'" class="text-muted">无实物执行权限</span>
           <span v-else class="text-muted">已归档</span>
         </template>
@@ -129,103 +129,113 @@
     </div>
 
     <!-- 录入质检结果弹窗 -->
-    <div v-if="isInspectOpen" class="modal-mask" @click.self="isInspectOpen = false">
-      <div class="modal-panel">
-        <div class="modal-header">
-          <h3 class="modal-title">录入采购到货质检结果</h3>
-          <button type="button" class="btn-close" @click="isInspectOpen = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitInspect">
-          <div v-if="!queryPoNo && receiptCandidates.length === 0" class="contract-alert" role="alert">
-            <strong>当前没有可质检的收货明细：</strong>
-            请先由仓库人员完成“确认接收进质量隔离位”，再刷新本页面。
-          </div>
-          <!-- 订单与凭证上下文选择（消除手填 UUID，修复 F04） -->
-          <div v-if="queryPoNo" class="info-alert" style="margin-bottom: 12px; padding: 8px 12px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; font-size: 13px; color: #bae6fd;">
-            <span>当前针对订单 <strong>{{ queryPoNo }}</strong> 录入质检（收货凭证: <span class="font-mono text-xs">{{ inspectForm.purchaseReceiptId }}</span>；收货行: <span class="font-mono text-xs">{{ inspectForm.purchaseReceiptLineId || '未返回' }}</span>）</span>
-          </div>
-          <template v-else>
-            <div class="form-item">
-              <label>关联采购收货单 <span class="req">*</span></label>
-              <select v-model="selectedReceiptId" class="form-select" required @change="onReceiptChange(selectedReceiptId)">
-                <option value="">请选择已确认收货单</option>
-                <option v-for="receipt in receiptOptions" :key="receipt.receiptId" :value="receipt.receiptId">
-                  {{ receipt.receiptNo }} - 采购单 {{ receipt.purchaseOrderNo }}
-                </option>
-              </select>
-            </div>
+    <el-dialog
+      v-model="isInspectOpen"
+      title="录入采购到货质检结果"
+      width="640px"
+      destroy-on-close
+    >
+      <el-form label-width="130px" @submit.prevent="submitInspect">
+        <el-alert
+          v-if="!queryPoNo && receiptCandidates.length === 0"
+          type="warning"
+          show-icon
+          style="margin-bottom: 14px"
+          title="当前没有可质检的收货明细：请先由仓库人员完成“确认接收进质量隔离位”，再刷新本页面。"
+        />
+        <el-alert
+          v-if="queryPoNo"
+          type="info"
+          show-icon
+          style="margin-bottom: 14px"
+          :title="`当前针对订单 ${queryPoNo} 录入质检（收货凭证: ${inspectForm.purchaseReceiptId}；收货行: ${inspectForm.purchaseReceiptLineId || '未返回'}）`"
+        />
+        <template v-else>
+          <el-form-item label="关联采购收货单" required>
+            <el-select v-model="selectedReceiptId" placeholder="请选择已确认收货单" style="width: 100%" @change="onReceiptChange(selectedReceiptId)">
+              <el-option
+                v-for="receipt in receiptOptions"
+                :key="receipt.receiptId"
+                :label="`${receipt.receiptNo} - 采购单 ${receipt.purchaseOrderNo}`"
+                :value="receipt.receiptId"
+              />
+            </el-select>
+          </el-form-item>
 
-            <div v-if="selectedReceiptId" class="form-item">
-              <label>检验物料行 <span class="req">*</span></label>
-              <select v-model="selectedReceiptLineId" class="form-select" required @change="onReceiptLineChange(selectedReceiptLineId)">
-                <option value="">请选择检验物料行</option>
-                <option v-for="line in selectedReceiptLines" :key="line.receiptLineId" :value="line.receiptLineId">
-                  第 {{ line.lineNo }} 行 - {{ productLabel(line) }} - 实收待检: {{ line.remainingQty }} {{ line.uom }}
-                </option>
-              </select>
-            </div>
-          </template>
-          <div class="form-grid">
-            <div class="form-item">
-              <label>检验总数量 <span class="req">*</span></label>
-              <input v-model="inspectForm.inspectedQty" type="text" class="form-input" required @input="calcUnqualified" />
-            </div>
-            <div class="form-item">
-              <label>质检合格数量 <span class="req">*</span></label>
-              <input v-model="inspectForm.qualifiedQty" type="text" class="form-input text-success" required @input="calcUnqualified" />
-            </div>
-          </div>
-          <div class="form-item">
-            <label>质检不合格数量 (自动计算)</label>
-            <input :value="inspectForm.unqualifiedQty" type="text" class="form-input text-danger" disabled />
-          </div>
-          <div v-if="parseFloat(inspectForm.unqualifiedQty || '0') > 0" class="form-item">
-            <label>不合格原因 <span class="req">*</span></label>
-            <input v-model="inspectForm.unqualifiedReason" type="text" class="form-input" required placeholder="如: 轴向尺寸公差超差 0.15mm" />
-          </div>
-          <div class="form-item">
-            <label>检验说明与备注</label>
-            <textarea v-model="inspectForm.inspectionRemark" class="form-textarea" rows="2" placeholder="抽样标准与检验过程说明..."></textarea>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn-secondary" @click="isInspectOpen = false">取消</button>
-            <button type="submit" class="btn-primary" :disabled="submitting">确认提交检验事实</button>
-          </div>
-        </form>
-      </div>
-    </div>
+          <el-form-item v-if="selectedReceiptId" label="检验物料行" required>
+            <el-select v-model="selectedReceiptLineId" placeholder="请选择检验物料行" style="width: 100%" @change="onReceiptLineChange(selectedReceiptLineId)">
+              <el-option
+                v-for="line in selectedReceiptLines"
+                :key="line.receiptLineId"
+                :label="`第 ${line.lineNo} 行 - ${productLabel(line)} - 实收待检: ${line.remainingQty} ${line.uom}`"
+                :value="line.receiptLineId"
+              />
+            </el-select>
+          </el-form-item>
+        </template>
+
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="检验总数量" required>
+              <el-input v-model="inspectForm.inspectedQty" placeholder="如: 100" @input="calcUnqualified" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="质检合格数量" required>
+              <el-input v-model="inspectForm.qualifiedQty" placeholder="如: 98" @input="calcUnqualified" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-form-item label="不合格数量">
+          <el-input :model-value="inspectForm.unqualifiedQty" disabled />
+        </el-form-item>
+
+        <el-form-item v-if="parseFloat(inspectForm.unqualifiedQty || '0') > 0" label="不合格原因" required>
+          <el-input v-model="inspectForm.unqualifiedReason" placeholder="如: 轴向尺寸公差超差 0.15mm" />
+        </el-form-item>
+
+        <el-form-item label="检验说明与备注">
+          <el-input v-model="inspectForm.inspectionRemark" type="textarea" :rows="2" placeholder="抽样标准与检验过程说明..." />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="isInspectOpen = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitInspect">
+          确认提交检验事实
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 做出处置决定弹窗 -->
-    <div v-if="isDecideOpen" class="modal-mask" @click.self="isDecideOpen = false">
-      <div class="modal-panel">
-        <div class="modal-header">
-          <h3 class="modal-title">做出质量处置决定</h3>
-          <button type="button" class="btn-close" @click="isDecideOpen = false">✕</button>
-        </div>
-        <form class="modal-body" @submit.prevent="submitDecide">
-          <div class="form-item">
-            <label>处置动作类型 <span class="req">*</span></label>
-            <select v-model="decideForm.dispositionType" class="form-select" required>
-              <option value="Release">合格放行上架 (Release ➔ 移至收货暂存位)</option>
-              <option value="Scrap">不合格报废处理 (Scrap ➔ 扣减实物库存)</option>
-              <option value="Return">退回供应方 (Return ➔ 扣减实物库存)</option>
-            </select>
-          </div>
-          <div class="form-item">
-            <label>处置数量 <span class="req">*</span></label>
-            <input v-model="decideForm.dispositionQty" type="text" class="form-input" required />
-          </div>
-          <div class="form-item">
-            <label>处置依据与原因</label>
-            <textarea v-model="decideForm.reason" class="form-textarea" rows="2" placeholder="填写放行依据或报废/退货原因..."></textarea>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn-secondary" @click="isDecideOpen = false">取消</button>
-            <button type="submit" class="btn-primary" :disabled="submitting">确认下达处置决定</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <el-dialog
+      v-model="isDecideOpen"
+      title="做出质量处置决定"
+      width="560px"
+      destroy-on-close
+    >
+      <el-form label-width="120px" @submit.prevent="submitDecide">
+        <el-form-item label="处置动作类型" required>
+          <el-select v-model="decideForm.dispositionType" placeholder="请选择处置动作类型" style="width: 100%">
+            <el-option label="合格放行上架 (Release ➔ 移至收货暂存位)" value="Release" />
+            <el-option label="不合格报废处理 (Scrap ➔ 扣减实物库存)" value="Scrap" />
+            <el-option label="退回供应方 (Return ➔ 扣减实物库存)" value="Return" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="处置数量" required>
+          <el-input v-model="decideForm.dispositionQty" placeholder="请输入处置数量" />
+        </el-form-item>
+        <el-form-item label="处置依据与原因">
+          <el-input v-model="decideForm.reason" type="textarea" :rows="2" placeholder="填写放行依据或报废/退货原因..." />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="isDecideOpen = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitDecide">
+          确认下达处置决定
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 仓库执行实物确认对话框 -->
     <ConfirmDialog
@@ -265,6 +275,8 @@
  * 职责：质检录入、处置决定（放行/报废/退回）与仓库实物执行确认
  */
 import { ref, reactive, computed, onMounted } from "vue";
+import { Plus } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { useCommand } from "@/composables/useCommand";
 import CommandFeedback from "@/components/common/CommandFeedback.vue";
 import { useRoute, useRouter } from "vue-router";
@@ -282,6 +294,7 @@ import type {
 } from "@/types/purchasing";
 import { stringSub, type Location, type Product } from "@/types/inventory";
 import { getLocations, getProducts } from "@/api/masterData";
+import { getOperatorDirectory } from "@/api/auth";
 import {
   getQualityInspections,
   inspectQuality,
@@ -317,12 +330,12 @@ function switchQualityTab(tab: "inspections" | "dispositions") {
 const inspectionColumns: TableColumn[] = [
   { key: "inspectionNo", label: "检验编号", width: "150px" },
   { key: "purchaseOrderNo", label: "采购单号", width: "140px" },
-  { key: "productId", label: "物料 UUID", width: "220px" },
+  { key: "productName", label: "物料", minWidth: "180px" },
   { key: "inspectedQty", label: "检验总量", width: "100px", align: "right" },
   { key: "qualifiedQty", label: "合格数量", width: "100px", align: "right" },
   { key: "unqualifiedQty", label: "不合格量", width: "100px", align: "right" },
   { key: "unqualifiedReason", label: "不合格原因", minWidth: "150px" },
-  { key: "inspectedBy", label: "检验质检员", width: "110px" },
+  { key: "inspectedByName", label: "检验质检员", width: "130px" },
   { key: "actions", label: "操作", width: "120px", align: "center" },
 ];
 
@@ -332,8 +345,8 @@ const dispositionColumns: TableColumn[] = [
   { key: "dispositionType", label: "处置决定", width: "130px", align: "center" },
   { key: "dispositionQty", label: "处置数量", width: "100px", align: "right" },
   { key: "status", label: "执行状态", width: "140px", align: "center" },
-  { key: "decidedBy", label: "决定人", width: "100px" },
-  { key: "executedBy", label: "仓库执行人", width: "100px" },
+  { key: "decidedByName", label: "决定人", width: "120px" },
+  { key: "executedByName", label: "仓库执行人", width: "120px" },
   { key: "actions", label: "操作", width: "130px", align: "center" },
 ];
 
@@ -460,15 +473,34 @@ const executeDialogMessage = computed(() => {
 async function loadData() {
   loading.value = true;
   try {
-    const [resI, resD] = await Promise.all([
+    const [resI, resD, operatorResponse] = await Promise.all([
       getQualityInspections(),
       getQualityDispositions(),
+      getOperatorDirectory({ page: 1, size: 1000 }).catch(() => null),
     ]);
-    inspections.value = resI.data;
-    dispositions.value = resD.data;
+    const productMap = new Map(products.value.map((item) => [String(item.id), item]));
+    const operators = operatorResponse?.data?.records || [];
+    const operatorName = (id?: string) => {
+      const operator = operators.find((item) => String(item.id) === String(id));
+      return operator?.realName || operator?.username || id || "-";
+    };
+    inspections.value = (resI.data || []).map((inspection) => {
+      const product = productMap.get(String(inspection.productId));
+      return {
+        ...inspection,
+        sku: inspection.sku || product?.sku || String(inspection.productId),
+        productName: inspection.productName || product?.name || String(inspection.productId),
+        inspectedByName: operatorName(inspection.inspectedBy),
+      };
+    });
+    dispositions.value = (resD.data || []).map((disposition) => ({
+      ...disposition,
+      decidedByName: operatorName(disposition.decidedBy),
+      executedByName: operatorName(disposition.executedBy),
+    }));
   } catch (err: any) {
     console.error("[QualityDispositionView] 加载失败:", err);
-    alert(err?.message || "加载质检与处置记录失败");
+    ElMessage.error(err?.message || "加载质检与处置记录失败");
   } finally {
     loading.value = false;
   }
@@ -516,17 +548,17 @@ async function openInspectModal() {
       isInspectOpen.value = true;
     }
   } catch (error: any) {
-    alert(error?.message || "加载质检选项失败");
+    ElMessage.error(error?.message || "加载质检选项失败");
   }
 }
 
 async function submitInspect() {
   if (!inspectForm.purchaseReceiptId || !inspectForm.purchaseReceiptLineId || !inspectForm.productId) {
-    alert("请选择真实的“关联采购收货单”和“检验物料行”，不能使用采购订单行 ID 或随机 UUID。");
+    ElMessage.warning("请选择真实的“关联采购收货单”和“检验物料行”，不能使用采购订单行 ID 或随机 UUID。");
     return;
   }
   if (!inspectForm.inspectedQty || parseFloat(inspectForm.inspectedQty) <= 0) {
-    alert("检验数量必须来自真实收货明细且大于 0。");
+    ElMessage.warning("检验数量必须来自真实收货明细且大于 0。");
     return;
   }
   submitting.value = true;
@@ -534,10 +566,11 @@ async function submitInspect() {
     await execute(async (key) => {
       await inspectQuality(inspectForm.purchaseReceiptId, { ...inspectForm }, key);
       isInspectOpen.value = false;
+      ElMessage.success("质检事实录入成功！");
       await loadData();
     }, { onConflict: loadData });
   } catch (err: any) {
-    alert(err?.message || "提交质检失败");
+    ElMessage.error(err?.message || "提交质检失败");
   } finally {
     submitting.value = false;
   }
@@ -562,9 +595,10 @@ async function submitDecide() {
       reason: decideForm.reason,
     }, key), { onConflict: loadData });
     isDecideOpen.value = false;
+    ElMessage.success("处置决策下达成功！");
     await loadData();
   } catch (err: any) {
-    alert(err?.message || "下达处置失败");
+    ElMessage.error(err?.message || "下达处置失败");
   } finally {
     submitting.value = false;
   }
@@ -576,7 +610,6 @@ async function openExecuteConfirm(row: PurchaseQualityDisposition) {
   putawayTargetLocationId.value = "";
 
   try {
-    // 修改用途：仓库人员可从菜单直接进入处置页，不能依赖收货跳转 query 才能取得目标仓库。
     // 流程：按处置记录关联的真实采购单读取目标仓库，再刷新同仓 ReceivingStaging/Storage 库位。
     const orderResponse = await getPurchaseOrderById(String(row.purchaseOrderId));
     const order = orderResponse.data;
@@ -585,14 +618,14 @@ async function openExecuteConfirm(row: PurchaseQualityDisposition) {
       || order.lines?.find((line) => String(line.productId) === String(row.productId))?.targetWarehouseId;
     inspectionWarehouseId.value = String(targetWarehouseId || "");
     if (!inspectionWarehouseId.value) {
-      alert("未能从真实采购单取得处置目标仓库，已阻止执行。");
+      ElMessage.warning("未能从真实采购单取得处置目标仓库，已阻止执行。");
       selectedDisp.value = null;
       return;
     }
     await loadReferenceOptions();
   } catch (error: any) {
     console.error("[QualityDispositionView] 加载处置目标仓库与库位失败", error);
-    alert(error?.message || "加载处置目标仓库与库位失败");
+    ElMessage.error(error?.message || "加载处置目标仓库与库位失败");
     selectedDisp.value = null;
     return;
   }
@@ -604,19 +637,19 @@ async function executeDisposition() {
   const disposition = selectedDisp.value;
   if (disposition.dispositionType === "Release") {
     if (!inspectionWarehouseId.value || filteredReceivingStagingLocations.value.length === 0) {
-      alert("未取得处置收货的目标仓库或同仓 ReceivingStaging 库位，已阻止执行。");
+      ElMessage.warning("未取得处置收货的目标仓库或同仓 ReceivingStaging 库位，已阻止执行。");
       return;
     }
     if (!receivingStagingLocationId.value || !filteredReceivingStagingLocations.value.some(
       (location) => String(location.id) === String(receivingStagingLocationId.value),
     )) {
-      alert("请选择当前收货目标仓库下真实、启用的 ReceivingStaging 库位。");
+      ElMessage.warning("请选择当前收货目标仓库下真实、启用的 ReceivingStaging 库位。");
       return;
     }
     if (putawayTargetLocationId.value && !filteredStorageLocations.value.some(
       (location) => String(location.id) === String(putawayTargetLocationId.value),
     )) {
-      alert("上架目标必须是当前收货目标仓库下真实、启用的 Storage 库位。");
+      ElMessage.warning("上架目标必须是当前收货目标仓库下真实、启用的 Storage 库位。");
       return;
     }
   }
@@ -631,12 +664,25 @@ async function executeDisposition() {
     isExecuteOpen.value = false;
     await loadData();
     if (isRelease) {
-      if (confirm("合格品已成功转移至收货暂存位，并已生成上架任务。是否立即前往【上架任务】页面执行入库？")) {
-        router.push("/purchasing/putaway");
+      try {
+        await ElMessageBox.confirm(
+          "合格品已成功转移至收货暂存位，并已生成上架任务。是否立即前往【上架任务】页面执行入库？",
+          "处置执行成功",
+          {
+            confirmButtonText: "前往上架任务",
+            cancelButtonText: "留在此页",
+            type: "success",
+          }
+        );
+        await router.push({ name: "PurchasePutawayTask" });
+      } catch {
+        // 用户留在此页
       }
+    } else {
+      ElMessage.success("处置执行成功！");
     }
   } catch (err: any) {
-    alert(err?.message || "执行失败");
+    ElMessage.error(err?.message || "执行失败");
   } finally {
     submitting.value = false;
   }
@@ -648,8 +694,8 @@ onMounted(async () => {
   const qReceiptId = String(route.query.receiptId || "");
   const qReceiptLineId = String(route.query.receiptLineId || "");
   const qProductId = String(route.query.productId || "");
-  loadData();
   await loadReferenceOptions().catch((error) => console.error("[QualityDispositionView] 加载质检选项失败", error));
+  await loadData();
   // 处理从采购收货一键跳转过来的 query 参数 (修复 F04)
   const qOrderId = route.query.orderId as string;
   const qPoNo = route.query.poNo as string;

@@ -14,19 +14,25 @@
       @search="fetchTransactions"
       @reset="resetFilter"
     >
-      <select v-model="queryParams.transactionType" class="filter-select" @change="fetchTransactions">
-        <option value="">全部流水操作类型</option>
-        <option value="PURCHASE_RECEIPT">PURCHASE_RECEIPT (采购收货入 QH)</option>
-        <option value="QUALITY_RELEASE">QUALITY_RELEASE (质检放行移至 RS)</option>
-        <option value="QUALITY_SCRAP">QUALITY_SCRAP (质检报废扣减)</option>
-        <option value="QUALITY_RETURN">QUALITY_RETURN (采购退回供应方)</option>
-        <option value="PUTAWAY">PUTAWAY (上架存储位)</option>
-        <option value="DIRECT_PICK">DIRECT_PICK (直接拣货移至 SHP)</option>
-        <option value="PICK_RETURN">PICK_RETURN (拣货退回合法库位)</option>
-        <option value="SALES_SHIPMENT">SALES_SHIPMENT (发货扣减实物)</option>
-        <option value="TRANSFER">TRANSFER (库位调拨)</option>
-        <option value="STOCKTAKE_ADJUST">STOCKTAKE_ADJUST (差异盘点调整)</option>
-      </select>
+      <el-select
+        v-model="queryParams.transactionType"
+        placeholder="全部流水操作类型"
+        clearable
+        style="width: 280px"
+        @change="fetchTransactions"
+      >
+        <el-option label="全部流水操作类型" value="" />
+        <el-option label="PURCHASE_RECEIPT (采购收货入 QH)" value="PURCHASE_RECEIPT" />
+        <el-option label="QUALITY_RELEASE (质检放行移至 RS)" value="QUALITY_RELEASE" />
+        <el-option label="QUALITY_SCRAP (质检报废扣减)" value="QUALITY_SCRAP" />
+        <el-option label="QUALITY_RETURN (采购退回供应方)" value="QUALITY_RETURN" />
+        <el-option label="PUTAWAY (上架存储位)" value="PUTAWAY" />
+        <el-option label="DIRECT_PICK (直接拣货移至 SHP)" value="DIRECT_PICK" />
+        <el-option label="PICK_RETURN (拣货退回合法库位)" value="PICK_RETURN" />
+        <el-option label="SALES_SHIPMENT (发货扣减实物)" value="SALES_SHIPMENT" />
+        <el-option label="TRANSFER (库位调拨)" value="TRANSFER" />
+        <el-option label="STOCKTAKE_ADJUST (差异盘点调整)" value="STOCKTAKE_ADJUST" />
+      </el-select>
     </FilterBar>
 
     <!-- 四态展示 -->
@@ -69,7 +75,7 @@
       <!-- 来源单据插槽 -->
       <template #source="{ row }">
         <div class="source-cell">
-          <span class="source-no">{{ row.sourceNo || '-' }}</span>
+          <span class="source-no">{{ row.sourceNo || `${row.sourceType}: ${row.sourceId}` }}</span>
           <span v-if="row.sourceLineId" class="source-line">行: {{ row.sourceLineId }}</span>
         </div>
       </template>
@@ -93,7 +99,7 @@
       <!-- 审计人员插槽 -->
       <template #operator="{ row }">
         <div class="operator-cell">
-          <span>{{ row.operatorName || 'wh.operator' }}</span>
+          <span>{{ row.operatorName || row.operatorId || '-' }}</span>
           <span v-if="row.sessionId" class="session-tag">{{ row.sessionId }}</span>
         </div>
       </template>
@@ -115,13 +121,16 @@ import QuantityText from "@/components/common/QuantityText.vue";
 import EmptyState from "@/components/common/EmptyState.vue";
 import ErrorState from "@/components/common/ErrorState.vue";
 import type { ViewState } from "@/types/common";
-import type { InventoryTransaction } from "@/types/inventory";
+import type { InventoryTransaction, Location, Product } from "@/types/inventory";
 import { getInventoryTransactions } from "@/api/inventory";
+import { getLocations, getProducts } from "@/api/masterData";
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 const transactionList = ref<InventoryTransaction[]>([]);
 const totalCount = ref(0);
+const products = ref<Product[]>([]);
+const locations = ref<Location[]>([]);
 
 const queryParams = reactive({
   page: 1,
@@ -173,13 +182,42 @@ async function fetchTransactions() {
   errorMessage.value = "";
   try {
     const res = await getInventoryTransactions({
-      page: queryParams.page,
-      size: queryParams.size,
-      keyword: queryParams.keyword,
+      page: 1,
+      size: 1000,
       transactionType: queryParams.transactionType,
     });
-    transactionList.value = res.data.records;
-    totalCount.value = res.data.total;
+    const productMap = new Map(products.value.map((item) => [String(item.id), item]));
+    const locationMap = new Map(locations.value.map((item) => [String(item.id), item]));
+    const keyword = queryParams.keyword.trim().toLowerCase();
+    const normalized = (res.data.records || []).map((transaction) => {
+      const dimension = transaction.toDimension || transaction.fromDimension;
+      const productId = String(transaction.productId || dimension?.productId || "");
+      const product = productMap.get(productId);
+      const fromLocationId = String(transaction.fromLocationId || transaction.fromDimension?.locationId || "");
+      const toLocationId = String(transaction.toLocationId || transaction.toDimension?.locationId || "");
+      return {
+        ...transaction,
+        productId,
+        sku: transaction.sku || product?.sku || productId,
+        productName: transaction.productName || product?.name || productId,
+        uom: transaction.uom || product?.uom,
+        lotNo: transaction.lotNo || dimension?.lotNo,
+        fromLocationId,
+        fromLocationCode: transaction.fromLocationCode || locationMap.get(fromLocationId)?.code,
+        toLocationId,
+        toLocationCode: transaction.toLocationCode || locationMap.get(toLocationId)?.code,
+        qty: transaction.qty || transaction.quantity || "0",
+      };
+    }).filter((transaction) => !keyword || [
+      transaction.transactionNo,
+      transaction.sourceNo,
+      transaction.sourceId,
+      transaction.sku,
+      transaction.productName,
+    ].some((value) => String(value || "").toLowerCase().includes(keyword)));
+    totalCount.value = normalized.length;
+    const start = (queryParams.page - 1) * queryParams.size;
+    transactionList.value = normalized.slice(start, start + queryParams.size);
     viewState.value = transactionList.value.length === 0 ? "empty" : "ready";
   } catch (err: any) {
     console.error("[InventoryTransactionView] 查询失败:", err);
@@ -200,8 +238,14 @@ function resetFilter() {
   fetchTransactions();
 }
 
-onMounted(() => {
-  fetchTransactions();
+onMounted(async () => {
+  const [productResult, locationResult] = await Promise.allSettled([
+    getProducts({ page: 1, size: 1000, status: "ACTIVE" }),
+    getLocations({ page: 1, size: 1000 }),
+  ]);
+  if (productResult.status === "fulfilled") products.value = productResult.value.data.records || [];
+  if (locationResult.status === "fulfilled") locations.value = locationResult.value.data.records || [];
+  await fetchTransactions();
 });
 </script>
 

@@ -7,10 +7,9 @@
       description="维护产成品及其标准物料清单构成与损耗率。已生效工单绑定的 BOM 版本不允许物理删除。"
     >
       <template #actions>
-        <button v-if="hasPermission('mes:bom:manage')" type="button" class="btn btn-primary" @click="openCreateModal">
-          <span class="btn-icon">＋</span>
-          <span>新建物料清单</span>
-        </button>
+        <el-button v-if="hasPermission('mes:bom:manage')" type="primary" :icon="Plus" @click="openCreateModal">
+          新建物料清单
+        </el-button>
       </template>
     </PageHeader>
 
@@ -21,15 +20,17 @@
       @search="handleSearch"
       @reset="handleReset"
     >
-      <div class="filter-select-group">
-        <label class="filter-label">状态：</label>
-        <select v-model="queryParams.status" class="filter-select" @change="handleSearch">
-          <option value="">全部状态</option>
-          <option value="ACTIVE">生效中 (ACTIVE)</option>
-          <option value="DRAFT">草稿 (DRAFT)</option>
-          <option value="DISABLED">已废弃 (DISABLED)</option>
-        </select>
-      </div>
+      <el-select
+        v-model="queryParams.status"
+        placeholder="全部状态"
+        clearable
+        style="width: 180px"
+        @change="handleSearch"
+      >
+        <el-option label="生效中 (ACTIVE)" value="ACTIVE" />
+        <el-option label="草稿 (DRAFT)" value="DRAFT" />
+        <el-option label="已废弃 (DISABLED)" value="DISABLED" />
+      </el-select>
     </FilterBar>
 
     <!-- 错误异常提示 -->
@@ -85,196 +86,183 @@
 
       <!-- 操作列 -->
       <template #actions="{ row }">
-        <div class="action-btn-group">
-          <button
-            type="button"
-            class="btn-text"
+        <div style="display: flex; gap: 8px; justify-content: center">
+          <el-button
+            type="primary"
+            link
+            size="small"
             @click="openDetailDrawer(row)"
           >
             查看明细
-          </button>
-          <button
-            type="button"
-            class="btn-text text-danger"
+          </el-button>
+          <el-button
+            type="danger"
+            link
+            size="small"
             :disabled="!isActionAllowed(row, 'delete')"
             :title="getActionDisabledReason(row, 'delete') || '删除此 BOM'"
             @click="promptDelete(row)"
           >
             删除
-          </button>
+          </el-button>
         </div>
       </template>
     </DataTable>
 
     <!-- BOM 组件明细抽屉面板 -->
-    <div v-if="drawerVisible && activeBom" class="drawer-overlay" @click.self="drawerVisible = false">
-      <div class="drawer-panel">
-        <div class="drawer-header">
-          <div>
-            <span class="drawer-tag font-mono">{{ activeBom.bomCode }}</span>
-            <h3 class="drawer-title">{{ activeBom.productName }} ({{ activeBom.version }})</h3>
-          </div>
-          <button type="button" class="btn-close" @click="drawerVisible = false">✕</button>
+    <el-drawer
+      v-model="drawerVisible"
+      size="760px"
+      destroy-on-close
+    >
+      <template #header>
+        <div v-if="activeBom" style="display: flex; align-items: center; gap: 12px">
+          <span style="font-family: monospace; font-weight: bold; color: #67d2ff">{{ activeBom.bomCode }}</span>
+          <span style="font-size: 16px; font-weight: 600; color: #f1f5f9">{{ activeBom.productName }} ({{ activeBom.version }})</span>
+        </div>
+      </template>
+
+      <div v-if="activeBom" class="drawer-body">
+        <div style="margin-bottom: 12px; font-size: 14px; font-weight: 600; color: #cbd5e1">
+          构成物料项列表 (共 {{ activeBom.components?.length || 0 }} 项)
         </div>
 
-        <div class="drawer-body">
-          <div class="drawer-section-title">
-            <span>构成物料项列表 (共 {{ activeBom.components?.length || 0 }} 项)</span>
-          </div>
-
-          <table class="nested-table">
-            <thead>
-              <tr>
-                <th style="width: 50px;">#</th>
-                <th>原料组件名称 / 编码</th>
-                <th style="width: 140px; text-align: right;">标准用量</th>
-                <th style="width: 100px; text-align: right;">损耗率</th>
-                <th>备注说明</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(comp, idx) in activeBom.components" :key="comp.id || idx">
-                <td class="font-mono text-muted">{{ idx + 1 }}</td>
-                <td>
-                  <div class="component-meta">
-                    <span class="comp-name">{{ comp.componentProductName || comp.componentProductId }}</span>
-                    <span class="comp-code font-mono text-muted">{{ comp.componentProductCode || "-" }}</span>
-                  </div>
-                </td>
-                <td style="text-align: right;">
-                  <QuantityText :value="comp.componentQty" :unit="comp.uom" />
-                </td>
-                <td style="text-align: right;">
-                  <QuantityText :value="comp.scrapRate || '0.00'" unit="%" />
-                </td>
-                <td class="text-muted">{{ comp.remark || "-" }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="drawer-footer">
-          <button type="button" class="btn btn-secondary" @click="drawerVisible = false">关闭</button>
-        </div>
+        <el-table :data="activeBom.components || []" border style="width: 100%">
+          <el-table-column type="index" label="#" width="50" align="center" />
+          <el-table-column label="原料组件名称 / 编码" min-width="180">
+            <template #default="{ row }">
+              <div>
+                <div style="font-weight: 500; color: #f1f5f9">{{ row.componentProductName || row.componentProductId }}</div>
+                <div style="font-size: 12px; font-family: monospace; color: #8ca2b8">{{ row.componentProductCode || '-' }}</div>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="标准用量" width="130" align="right">
+            <template #default="{ row }">
+              <QuantityText :value="row.componentQty" :unit="row.uom" />
+            </template>
+          </el-table-column>
+          <el-table-column label="损耗率" width="100" align="right">
+            <template #default="{ row }">
+              <QuantityText :value="row.scrapRate || '0.00'" unit="%" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="remark" label="备注说明" min-width="120">
+            <template #default="{ row }">
+              <span style="color: #8ca2b8">{{ row.remark || '-' }}</span>
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
-    </div>
+
+      <template #footer>
+        <el-button @click="drawerVisible = false">关闭</el-button>
+      </template>
+    </el-drawer>
 
     <!-- 新建 BOM 模态对话框 -->
-    <div v-if="createModalVisible" class="modal-mask" @click.self="createModalVisible = false">
-      <div class="modal-card modal-large">
-        <div class="modal-header">
-          <h3 class="modal-title">新建物料清单 (BOM)</h3>
-          <button type="button" class="btn-close" @click="createModalVisible = false">✕</button>
-        </div>
+    <el-dialog
+      v-model="createModalVisible"
+      title="新建物料清单 (BOM)"
+      width="780px"
+      destroy-on-close
+      append-to-body
+    >
+      <el-form label-width="100px" @submit.prevent="submitCreateBom">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="BOM 编码" required>
+              <el-input v-model="createForm.bomCode" placeholder="例如 BOM-CTL-002" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="版本号" required>
+              <el-input v-model="createForm.version" placeholder="例如 V1.0" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="产出产品" required>
+              <el-select v-model="createForm.productId" placeholder="请选择真实产品" filterable style="width: 100%">
+                <el-option
+                  v-for="product in products"
+                  :key="product.id"
+                  :value="String(product.id)"
+                  :label="`${product.sku} (${product.name})`"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="状态" required>
+              <el-select v-model="createForm.status" style="width: 100%">
+                <el-option label="生效中 (ACTIVE，可供工单选择)" value="ACTIVE" />
+                <el-option label="草稿 (DRAFT，暂不可供工单选择)" value="DRAFT" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
 
-        <form class="modal-body" @submit.prevent="submitCreateBom">
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>BOM 编码 <span class="req">*</span></label>
-              <input
-                v-model="createForm.bomCode"
-                type="text"
-                class="form-input font-mono"
-                placeholder="例如 BOM-CTL-002"
-                required
-              />
-            </div>
-            <div class="form-item">
-              <label>版本号 <span class="req">*</span></label>
-              <input
-                v-model="createForm.version"
-                type="text"
-                class="form-input font-mono"
-                placeholder="例如 V1.0"
-                required
-              />
-            </div>
+        <!-- 动态组件清单编辑 -->
+        <div style="margin-top: 16px; border-top: 1px dashed rgba(140, 162, 184, 0.2); padding-top: 16px">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px">
+            <span style="font-weight: 600; color: #f1f5f9; font-size: 14px">BOM 原料明细项 <span style="color: #f43f5e">*</span></span>
+            <el-button type="primary" size="small" :icon="Plus" @click="addComponentRow">添加物料</el-button>
           </div>
 
-          <div class="form-item">
-            <label>产出产品 <span class="req">*</span></label>
-            <select v-model="createForm.productId" class="form-input" required>
-              <option value="">请选择真实产品</option>
-              <option v-for="product in products" :key="product.id" :value="String(product.id)">{{ product.sku }} ({{ product.name }})</option>
-            </select>
-          </div>
-
-          <div class="form-item">
-            <label>状态 <span class="req">*</span></label>
-            <select v-model="createForm.status" class="form-input" required>
-              <option value="ACTIVE">生效中 (ACTIVE，可供工单选择)</option>
-              <option value="DRAFT">草稿 (DRAFT，暂不可供工单选择)</option>
-            </select>
-          </div>
-
-          <!-- 动态组件清单编辑 -->
-          <div class="form-section">
-            <div class="section-head">
-              <label>BOM 原料明细项 <span class="req">*</span></label>
-              <button type="button" class="btn-sm btn-secondary" @click="addComponentRow">
-                ＋ 添加物料
-              </button>
-            </div>
-
-            <div class="component-form-table">
-              <div
-                v-for="(comp, idx) in createForm.components"
-                :key="idx"
-                class="component-form-row"
+          <div style="display: flex; flex-direction: column; gap: 10px">
+            <div
+              v-for="(comp, idx) in createForm.components"
+              :key="idx"
+              style="display: flex; gap: 8px; align-items: center"
+            >
+              <el-select
+                v-model="comp.componentProductId"
+                placeholder="选择真实组件产品"
+                filterable
+                style="flex: 2"
               >
-                <div class="comp-col-id">
-                  <select v-model="comp.componentProductId" class="form-input" required>
-                    <option value="">选择真实组件产品</option>
-                    <option v-for="product in products" :key="product.id" :value="String(product.id)">{{ product.sku }}</option>
-                  </select>
-                </div>
-                <div class="comp-col-qty">
-                  <input
-                    v-model="comp.componentQty"
-                    type="text"
-                    class="form-input font-mono"
-                    placeholder="数量 (如 1.00)"
-                    required
-                  />
-                </div>
-                <div class="comp-col-uom">
-                  <input
-                    v-model="comp.uom"
-                    type="text"
-                    class="form-input"
-                    placeholder="单位 (PCS)"
-                    required
-                  />
-                </div>
-                <div class="comp-col-scrap">
-                  <input
-                    v-model="comp.scrapRate"
-                    type="text"
-                    class="form-input font-mono"
-                    placeholder="损耗 (如 0.01)"
-                  />
-                </div>
-                <button
-                  type="button"
-                  class="btn-del-row"
-                  :disabled="createForm.components.length <= 1"
-                  @click="removeComponentRow(idx)"
-                >
-                  ✕
-                </button>
-              </div>
+                <el-option
+                  v-for="product in products"
+                  :key="product.id"
+                  :value="String(product.id)"
+                  :label="`${product.sku} (${product.name})`"
+                />
+              </el-select>
+              <el-input
+                v-model="comp.componentQty"
+                placeholder="数量 (如 1.00)"
+                style="flex: 1"
+              />
+              <el-input
+                v-model="comp.uom"
+                placeholder="单位 (PCS)"
+                style="width: 90px"
+              />
+              <el-input
+                v-model="comp.scrapRate"
+                placeholder="损耗 (0.01)"
+                style="width: 100px"
+              />
+              <el-button
+                type="danger"
+                :icon="Delete"
+                circle
+                size="small"
+                :disabled="createForm.components.length <= 1"
+                @click="removeComponentRow(idx)"
+              />
             </div>
           </div>
+        </div>
+      </el-form>
 
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="createModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
-              {{ isSubmitting ? "创建中..." : "保存 BOM" }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      <template #footer>
+        <el-button @click="createModalVisible = false">取消</el-button>
+        <el-button type="primary" :loading="isSubmitting" @click="submitCreateBom">
+          {{ isSubmitting ? "创建中..." : "保存 BOM" }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 删除确认对话框 -->
     <ConfirmDialog
@@ -291,6 +279,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
+import { Plus, Delete } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
 import type { AllowedAction } from "../../types/common";
 import {
@@ -471,7 +461,7 @@ async function submitCreateBom() {
     createModalVisible.value = false;
     await fetchBomList();
   } catch (err: any) {
-    alert(`创建失败：${err.message}`);
+    ElMessage.error(`创建失败：${err.message}`);
   } finally {
     isSubmitting.value = false;
   }
@@ -493,7 +483,7 @@ async function handleConfirmDelete() {
     deleteConfirm.visible = false;
     await fetchBomList();
   } catch (err: any) {
-    alert(`删除失败：${err.message}`);
+    ElMessage.error(`删除失败：${err.message}`);
   } finally {
     deleteConfirm.loading = false;
   }

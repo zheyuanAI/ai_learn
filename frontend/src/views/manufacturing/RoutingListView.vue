@@ -7,10 +7,9 @@
       description="定义产品加工工序流、作业工作中心与标准工时基准。工单审核通过时将锁定对应有效路线版本。"
     >
       <template #actions>
-        <button v-if="hasPermission('mes:routing:manage')" type="button" class="btn btn-primary" @click="openCreateModal">
-          <span class="btn-icon">＋</span>
-          <span>新建工艺路线</span>
-        </button>
+        <el-button v-if="hasPermission('mes:routing:manage')" type="primary" :icon="Plus" @click="openCreateModal">
+          新建工艺路线
+        </el-button>
       </template>
     </PageHeader>
 
@@ -21,15 +20,17 @@
       @search="handleSearch"
       @reset="handleReset"
     >
-      <div class="filter-select-group">
-        <label class="filter-label">状态：</label>
-        <select v-model="queryParams.status" class="filter-select" @change="handleSearch">
-          <option value="">全部状态</option>
-          <option value="ACTIVE">生效中 (ACTIVE)</option>
-          <option value="DRAFT">草稿 (DRAFT)</option>
-          <option value="DISABLED">已停用 (DISABLED)</option>
-        </select>
-      </div>
+      <el-select
+        v-model="queryParams.status"
+        placeholder="全部状态"
+        clearable
+        style="width: 180px"
+        @change="handleSearch"
+      >
+        <el-option label="生效中 (ACTIVE)" value="ACTIVE" />
+        <el-option label="草稿 (DRAFT)" value="DRAFT" />
+        <el-option label="已停用 (DISABLED)" value="DISABLED" />
+      </el-select>
     </FilterBar>
 
     <!-- 错误异常提示 -->
@@ -85,192 +86,174 @@
 
       <!-- 操作列 -->
       <template #actions="{ row }">
-        <div class="action-btn-group">
-          <button type="button" class="btn-text" @click="openDetailDrawer(row)">
+        <div style="display: flex; gap: 8px; justify-content: center">
+          <el-button type="primary" link size="small" @click="openDetailDrawer(row)">
             查看工序
-          </button>
-          <button
-            type="button"
-            class="btn-text text-danger"
+          </el-button>
+          <el-button
+            type="danger"
+            link
+            size="small"
             :disabled="!isActionAllowed(row, 'delete')"
             :title="getActionDisabledReason(row, 'delete') || '删除此工艺路线'"
             @click="promptDelete(row)"
           >
             删除
-          </button>
+          </el-button>
         </div>
       </template>
     </DataTable>
 
     <!-- 工艺路线工序流抽屉 -->
-    <div v-if="drawerVisible && activeRouting" class="drawer-overlay" @click.self="drawerVisible = false">
-      <div class="drawer-panel">
-        <div class="drawer-header">
-          <div>
-            <span class="drawer-tag font-mono">{{ activeRouting.routingCode }}</span>
-            <h3 class="drawer-title">{{ activeRouting.productName }} ({{ activeRouting.version }})</h3>
-          </div>
-          <button type="button" class="btn-close" @click="drawerVisible = false">✕</button>
+    <el-drawer
+      v-model="drawerVisible"
+      size="760px"
+      destroy-on-close
+    >
+      <template #header>
+        <div v-if="activeRouting" style="display: flex; align-items: center; gap: 12px">
+          <span style="font-family: monospace; font-weight: bold; color: #67d2ff">{{ activeRouting.routingCode }}</span>
+          <span style="font-size: 16px; font-weight: 600; color: #f1f5f9">{{ activeRouting.productName }} ({{ activeRouting.version }})</span>
+        </div>
+      </template>
+
+      <div v-if="activeRouting" class="drawer-body">
+        <div style="margin-bottom: 12px; font-size: 14px; font-weight: 600; color: #cbd5e1">
+          标准工序流程 (共 {{ activeRouting.operations?.length || 0 }} 道工序)
         </div>
 
-        <div class="drawer-body">
-          <div class="drawer-section-title">
-            <span>标准工序流程 (共 {{ activeRouting.operations?.length || 0 }} 道工序)</span>
-          </div>
-
-          <!-- 工序流时间轴卡片列表 -->
-          <div class="operation-timeline">
-            <div
-              v-for="op in activeRouting.operations"
-              :key="op.id || op.operationNo"
-              class="operation-step-card"
-            >
-              <div class="step-badge font-mono">{{ op.operationNo }}</div>
-              <div class="step-content">
-                <div class="step-top-row">
-                  <h4 class="step-name">{{ op.operationName }}</h4>
-                  <div class="step-workcenter">
-                    <span class="wc-tag font-mono">{{ op.workCenterName || op.workCenterId }}</span>
-                  </div>
-                </div>
-
-                <div class="step-meta-row">
-                  <span class="meta-label">标准工时：</span>
-                  <QuantityText :value="op.standardTimeMinutes || '0.00'" unit="分钟" />
-                  <span v-if="op.remark" class="step-remark text-muted">（{{ op.remark }}）</span>
-                </div>
+        <!-- 工序流卡片列表 -->
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <el-card
+            v-for="op in activeRouting.operations"
+            :key="op.id || op.operationNo"
+            shadow="never"
+            style="background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(140, 162, 184, 0.2)"
+          >
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
+              <div style="display: flex; align-items: center; gap: 10px">
+                <el-tag type="primary" size="small" style="font-family: monospace">序号 {{ op.operationNo }}</el-tag>
+                <span style="font-weight: 600; color: #f1f5f9; font-size: 15px">{{ op.operationName }}</span>
               </div>
+              <el-tag type="info" size="small">{{ op.workCenterName || op.workCenterId }}</el-tag>
             </div>
-          </div>
-        </div>
 
-        <div class="drawer-footer">
-          <button type="button" class="btn btn-secondary" @click="drawerVisible = false">关闭</button>
+            <div style="font-size: 13px; color: #8ca2b8; display: flex; align-items: center; gap: 8px">
+              <span>标准工时：</span>
+              <QuantityText :value="op.standardTimeMinutes || '0.00'" unit="分钟" />
+              <span v-if="op.remark" style="color: #64748b">（{{ op.remark }}）</span>
+            </div>
+          </el-card>
         </div>
       </div>
-    </div>
+
+      <template #footer>
+        <el-button @click="drawerVisible = false">关闭</el-button>
+      </template>
+    </el-drawer>
 
     <!-- 新建工艺路线对话框 -->
-    <div v-if="createModalVisible" class="modal-mask" @click.self="createModalVisible = false">
-      <div class="modal-card modal-large">
-        <div class="modal-header">
-          <h3 class="modal-title">新建工艺路线 (Routing)</h3>
-          <button type="button" class="btn-close" @click="createModalVisible = false">✕</button>
-        </div>
+    <el-dialog
+      v-model="createModalVisible"
+      title="新建工艺路线 (Routing)"
+      width="800px"
+      destroy-on-close
+      append-to-body
+    >
+      <el-form label-width="110px" @submit.prevent="submitCreateRouting">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="路线编码" required>
+              <el-input v-model="createForm.routingCode" placeholder="例如 ROUT-GW-STANDARD" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="版本号" required>
+              <el-input v-model="createForm.version" placeholder="例如 V1.0" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="产出产品" required>
+              <el-select v-model="createForm.productId" placeholder="请选择真实产品" filterable style="width: 100%">
+                <el-option
+                  v-for="product in products"
+                  :key="product.id"
+                  :value="String(product.id)"
+                  :label="`${product.sku} (${product.name})`"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="状态" required>
+              <el-select v-model="createForm.status" style="width: 100%">
+                <el-option label="生效中 (ACTIVE，可供工单选择)" value="ACTIVE" />
+                <el-option label="草稿 (DRAFT，暂不可供工单选择)" value="DRAFT" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
 
-        <form class="modal-body" @submit.prevent="submitCreateRouting">
-          <div class="form-grid two-col">
-            <div class="form-item">
-              <label>工艺路线编码 <span class="req">*</span></label>
-              <input
-                v-model="createForm.routingCode"
-                type="text"
-                class="form-input font-mono"
-                placeholder="例如 ROUT-GW-STANDARD"
-                required
+        <!-- 动态工序行 -->
+        <div style="margin-top: 16px; border-top: 1px dashed rgba(140, 162, 184, 0.2); padding-top: 16px">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px">
+            <span style="font-weight: 600; color: #f1f5f9; font-size: 14px">工序步骤定义 <span style="color: #f43f5e">*</span></span>
+            <el-button type="primary" size="small" :icon="Plus" @click="addOperationRow">添加工序</el-button>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px">
+            <div
+              v-for="(op, idx) in createForm.operations"
+              :key="idx"
+              style="display: flex; gap: 8px; align-items: center"
+            >
+              <el-input
+                v-model.number="op.operationNo"
+                type="number"
+                step="10"
+                placeholder="序号"
+                style="width: 80px"
               />
-            </div>
-            <div class="form-item">
-              <label>版本号 <span class="req">*</span></label>
-              <input
-                v-model="createForm.version"
-                type="text"
-                class="form-input font-mono"
-                placeholder="例如 V1.0"
-                required
+              <el-input
+                v-model="op.operationName"
+                placeholder="工序名称 (如 主板贴片)"
+                style="flex: 2"
               />
-            </div>
-          </div>
-
-          <div class="form-item">
-            <label>产出产品 <span class="req">*</span></label>
-            <select v-model="createForm.productId" class="form-input" required>
-              <option value="">请选择真实产品</option>
-              <option v-for="product in products" :key="product.id" :value="String(product.id)">{{ product.sku }} ({{ product.name }})</option>
-            </select>
-          </div>
-
-          <div class="form-item">
-            <label>状态 <span class="req">*</span></label>
-            <select v-model="createForm.status" class="form-input" required>
-              <option value="ACTIVE">生效中 (ACTIVE，可供工单选择)</option>
-              <option value="DRAFT">草稿 (DRAFT，暂不可供工单选择)</option>
-            </select>
-          </div>
-
-          <!-- 动态工序行 -->
-          <div class="form-section">
-            <div class="section-head">
-              <label>工序步骤定义 <span class="req">*</span></label>
-              <button type="button" class="btn-sm btn-secondary" @click="addOperationRow">
-                ＋ 添加工序
-              </button>
-            </div>
-
-            <div class="op-form-list">
-              <div
-                v-for="(op, idx) in createForm.operations"
-                :key="idx"
-                class="op-form-row"
+              <el-select
+                v-model="op.workCenterId"
+                placeholder="工作中心"
+                style="flex: 2"
               >
-                <div class="op-col-no">
-                  <input
-                    v-model.number="op.operationNo"
-                    type="number"
-                    step="10"
-                    class="form-input font-mono"
-                    placeholder="序号"
-                    required
-                  />
-                </div>
-                <div class="op-col-name">
-                  <input
-                    v-model="op.operationName"
-                    type="text"
-                    class="form-input"
-                    placeholder="工序名称 (如 主板贴片)"
-                    required
-                  />
-                </div>
-                <div class="op-col-wc">
-                  <select
-                    v-model="op.workCenterId"
-                    class="form-input"
-                    required
-                  >
-                    <option :value="MANUAL_WORK_CENTER_ID">人工工位（无需专用设备）</option>
-                  </select>
-                  <small class="form-hint">一期人工工序使用系统内置人工工位，不要求绑定专用设备。</small>
-                </div>
-                <div class="op-col-time">
-                  <input
-                    v-model="op.standardTimeMinutes"
-                    type="text"
-                    class="form-input font-mono"
-                    placeholder="标准工时(分)"
-                  />
-                </div>
-                <button
-                  type="button"
-                  class="btn-del-row"
-                  :disabled="createForm.operations.length <= 1"
-                  @click="removeOperationRow(idx)"
-                >
-                  ✕
-                </button>
-              </div>
+                <el-option :value="MANUAL_WORK_CENTER_ID" label="人工工位（无需专用设备）" />
+              </el-select>
+              <el-input
+                v-model="op.standardTimeMinutes"
+                placeholder="标准工时(分)"
+                style="width: 110px"
+              />
+              <el-button
+                type="danger"
+                :icon="Delete"
+                circle
+                size="small"
+                :disabled="createForm.operations.length <= 1"
+                @click="removeOperationRow(idx)"
+              />
             </div>
           </div>
-
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="createModalVisible = false">取消</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
-              {{ isSubmitting ? "创建中..." : "保存工艺路线" }}
-            </button>
+          <div style="margin-top: 6px; font-size: 12px; color: #8ca2b8">
+            一期人工工序使用系统内置人工工位，不要求绑定专用设备。
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="createModalVisible = false">取消</el-button>
+        <el-button type="primary" :loading="isSubmitting" @click="submitCreateRouting">
+          {{ isSubmitting ? "创建中..." : "保存工艺路线" }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 删除确认对话框 -->
     <ConfirmDialog
@@ -287,6 +270,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
+import { Plus, Delete } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
 import type { AllowedAction } from "../../types/common";
 import {
@@ -442,7 +427,7 @@ async function submitCreateRouting() {
     createModalVisible.value = false;
     await fetchRoutingList();
   } catch (err: any) {
-    alert(`创建失败：${err.message}`);
+    ElMessage.error(`创建失败：${err.message}`);
   } finally {
     isSubmitting.value = false;
   }
@@ -461,7 +446,7 @@ async function handleConfirmDelete() {
     deleteConfirm.visible = false;
     await fetchRoutingList();
   } catch (err: any) {
-    alert(`删除失败：${err.message}`);
+    ElMessage.error(`删除失败：${err.message}`);
   } finally {
     deleteConfirm.loading = false;
   }

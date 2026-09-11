@@ -265,4 +265,33 @@ class AuthMigrationScriptTest {
         }
     }
 
+    /**
+     * 校验 V14 补齐 IoT 模型/遥测菜单，并只为生产质检角色追加销售订单读取权限。
+     * 入参：无；出参：无；流程：读取迁移资源，确认菜单、角色范围、只读权限和幂等插入。
+     *
+     * @throws IOException 读取 V14 迁移资源失败时抛出
+     */
+    @Test
+    @DisplayName("V14 必须补齐 IoT 导航和工单来源销售行只读权限")
+    void shouldCompleteIotNavigationAndWorkOrderSourcePermissionInV14() throws IOException {
+        try (InputStream input = getClass().getResourceAsStream(
+                "/db/migration/auth/V14__complete_iot_navigation_and_work_order_source_permission.sql")) {
+            assertNotNull(input, "V14 迁移脚本必须存在");
+            String sql = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+
+            for (String menuCode : List.of("iot_profile", "iot_telemetry")) {
+                assertTrue(sql.contains("'" + menuCode + "'"), "V14 缺少 IoT 菜单: " + menuCode);
+            }
+            assertTrue(sql.contains("'/iot/profiles'") && sql.contains("'/iot/telemetry'"),
+                    "V14 必须使用前端已实现的 IoT 路由");
+            assertTrue(sql.contains("r.role_code IN ('tenant.admin', 'iot.engineer')"),
+                    "V14 必须向租户管理员和 IoT 工程师授权新菜单");
+            assertTrue(sql.contains("p.permission_code = 'sales:order:view'"),
+                    "V14 必须追加销售订单只读权限");
+            assertTrue(sql.contains("r.role_code = 'mes.inspector'"),
+                    "V14 的销售订单只读权限只能授予生产质检角色");
+            assertTrue(sql.contains("ON CONFLICT DO NOTHING"), "V14 关系插入必须保持幂等");
+        }
+    }
+
 }

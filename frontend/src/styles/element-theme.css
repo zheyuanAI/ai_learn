@@ -1,0 +1,235 @@
+/**
+ * Element Plus 暗色工业风主题覆盖
+ * 将 Element Plus 默认主题适配为项目现有的深蓝色工业风格
+ * 颜色基线来自 src/styles.css 的 :root 变量
+ */
+
+/* ================================================================
+   基础色彩覆盖 — 融入工业暗色风格
+   ================================================================ */
+:root {
+  /* 主色调：项目青色高亮 */
+  --el-color-primary: #67d2ff;
+  --el-color-primary-light-3: #8bddff;
+  --el-color-primary-light-5: #a9e5ff;
+  --el-color-primary-light-7: #c8eeff;
+  --el-color-primary-light-8: #d9f3ff;
+  --el-color-primary-light-9: #eaf8ff;
+  --el-color-primary-dark-2: #4fb8e6;
+
+  /* 成功色：项目绿色 */
+  --el-color-success: #6fe1a6;
+  --el-color-success-light-3: #93e9bd;
+  --el-color-success-light-5: #b1f0d0;
+  --el-color-success-light-7: #cff6e3;
+  --el-color-success-light-8: #ddf9ec;
+  --el-color-success-light-9: #ecfcf4;
+  --el-color-success-dark-2: #5cca92;
+
+  /* 警告色：项目暖橙色 */
+  --el-color-warning: #ffb25e;
+  --el-color-warning-light-3: #ffc582;
+  --el-color-warning-light-5: #ffd5a3;
+  --el-color-warning-light-7: #ffe4c3;
+  --el-color-warning-light-8: #ffecd4;
+  --el-color-warning-light-9: #fff4e4;
+  --el-color-warning-dark-2: #e69e4f;
+
+  /* 危险色：项目红色 */
+  --el-color-danger: #ff7d7d;
+  --el-color-danger-light-3: #ff9d9d;
+  --el-color-danger-light-5: #ffb8b8;
+  --el-color-danger-light-7: #ffd3d3;
+  --el-color-danger-light-8: #ffe0e0;
+  --el-color-danger-light-9: #ffeded;
+  --el-color-danger-dark-2: #e66b6b;
+
+  /* 信息色 */
+  --el-color-info: #8ca2b8;
+  --el-color-info-light-3: #a8b8c9;
+  --el-color-info-light-5: #c0cdd8;
+  --el-color-info-light-7: #d8e1e8;
+  --el-color-info-light-8: #e3e9ef;
+  --el-color-info-light-9: #eef2f6;
+  --el-color-info-dark-2: #7a90a6;
+}
+
+/* ================================================================
+   暗色模式覆盖 — 通过 html.dark 类名激活
+   ================================================================ */
+html.dark,
+html:not(.light) {
+  /* 背景色体系 */
+  --el-bg-color-page: #08111a;
+  --el-bg-color: #0e1723;
+  --el-bg-color-overlay: rgba(10, 18, 28, 0.95);
+
+  /* 文字色体系 */
+  --el-text-color-primary: #ebf3fb;
+  --el-text-color-regular: #d5e3ef;
+  --el-text-color-secondary: #8ca2b8;
+  --el-text-color-placeholder: rgba(140, 162, 184, 0.6);
+  --el-text-color-disabled: rgba(140, 162, 184, 0.35);
+
+  /* 边框色体系 */
+  --el-border-color: rgba(124, 162, 194, 0.18);
+  --el-border-color-light: rgba(124, 162, 194, 0.12);
+  --el-border-color-lighter: rgba(124, 162, 194, 0.08);
+  --el-border-color-extra-light: rgba(124, 162, 194, 0.05);
+  --el-border-color-dark: rgba(124, 162, 194, 0.28);
+  --el-border-color-darker: rgba(124, 162, 194, 0.35);
+
+  /* 填充色 — 用于输入框、表格行、下拉面板等背景 */
+  --el-fill-color: rgba(30, 41, 59, 0.8);
+  --el-fill-color-light: rgba(30, 41, 59, 0.5);
+  --el-fill-color-lighter: rgba(30, 41, 59, 0.3);
+  --el-fill-color-extra-light: rgba(30, 41, 59, 0.15);
+  --el-fill-color-blank: #0e1723;
+  --el-fill-color-dark: rgba(30, 41, 59, 0.95);
+
+  /* 遮罩与阴影 */
+  --el-mask-color: rgba(8, 17, 26, 0.75);
+  --el-mask-color-extra-light: rgba(8, 17, 26, 0.35);
+  --el-box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --el-box-shadow-light: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --el-box-shadow-lighter: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --el-box-shadow-dark: 0 18px 60px rgba(0, 0, 0, 0.55);
+
+  /* 圆角与字体 */
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 4px;
+  --el-border-radius-round: 20px;
+  --el-border-radius-circle: 100%;
+  --el-font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+  --el-font-size-base: 13px;
+  --el-font-size-small: 12px;
+  --el-font-size-extra-small: 11px;
+}
+
+/* ================================================================
+   组件级精细调整 — 适配工业暗色视觉
+   ================================================================ */
+
+/* 表格：半透明行间色、悬浮高亮 */
+.el-table {
+  --el-table-bg-color: transparent;
+  --el-table-header-bg-color: rgba(15, 23, 42, 0.75);
+  --el-table-tr-bg-color: transparent;
+  --el-table-row-hover-bg-color: rgba(103, 210, 255, 0.06);
+  --el-table-border-color: rgba(124, 162, 194, 0.12);
+  --el-table-header-text-color: #8ca2b8;
+  --el-table-text-color: #d5e3ef;
+  --el-table-current-row-bg-color: rgba(103, 210, 255, 0.1);
+}
+
+.el-table th.el-table__cell {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+/* 对话框/弹窗 */
+.el-dialog {
+  --el-dialog-bg-color: #0e1723;
+  --el-dialog-title-font-size: 16px;
+  border: 1px solid rgba(124, 162, 194, 0.18);
+  border-radius: 12px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(18px);
+}
+
+.el-dialog__header {
+  border-bottom: 1px solid rgba(124, 162, 194, 0.12);
+  padding: 16px 20px;
+}
+
+.el-dialog__body {
+  padding: 20px;
+}
+
+.el-dialog__footer {
+  border-top: 1px solid rgba(124, 162, 194, 0.12);
+  padding: 12px 20px;
+}
+
+/* 表单输入框 */
+.el-input__wrapper {
+  background-color: rgba(30, 41, 59, 0.8) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset !important;
+}
+
+.el-input__wrapper:hover {
+  box-shadow: 0 0 0 1px rgba(103, 210, 255, 0.35) inset !important;
+}
+
+.el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px var(--el-color-primary) inset !important;
+}
+
+.el-input__inner {
+  color: #f8fafc;
+}
+
+/* 选择器 */
+.el-select__wrapper {
+  background-color: rgba(30, 41, 59, 0.8) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset !important;
+}
+
+/* 按钮微光效果 */
+.el-button--primary {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.el-button--primary:hover {
+  box-shadow: 0 0 16px rgba(103, 210, 255, 0.25);
+}
+
+/* 标签与分页 */
+.el-tag {
+  border-radius: 6px;
+}
+
+.el-pagination {
+  --el-pagination-bg-color: transparent;
+  --el-pagination-hover-color: var(--el-color-primary);
+}
+
+.el-pagination .btn-prev,
+.el-pagination .btn-next,
+.el-pagination .el-pager li {
+  background-color: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #8ca2b8;
+}
+
+.el-pagination .el-pager li.is-active {
+  background-color: rgba(103, 210, 255, 0.15);
+  border-color: rgba(103, 210, 255, 0.4);
+  color: var(--el-color-primary);
+}
+
+/* 下拉菜单 & 抽屉 */
+.el-drawer,
+.el-dropdown-menu,
+.el-select-dropdown {
+  background-color: #0e1723 !important;
+  border: 1px solid rgba(124, 162, 194, 0.18) !important;
+}
+
+.el-select-dropdown__item.is-hovering {
+  background-color: rgba(103, 210, 255, 0.08) !important;
+}
+
+.el-card {
+  --el-card-bg-color: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(12px);
+}

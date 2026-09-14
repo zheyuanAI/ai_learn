@@ -233,3 +233,117 @@ html:not(.light) {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   backdrop-filter: blur(12px);
 }
+
+/* ================================================================
+   消息提示 (ElMessage) 全局工业暗色/黑曜石科技拟态覆盖
+   统一全局固定定位在右上角（Top-Right），高阶晶体半透明拟态，美观且不遮挡居中主视区
+   ================================================================ */
+.el-message {
+  left: auto !important;
+  right: 24px !important;
+  transform: none !important;
+  min-width: 320px;
+  max-width: 480px;
+  padding: 14px 22px !important;
+  border-radius: 12px !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.75), 0 0 1px rgba(255, 255, 255, 0.15) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), top 0.3s ease, right 0.3s ease !important;
+}
+
+/* 进场与离场动画：从右侧优雅平移滑入滑出 */
+.el-message-fade-enter-from,
+.el-message-fade-leave-to {
+  opacity: 0 !important;
+  transform: translateX(40px) !important;
+}
+
+/* 成功状态：深翠绿晶体半透明拟态（与原右下角 toast 相同黑曜石微光配色） */
+.el-message--success {
+  background: rgba(6, 78, 59, 0.92) !important;
+  border: 1px solid #10b981 !important;
+}
+.el-message--success .el-message__content {
+  color: #a7f3d0 !important;
+}
+.el-message--success .el-message__icon {
+  color: #34d399 !important;
+}
+
+/* 错误/危险状态：深红晶体半透明拟态 */
+.el-message--error {
+  background: rgba(127, 29, 29, 0.92) !important;
+  border: 1px solid #ef4444 !important;
+}
+.el-message--error .el-message__content {
+  color: #fecaca !important;
+}
+.el-message--error .el-message__icon {
+  color: #f87171 !important;
+}
+
+/* 警告状态：琥珀晶体半透明拟态 */
+.el-message--warning {
+  background: rgba(120, 53, 15, 0.92) !important;
+  border: 1px solid #f59e0b !important;
+}
+.el-message--warning .el-message__content {
+  color: #fde68a !important;
+}
+.el-message--warning .el-message__icon {
+  color: #fbbf24 !important;
+}
+
+/* 信息状态：深蓝黑晶体拟态 */
+.el-message--info {
+  background: rgba(15, 23, 42, 0.92) !important;
+  border: 1px solid rgba(103, 210, 255, 0.4) !important;
+}
+.el-message--info .el-message__content {
+  color: #c9e8fa !important;
+}
+.el-message--info .el-message__icon {
+  color: #67d2ff !important;
+}
+
+/* ================================================================
+   全局通知 (ElNotification) 工业暗色/黑曜石科技拟态覆盖
+   ================================================================ */
+.el-notification {
+  background: rgba(15, 23, 42, 0.94) !important;
+  border: 1px solid rgba(124, 162, 194, 0.25) !important;
+  border-radius: 12px !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.75) !important;
+  padding: 16px 22px !important;
+}
+.el-notification__title {
+  color: #f8fafc !important;
+  font-weight: 700 !important;
+}
+.el-notification__content {
+  color: #cbd5e1 !important;
+}
+.el-notification.success,
+.el-notification--success {
+  background: rgba(6, 78, 59, 0.94) !important;
+  border-color: #10b981 !important;
+}
+.el-notification.success .el-notification__title,
+.el-notification--success .el-notification__title {
+  color: #a7f3d0 !important;
+}
+.el-notification.error,
+.el-notification--error {
+  background: rgba(127, 29, 29, 0.94) !important;
+  border-color: #ef4444 !important;
+}
+.el-notification.warning,
+.el-notification--warning {
+  background: rgba(120, 53, 15, 0.94) !important;
+  border-color: #f59e0b !important;
+}

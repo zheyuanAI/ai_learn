@@ -132,26 +132,14 @@ const routes: RouteRecordRaw[] = [
       {
         path: "ai",
         name: "Ai",
-        component: DomainView,
-        props: {
-          title: "智能只读助手",
-          summary: "通过受权限约束的只读工具查询库存、订单、工单、告警与追溯信息，并展示来源与调用审计。",
-          specPath: "docs/specs/50-ai-assistant",
-          prototypePath: "docs/prototype/pages/ai-assistant.html / tool-audit.html",
-        },
-        meta: { requiresAuth: true, title: "智能只读助手" },
+        component: () => import("../views/ai/AiChatView.vue"),
+        meta: { requiresAuth: true, requiredPermission: "ai:chat:query", title: "智能只读助手" },
       },
       {
         path: "ai/chat",
         name: "AiChat",
-        component: DomainView,
-        props: {
-          title: "智能对话查询",
-          summary: "当前入口承载智能只读助手的对话能力说明，具体工具调用仍以权限约束和审计记录为准。",
-          specPath: "docs/specs/50-ai-assistant",
-          prototypePath: "docs/prototype/pages/ai-assistant.html",
-        },
-        meta: { requiresAuth: true, title: "智能对话查询" },
+        component: () => import("../views/ai/AiChatView.vue"),
+        meta: { requiresAuth: true, requiredPermission: "ai:chat:query", title: "智能对话查询" },
       },
       {
         path: "ai/trace",

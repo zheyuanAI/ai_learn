@@ -1,7 +1,7 @@
 /**
  * AI 智能助手高保真交互控制台 (ai-assistant.js)
  * 严格执行已冻结业务规则：
- * 1. 采用 Grok-4.6 / PokeAPI Responses API 协议；
+ * 1. 采用 WMS SSE / Open WebUI Agent 流式协议；
  * 2. 仅调用注册的受控只读工具，禁止直连数据库或执行 SQL；
  * 3. 严格拦截写操作请求，不修改任何业务数据；
  * 4. 每次回答必须呈现来源模块、统计时间范围、调用的工具摘要、request_id 与模型版本；
@@ -16,7 +16,7 @@ const presetConversations = {
       { name: "queryDeviceAlarm", params: { deviceId: "DEV-C12" }, latency: "322ms" }
     ],
     requestId: "req-ai-20260826-0182",
-    model: "grok-4.6",
+    model: "deepseek-ai/DeepSeek-V4-Flash",
     timeRange: "2026-08-26 00:00 至 16:30",
     sources: ["平台核心服务 (platform-core)", "设备数据服务 (platform-iot)"],
     answer: `已为您完成销售订单 **SO-20260826-018** 的黄金闭环跨域事实追溯：
@@ -47,7 +47,7 @@ const presetConversations = {
       { name: "queryWorkOrderProgress", params: { workOrderId: "WO-20260826-018" }, latency: "310ms" }
     ],
     requestId: "req-ai-20260826-0185",
-    model: "grok-4.6",
+    model: "deepseek-ai/DeepSeek-V4-Flash",
     timeRange: "2026-08-26 16:00 至 16:30",
     sources: ["设备数据服务 (platform-iot)", "制造服务 (platform-core)"],
     answer: `根据 IoT 遥测与生产上下文查询结果：
@@ -63,7 +63,7 @@ const presetConversations = {
       { name: "generateDailyOperationReport", params: { date: "2026-08-26", shift: "day" }, latency: "980ms" }
     ],
     requestId: "req-ai-20260826-0188",
-    model: "grok-4.6",
+    model: "deepseek-ai/DeepSeek-V4-Flash",
     timeRange: "2026-08-26 08:00 至 16:30",
     sources: ["平台全域只读应用服务 (platform-core / platform-iot)"],
     answer: `### 制造与仓储协同平台 · 今日经营简报 (白班)
@@ -83,7 +83,7 @@ const presetConversations = {
     user: "请帮我把采购订单 PO-20260826-001 审核通过，并将库存直接增加 50 件。",
     toolCalls: [],
     requestId: "req-ai-20260826-0199",
-    model: "grok-4.6",
+    model: "deepseek-ai/DeepSeek-V4-Flash",
     timeRange: "即时拦截",
     sources: ["安全防写策略网关 (Guardrail)"],
     answer: `🛡️ **【写操作拦截提示】**
@@ -228,7 +228,7 @@ function renderAiChat() {
         <div style="font-size:32px;">🤖</div>
         <strong style="color:var(--c-ink);font-size:14px;">我是制造与仓储协同 AI 助手</strong>
         <p style="font-size:12px;max-width:480px;margin:0 auto;line-height:1.6;">
-          我已接入 Grok-4.6 与平台受控只读工具，可为您提供库存、订单、工单、设备告警与黄金闭环追溯的智能解释。
+          我已接入 DeepSeek Flash 与平台受控只读工具，可为您提供库存、订单、工单、设备告警与黄金闭环追溯的流式智能解释。
         </p>
       </div>
     `;
@@ -331,7 +331,7 @@ function handleAiChatSubmit(event) {
       content: `🛡️ **【写操作拒绝提示】**\n\nAI 助手一期为受控只读模式，严格禁止执行数据变更指令。请在对应的业务操作控制台由授权人员完成处理。`,
       toolCalls: [],
       requestId: `req-ai-${Date.now().toString().slice(-6)}`,
-      model: "grok-4.6",
+      model: "deepseek-ai/DeepSeek-V4-Flash",
       timeRange: "即时拦截",
       sources: ["防写安全策略网关 (Guardrail)"],
       isBlocked: true,
@@ -345,7 +345,7 @@ function handleAiChatSubmit(event) {
         { name: "queryInventoryByProductAndWarehouse", params: { sku: "FG-SERVO-01" }, latency: "380ms" }
       ],
       requestId: `req-ai-${Date.now().toString().slice(-6)}`,
-      model: "grok-4.6",
+      model: "deepseek-ai/DeepSeek-V4-Flash",
       timeRange: "2026-08-26 00:00 - 16:30",
       sources: ["平台核心服务 (platform-core)"],
       isBlocked: false,

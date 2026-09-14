@@ -17,10 +17,10 @@
         <div class="console-title-block">
           <div class="console-title-meta">
             <span class="console-module-code">AI / INTELLIGENT ASSISTANT / READ-ONLY</span>
-            <span class="console-live-mark"><i aria-hidden="true"></i> Grok-4.6 受控查询</span>
+            <span class="console-live-mark"><i aria-hidden="true"></i> Open WebUI + DeepSeek V4 Flash 流式受控查询</span>
           </div>
           <h1>AI 智能助手</h1>
-          <p>基于 Grok-4.6 / PokeAPI 的受控只读业务查询与解释，严格禁止直连数据库、禁止生成/执行 SQL、禁止写操作，回答必须附带来源与时间范围。</p>
+          <p>基于 Open WebUI、硅基流动 DeepSeek V4 Flash 和 WMS 受控工具的流式只读查询与解释，严格禁止直连数据库、生成/执行 SQL、写操作和页面跳转，回答必须附带来源与时间范围。</p>
         </div>
 
         <div style="display:flex;gap:8px;">
@@ -41,15 +41,15 @@
           <button type="button" data-prompt="report" aria-pressed="false">📊 生成今日经营日报</button>
           <button type="button" data-prompt="write_block" aria-pressed="false">🛡️ 尝试修改库存(写拦截)</button>
         </div>
-        <p><strong>协议规范</strong> · PokeAPI Responses API · 只读工具受控注册</p>
+        <p><strong>协议规范</strong> · WMS SSE / Open WebUI Agent · 只读工具受控注册</p>
       </section>
 
       <section class="console-layout" style="grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);" aria-label="AI 对话工作台">
         <!-- 聊天主窗口 -->
         <div class="console-panel-box" style="display:flex;flex-direction:column;height:680px;">
           <div style="padding:14px 18px;border-bottom:1px solid var(--c-line);display:flex;justify-content:space-between;align-items:center;">
-            <strong style="font-size:13px;">Grok-4.6 工业智能问答会话 (Session: sess_ai_20260826_01)</strong>
-            <span class="console-badge purple">模型: grok-4.6 / PokeAPI</span>
+            <strong style="font-size:13px;">DeepSeek Flash 工业智能问答会话 (Session: sess_ai_20260826_01)</strong>
+            <span class="console-badge purple">模型: deepseek-ai/DeepSeek-V4-Flash</span>
           </div>
 
           <div id="aiChatThread" style="flex:1;overflow-y:auto;padding:18px;display:grid;gap:14px;scrollbar-color:rgba(187,134,252,0.25) transparent;">

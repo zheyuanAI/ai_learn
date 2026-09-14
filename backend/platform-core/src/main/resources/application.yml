@@ -60,3 +60,26 @@ core:
 
 platform:
   default-time-zone: ${PLATFORM_DEFAULT_TIME_ZONE:Asia/Shanghai}
+  ai:
+    # AI 默认关闭；只有部署环境显式启用并注入本机 Open WebUI API Key 时才可用。
+    enabled: ${WMS_AI_ENABLED:false}
+    # 当前默认由 Open WebUI 编排；deepseek 直连仅作为显式配置的故障诊断回退。
+    provider: ${WMS_AI_PROVIDER:open-webui}
+    base-url: ${WMS_AI_BASE_URL:https://api.deepseek.com}
+    model: ${WMS_AI_MODEL:deepseek-v4-flash}
+    api-key: ${WMS_AI_API_KEY:}
+    connect-timeout: ${WMS_AI_CONNECT_TIMEOUT:5s}
+    stream-timeout: ${WMS_AI_STREAM_TIMEOUT:60s}
+    tool-timeout: ${WMS_AI_TOOL_TIMEOUT:10s}
+    max-tool-rounds: ${WMS_AI_MAX_TOOL_ROUNDS:4}
+    max-tool-calls: ${WMS_AI_MAX_TOOL_CALLS:8}
+    # 配置只能在代码已注册的只读工具中选择启用子集，未知工具会使应用启动失败。
+    enabled-tools: ${WMS_AI_ENABLED_TOOLS:queryTrace,queryOperationAudit,querySalesOrderStatus,queryPurchaseOrderStatus,queryInventoryByProductAndWarehouse,queryWorkOrderProgress,queryQualityStatistics,queryDeviceAlarm,queryLowStock,generateDailyOperationReport}
+    open-webui-base-url: ${WMS_OPENWEBUI_BASE_URL:http://127.0.0.1:3000}
+    open-webui-api-key: ${WMS_OPENWEBUI_API_KEY:}
+    open-webui-model: ${WMS_OPENWEBUI_MODEL:wms-assistant}
+    # OpenAPI Tool Server 在 Open WebUI 中的连接 ID；只允许指向管理员预先注册的 WMS 工具集合。
+    open-webui-tool-server-id: ${WMS_OPENWEBUI_TOOL_SERVER_ID:server:wms}
+    # Open WebUI 调用 /internal/ai/tools/** 时使用的独立服务间密钥，不得复用用户 JWT。
+    tool-service-secret: ${WMS_AI_TOOL_SERVICE_SECRET:}
+    invocation-context-ttl: ${WMS_AI_INVOCATION_CONTEXT_TTL:10m}

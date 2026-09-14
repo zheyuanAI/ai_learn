@@ -3,6 +3,8 @@ package com.ailearn.platform.core.sales.application;
 import com.ailearn.platform.core.masterdata.domain.entity.Customer;
 import com.ailearn.platform.core.masterdata.domain.entity.Product;
 import com.ailearn.platform.core.masterdata.domain.port.MasterDataRepository;
+import com.ailearn.platform.core.operationaudit.application.OperationAuditCommand;
+import com.ailearn.platform.core.operationaudit.application.OperationAuditRecorder;
 import com.ailearn.platform.core.sales.domain.SalesOrder;
 import com.ailearn.platform.core.sales.domain.SalesOrderLine;
 import com.ailearn.platform.core.sales.domain.SalesOrderPage;
@@ -58,6 +60,7 @@ public class SalesOrderApplicationServiceImpl implements SalesOrderApplicationSe
     private final MasterDataRepository<Product> productRepository;
     private final SalesOrderIdempotencyExecutor idempotencyExecutor;
     private final ObjectMapper objectMapper;
+    private final OperationAuditRecorder operationAuditRecorder;
 
     /**
      * 提供纯单元测试使用的内存幂等构造器。
@@ -71,7 +74,24 @@ public class SalesOrderApplicationServiceImpl implements SalesOrderApplicationSe
                                             MasterDataRepository<Product> productRepository) {
         this(repository, customerRepository, productRepository,
                 new com.ailearn.platform.shared.idempotency.InMemoryIdempotencyStorage(),
-                new ObjectMapper().registerModule(new JavaTimeModule()));
+                new ObjectMapper().registerModule(new JavaTimeModule()), OperationAuditRecorder.NO_OP);
+    }
+
+    /**
+     * 提供可验证操作审计的纯单元测试构造器。
+     *
+     * @param repository 销售订单持久化端口
+     * @param customerRepository 客户主数据端口
+     * @param productRepository 产品主数据端口
+     * @param operationAuditRecorder 操作审计记录端口
+     */
+    public SalesOrderApplicationServiceImpl(SalesOrderRepository repository,
+                                            MasterDataRepository<Customer> customerRepository,
+                                            MasterDataRepository<Product> productRepository,
+                                            OperationAuditRecorder operationAuditRecorder) {
+        this(repository, customerRepository, productRepository,
+                new com.ailearn.platform.shared.idempotency.InMemoryIdempotencyStorage(),
+                new ObjectMapper().registerModule(new JavaTimeModule()), operationAuditRecorder);
     }
 
     /**
@@ -82,17 +102,20 @@ public class SalesOrderApplicationServiceImpl implements SalesOrderApplicationSe
      * @param productRepository 产品主数据端口
      * @param storage Core 幂等存储
      * @param objectMapper 结果序列化器
+     * @param operationAuditRecorder Core 结构化业务操作审计端口
      */
     @Autowired
     public SalesOrderApplicationServiceImpl(SalesOrderRepository repository,
                                             MasterDataRepository<Customer> customerRepository,
                                             MasterDataRepository<Product> productRepository,
-                                            IdempotencyStorage storage, ObjectMapper objectMapper) {
+                                            IdempotencyStorage storage, ObjectMapper objectMapper,
+                                            OperationAuditRecorder operationAuditRecorder) {
         this.repository = repository;
         this.customerRepository = customerRepository;
         this.productRepository = productRepository;
         this.objectMapper = objectMapper;
         this.idempotencyExecutor = new SalesOrderIdempotencyExecutor(storage, objectMapper);
+        this.operationAuditRecorder = operationAuditRecorder;
     }
 
     /**
@@ -140,7 +163,13 @@ public class SalesOrderApplicationServiceImpl implements SalesOrderApplicationSe
         validateSaveRequest(request, true);
         return idempotencyExecutor.execute("sales:order:create", actor.tenantId(), idempotencyKey,
                 digest("create", request), SalesOrderView.class,
-                () -> toView(repository.insert(buildNewOrder(request, actor))));
+                () -> {
+                    SalesOrder inserted = repository.insert(buildNewOrder(request, actor));
+                    SalesOrderView view = toView(inserted);
+                    recordSuccess(actor, "sales:order:create", view, null, view.getStatus(),
+                            "创建销售订单", "customerId,plannedShipDate,remark,lines", idempotencyKey);
+                    return view;
+                });
     }
 
     /**
@@ -160,7 +189,7 @@ public class SalesOrderApplicationServiceImpl implements SalesOrderApplicationSe
         validateSaveRequest(request, false);
         return idempotencyExecutor.execute("sales:order:update", actor.tenantId(), idempotencyKey,
                 digest("update", List.of(id, request)), SalesOrderView.class,
-                () -> updateInternal(id, request, actor));
+                () -> updateInternal(id, request, actor, idempotencyKey));
     }
 
     /**
@@ -218,16 +247,23 @@ public class SalesOrderApplicationServiceImpl implements SalesOrderApplicationSe
                     OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
                     SalesOrder completed = order.manuallyComplete(request.getCompletionReason(), actor.userId(),
                             actor.sessionId(), now);
-                    return toView(repository.updateState(completed, order.version()));
+                    SalesOrderView view = toView(repository.updateState(completed, order.version()));
+                    recordSuccess(actor, "sales:order:complete", view, order.status().name(), view.getStatus(),
+                            "人工完成销售订单", "status,completionType,completionReason", idempotencyKey);
+                    return view;
                 });
     }
 
-    private SalesOrderView updateInternal(UUID id, SalesOrderSaveRequest request, Actor actor) {
+    private SalesOrderView updateInternal(UUID id, SalesOrderSaveRequest request, Actor actor,
+                                          String idempotencyKey) {
         SalesOrder order = findOrder(actor.tenantId(), id);
         List<SalesOrderLine> lines = buildLines(request.getLines(), actor.tenantId());
         SalesOrder updated = order.draftUpdated(request.getCustomerId(), request.getPlannedShipDate(),
                 normalizeRemark(request.getRemark()), lines, actor.userId(), OffsetDateTime.now(ZoneOffset.UTC));
-        return toView(repository.update(updated, order.version()));
+        SalesOrderView view = toView(repository.update(updated, order.version()));
+        recordSuccess(actor, "sales:order:update", view, order.status().name(), view.getStatus(),
+                "修改销售订单草稿", "customerId,plannedShipDate,remark,lines", idempotencyKey);
+        return view;
     }
 
     private SalesOrderView transition(String operation, UUID id, String key, Transition transition) {
@@ -237,7 +273,15 @@ public class SalesOrderApplicationServiceImpl implements SalesOrderApplicationSe
                 SalesOrderView.class, () -> {
                     SalesOrder order = findOrder(actor.tenantId(), id);
                     SalesOrder next = transition.apply(order, actor, OffsetDateTime.now(ZoneOffset.UTC));
-                    return toView(repository.updateState(next, order.version()));
+                    SalesOrderView view = toView(repository.updateState(next, order.version()));
+                    String summary = switch (operation) {
+                        case "sales:order:submit" -> "提交销售订单";
+                        case "sales:order:approve" -> "审核销售订单";
+                        default -> "变更销售订单状态";
+                    };
+                    recordSuccess(actor, operation, view, order.status().name(), view.getStatus(),
+                            summary, "status", key);
+                    return view;
                 });
     }
 
@@ -370,12 +414,25 @@ public class SalesOrderApplicationServiceImpl implements SalesOrderApplicationSe
     private Actor actor() {
         UUID tenantId = TenantContextHolder.requireTenantId();
         UUID userId = UserContextHolder.requireUserId();
+        String account = UserContextHolder.getUsername();
         String sessionId = UserContextHolder.getSessionId();
         String requestId = RequestContextHolder.getRequestId();
         if (sessionId == null || sessionId.isBlank() || requestId == null || requestId.isBlank()) {
             throw new ForbiddenException("缺失可信会话或请求上下文");
         }
-        return new Actor(tenantId, userId, sessionId, requestId);
+        return new Actor(tenantId, userId, account, sessionId, requestId);
+    }
+
+    /**
+     * 修改：在幂等动作首次成功路径内写入结构化审计，使审计失败能够回滚同一销售业务事务。
+     */
+    private void recordSuccess(Actor actor, String actionCode, SalesOrderView view,
+                               String beforeStatus, String afterStatus, String summary,
+                               String changedFields, String idempotencyKey) {
+        operationAuditRecorder.recordSuccess(new OperationAuditCommand(actor.tenantId(), "USER",
+                actor.userId(), actor.account(), actor.sessionId(), actor.requestId(), actionCode,
+                "SALES_ORDER", view.getId(), view.getSoNo(), beforeStatus, afterStatus, summary,
+                changedFields, idempotencyKey, OffsetDateTime.now(ZoneOffset.UTC)));
     }
 
     private void validateKey(String key) {
@@ -401,6 +458,6 @@ public class SalesOrderApplicationServiceImpl implements SalesOrderApplicationSe
         SalesOrder apply(SalesOrder order, Actor actor, OffsetDateTime now);
     }
 
-    private record Actor(UUID tenantId, UUID userId, String sessionId, String requestId) {
+    private record Actor(UUID tenantId, UUID userId, String account, String sessionId, String requestId) {
     }
 }

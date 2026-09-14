@@ -4,6 +4,8 @@
     <option name="SPRING_BOOT_MAIN_CLASS" value="com.ailearn.platform.iot.IotApplication" />
     <!-- 本地联调必须显式加载 application-dev.yml，提供与 Core 配对的 Facts HMAC。 -->
     <option name="ACTIVE_PROFILES" value="dev" />
+    <!-- 与 Core 共用被 Git 忽略的 windows.env，仅加载本地追溯 HMAC，不在运行配置中保存密钥。 -->
+    <option name="PROGRAM_PARAMETERS" value="--spring.config.import=optional:file:$PROJECT_DIR$/deploy/openwebui/windows.env[.properties]" />
     <extension name="coverage">
       <pattern>
         <option name="PATTERN" value="com.ailearn.platform.iot.*" />

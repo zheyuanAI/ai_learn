@@ -34,7 +34,8 @@ class CorePostgresMigrationTest {
             "md_uom", "md_product", "md_customer", "md_supplier", "md_warehouse", "md_location",
             "inv_inventory_balance", "inv_inventory_reservation", "inv_inventory_reservation_allocation",
             "inv_inventory_transaction", "inv_transfer_order", "inv_transfer_order_line",
-            "inv_stocktake_order", "inv_stocktake_order_line", "core_idempotency_record");
+            "inv_stocktake_order", "inv_stocktake_order_line", "core_idempotency_record",
+            "ai_chat_session", "ai_chat_message", "ai_tool_audit_log", "core_operation_audit_log");
 
     private static String adminUrl;
     private static String username;
@@ -67,13 +68,13 @@ class CorePostgresMigrationTest {
     }
 
     /**
-     * 在随机隔离数据库中执行 V1→V2，并验证核心表和余额约束。
+     * 在随机隔离数据库中执行全部 Core 迁移，并验证核心表、AI 审计表和余额约束。
      * 入参：无；出参：无；流程：创建随机库、运行 Flyway、读取结构后清理随机库。
      *
      * @throws Exception 迁移或隔离数据库清理失败
      */
     @Test
-    void freshDatabaseMigratesV1ToV2AndCreatesTenantSafeCoreTables() throws Exception {
+    void freshDatabaseMigratesAllVersionsAndCreatesTenantSafeCoreTables() throws Exception {
         String databaseName = "core_migration_" + UUID.randomUUID().toString().replace("-", "");
         try {
             createDatabase(databaseName);
@@ -94,7 +95,7 @@ class CorePostgresMigrationTest {
                                     + "WHERE table_schema='public' AND table_name='" + table + "'"),
                             "缺少 Core 表: " + table);
                 }
-                assertEquals(2, scalarInt(connection,
+                assertEquals(11, scalarInt(connection,
                         "SELECT COUNT(*) FROM core_flyway_schema_history WHERE success = TRUE"));
                 assertEquals(1, scalarInt(connection,
                         "SELECT COUNT(*) FROM pg_constraint "

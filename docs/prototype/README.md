@@ -66,11 +66,11 @@
   - `pages/device-alarm.html`：MQTT QoS 1 消息去重、实时遥测曲线、单指标阈值告警生命周期与工序上下文控制台
 - **GIS 与 AI 空间分析**：
   - `pages/site-map.html`：厂区二维平面地图、百分比坐标、4 级状态优先级与穿透直达控制台
-  - `pages/ai-assistant.html`：Grok-4.6 / PokeAPI 受控只读助手、全链追溯卡片生成与写操作拦截控制台
+  - `pages/ai-assistant.html`：Open WebUI + DeepSeek 目标链路的流式受控只读助手、受控知识、全链追溯、跨角色文字建议与写操作拦截控制台；当前静态原型中的历史导航演示待下线
   - `pages/tool-audit.html`：AI 受控工具调用全量审计日志与详情抽屉控制台
 - **二期设计资产（保留不验收）**：
   - `pages/digital-twin.html`：三维展示与数字孪生预留资产
-  - `pages/knowledge-base.html`：企业知识库与 RAG 预留资产
+  - `pages/knowledge-base.html`：通用企业知识库管理预留资产；阶段 8 受控知识由 Open WebUI 管理，不使用该页面
 
 ---
 

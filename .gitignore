@@ -6,6 +6,7 @@ target/
 .DS_Store
 *.log
 .env
+deploy/openwebui/windows.env
 runtime/*
 !runtime/README.md
 /tmp/

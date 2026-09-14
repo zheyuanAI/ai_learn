@@ -20,6 +20,8 @@
 
 Core / IoT 的 `dev` profile 与 S7 Facts 联调必须通过运行环境注入配对 HMAC，仓库不保存实际密钥；完整变量清单和手工启动命令见 `../runtime/README.md`。Gateway 的本地统一入口保持为 20001。
 
+阶段 8 AI 已实现 Open WebUI Agent Provider、SSE 会话、10 个受控只读工具、权限继承与工具审计，默认关闭。Windows Open WebUI 使用硅基流动 `deepseek-ai/DeepSeek-V4-Flash`，并绑定受控知识和 WMS 查询工具的 `wms-assistant` 预设；早期直连 Provider 只保留为诊断回退代码，同一次请求不得执行两套 Agent 循环。所有 Open WebUI、硅基流动密钥和服务签名只从运行环境读取，不得写入仓库。
+
 ## 当前状态
 - **父工程与骨架**：已创建多模块父工程与各服务启动类，各服务均提供 `/internal/ping` 探活接口。
 - **platform-auth（阶段1基础能力与本轮修复中，阶段验收未完成）**：
@@ -38,6 +40,8 @@ Core / IoT 的 `dev` profile 与 S7 Facts 联调必须通过运行环境注入�
     - **统一逻辑软删除**：关联数据及核心实体统一采用逻辑软删除（`isdel = 1`），禁止物理 `DELETE`；
     - 实现防自删保护、最后管理员保护与 409 冲突拦截。
 - **platform-core / platform-iot / platform-gateway**：当前保持基础服务骨架，业务领域代码将在后续阶段推进。
+- **platform-core 阶段 8 AI 纵向切片**：已实现会话/消息/工具审计迁移、DeepSeek Flash 与 Open WebUI Provider、SSE 聊天与能力接口、十个受控查询或汇总工具（含低库存专用读模型）；AI-01B 已实现 Core 销售订单五类成功操作审计和 `queryOperationAudit` 脱敏查询。失败/拒绝业务审计、Auth/IoT 操作审计接入和审计查询页仍在后续里程碑中。
+- **Open WebUI 演进状态**：Windows 本地安装、管理员 API Key、硅基流动 DeepSeek、7 份 Knowledge、`wms-assistant` 预设、`wms` Tool Server、短期身份映射与真实 SSE 工具调用均已联通；六类角色能力目录以及销售、采购、库存、制造、质量、IoT、跨域追溯和综合日报主场景已实测。Open WebUI 工具回调现会向前端发送同一 `call_id` 的 `tool_started/tool_finished`，完整故障和跨租户全组合矩阵仍待收口。
 
 ## 规格入口
 - 当前开发计划与一期范围：`../docs/specs/00-project/正式项目计划.md`

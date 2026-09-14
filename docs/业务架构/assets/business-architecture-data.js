@@ -278,33 +278,33 @@ window.businessArchitectureData = {
       confidence: "confirmed",
       confidenceLabel: "已确认",
       tagline: "受权限约束、可审计的只读查询入口",
-      purpose: "通过受控只读工具查询业务事实，再经 PokeAPI 中转站调用 Grok 模型生成带依据、时间范围和审计标识的回答。",
-      inputs: ["用户问题与最小页面上下文", "租户与权限上下文", "受控只读工具", "PokeAPI 与 Grok 部署配置"],
-      outputs: ["自然语言回答或部分结果", "来源与时间范围", "工具/请求/实际模型编号", "会话与调用审计"],
+      purpose: "通过 Open WebUI 编排受控知识与只读工具，调用硅基流动 DeepSeek V4 Flash 生成带依据、时间范围和审计标识的流式回答。",
+      inputs: ["用户问题与最小页面上下文", "租户与权限上下文", "受控知识与只读工具", "Open WebUI / 硅基流动服务端配置"],
+      outputs: ["SSE 自然语言回答或部分结果", "来源与时间范围", "工具/请求/实际模型编号", "跨角色文字建议", "会话与调用审计"],
       roles: ["所有授权业务角色"],
       states: ["只读会话，不迁移业务状态", "调用结果：Success（成功）/ Partial（部分结果）/ Failed（失败）/ Rejected（拒绝）"],
       stateAxes: [
         { label: "权限", values: ["普通用户权限", "服务端工具复核", "授权事实"] },
         { label: "调用结果", values: ["成功", "部分结果", "失败或拒绝"] },
-        { label: "模型边界", values: ["PokeAPI", "Grok 模型", "只读回答"] }
+        { label: "模型边界", values: ["Open WebUI Agent", "deepseek-ai/DeepSeek-V4-Flash", "只读回答"] }
       ],
       flow: [
         { id: "ai-question", title: "接收问题", owner: "AI 助手", detail: "保留当前用户、租户、会话和请求编号；页面只传业务对象类型与编号，不发送整个页面。" },
         { id: "ai-plan", title: "选择受控工具", owner: "AI 助手", detail: "只允许缩小权限，不能扩大数据范围，也不能调用未注册工具。" },
         { id: "ai-query", title: "执行只读查询", owner: "领域查询工具", detail: "服务端再次校验租户、用户、数据范围、时间范围和数量上限；不直连数据库或执行 SQL。" },
-        { id: "ai-model", title: "调用 Grok 模型", owner: "AI 服务", detail: "通过 https://www.poke2api.com 的 OpenAI Responses（响应式接口）兼容协议调用 Grok，默认优先 grok-4.6，实际模型编号由部署配置决定。" },
-        { id: "ai-answer", title: "生成可核对回答", owner: "AI 助手", detail: "展示数据来源、统计时间、工具摘要、请求编号和实际模型编号；部分来源失败时保留已取得事实并标记缺失。" },
+        { id: "ai-model", title: "调用 DeepSeek V4 Flash", owner: "AI 服务", detail: "Core 调用本机 Open WebUI 的 wms-assistant 预设，Open WebUI 再通过硅基流动 OpenAI 兼容 Chat Completions 接口调用 deepseek-ai/DeepSeek-V4-Flash；WMS 对浏览器输出语义化 SSE 事件。" },
+        { id: "ai-answer", title: "生成可核对回答", owner: "AI 助手", detail: "流式展示数据来源、统计时间、工具摘要、请求编号和实际模型编号；涉及多个角色时只给出主责、协同角色和处理顺序，部分来源失败时保留已取得事实并标记缺失。" },
         { id: "ai-audit", title: "记录调用审计", owner: "AI", detail: "成功、失败、超时和拒绝均记录审计，不保存密码、设备凭证、中转站密钥或无关敏感数据。" }
       ],
       relations: [
         { direction: "security", module: "Auth", text: "沿用普通用户权限，不成为超级管理员。" },
         { direction: "read", module: "领域查询", text: "通过受控只读工具访问，不生成 SQL 直连业务库。" },
-        { direction: "external", module: "PokeAPI / Grok", text: "只发送回答所需的最小授权业务摘要，密钥仅从安全环境读取。" }
+        { direction: "external", module: "Open WebUI / 硅基流动", text: "只发送回答所需的最小授权业务摘要，密钥仅从安全环境读取。" }
       ],
       ownedFacts: ["对话上下文", "工具调用审计", "回答来源与实际模型摘要"],
-      boundaries: ["一期不修改任何业务数据，即使用户在对话中同意也不能写入。", "工具白名单只能缩小用户权限。", "不直接生成 SQL（数据库查询语句），不建立第二套业务事实。", "一期不启用 Grok 联网搜索或 X 搜索。"],
-      exceptions: ["无权限或跨租户查询", "工具调用超时或部分来源失败", "PokeAPI 不可用、模型不可用或额度不足", "来源数据不足或模型回答与工具结果不一致", "敏感字段泄露或密钥误入日志"],
-      extensions: ["RAG（先检索企业文档再回答）与知识库", "文档解析", "向量检索", "多步分析工作流", "需审批的业务建议", "可观测性与质量评估"],
+      boundaries: ["一期不修改任何业务数据，即使用户在对话中同意也不能写入。", "工具白名单只能缩小用户权限。", "不直接生成 SQL（数据库查询语句），不建立第二套业务事实。", "一期不启用联网搜索、文件搜索、代码执行、MCP 或写工具。", "一期不生成页面导航动作。"],
+      exceptions: ["无权限或跨租户查询", "工具调用超时或部分来源失败", "Open WebUI、硅基流动或目标模型不可用", "来源数据不足或模型回答与工具结果不一致", "敏感字段泄露或密钥误入日志"],
+      extensions: ["通用文档上传与自建向量检索", "需审批的写操作草案", "复杂工作流", "可观测性与质量评估"],
       specs: [
         { label: "AI 助手业务规则", href: "../specs/50-ai-assistant/AI助手业务规则.md" },
         { label: "AI 助手领域模型", href: "../specs/50-ai-assistant/领域模型.md" },
@@ -453,7 +453,7 @@ window.businessArchitectureData = {
     { title: "人工供需关联", owner: "Sales / Manufacturing / Purchasing", rule: "一个工单最多关联一条销售明细，同一销售明细可拆为多个工单；一期不执行自动 MRP。" },
     { title: "完成不伪造事实", owner: "Sales / Purchasing / Manufacturing", rule: "人工完成只终止剩余履约，已经发生的数量、质量、库存与执行历史继续保留。" },
     { title: "展示层只读", owner: "Traceability / GIS / Dashboard", rule: "只读投影不得修改或复制源领域状态，来源失败必须标记陈旧或不可用。" },
-    { title: "AI 外部处理边界", owner: "AI / PokeAPI", rule: "仅发送最小授权摘要；AI 不直连数据库、不写业务数据、不启用 Grok 联网或 X 搜索。" }
+    { title: "AI 外部处理边界", owner: "AI / Open WebUI / 硅基流动", rule: "仅发送最小授权摘要；AI 不直连数据库、不写业务数据、不启用外部搜索或写工具，本阶段也不生成页面导航动作。" }
   ],
   roadmap: [
     { phase: "第 1 周", title: "底座与库存内核", detail: "认证租户、主数据、余额、预留、流水、事务与并发。" },

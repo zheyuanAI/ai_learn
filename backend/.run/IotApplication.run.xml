@@ -1,6 +1,9 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="IotApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <!-- 本地联调加载 dev profile，并与 Core 共用被 Git 忽略的 Facts HMAC。 -->
+    <option name="ACTIVE_PROFILES" value="dev" />
     <module name="platform-iot" />
+    <option name="PROGRAM_PARAMETERS" value="--spring.config.import=optional:file:$PROJECT_DIR$/../deploy/openwebui/windows.env[.properties]" />
     <option name="SPRING_BOOT_MAIN_CLASS" value="com.ailearn.platform.iot.IotApplication" />
     <method v="2">
       <option name="Make" enabled="true" />

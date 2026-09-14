@@ -194,16 +194,6 @@
         基于 Vue 3 + Pinia + Axios 真实前后端链路，承载 6 类正式角色鉴权与动态菜单流转。
       </span>
     </footer>
-
-    <!-- 统一 Toast 提示 -->
-    <div
-      v-if="toast.visible"
-      class="cloud-toast"
-      :class="[`toast-${toast.type}`, { 'is-visible': toast.visible }]"
-      role="status"
-    >
-      {{ toast.message }}
-    </div>
   </div>
 </template>
 
@@ -228,32 +218,21 @@ const formData = reactive({
   password: "",
 });
 
-// Toast 状态管理
-const toast = reactive({
-  visible: false,
-  message: "",
-  type: "success",
-});
-
-let toastTimer: any = null;
 let animationFrameId: number | null = null;
 
 /**
  * 弹出提示消息
- * 中文注释：入参为消息文本与消息类型，同步调用 ElMessage 与本地微型 Toast 组件
+ * 中文注释：使用 Element Plus 的 ElMessage 组件统一提示，配色已由 src/styles/element-theme.css 覆盖为科技黑曜石深色微光拟态。
+ * 切换提示时调用 ElMessage.closeAll() 关闭旧气泡，并开启 grouping，确保屏幕正上方只保留最新 1 条，杜绝多层堆叠遮挡。
  */
 function showToast(message: string, type: "success" | "danger" | "warning" = "success") {
+  ElMessage.closeAll();
   ElMessage({
     message,
     type: type === "danger" ? "error" : type,
+    grouping: true,
+    duration: 2600,
   });
-  if (toastTimer) clearTimeout(toastTimer);
-  toast.message = message;
-  toast.type = type;
-  toast.visible = true;
-  toastTimer = setTimeout(() => {
-    toast.visible = false;
-  }, 3600);
 }
 
 /**
@@ -433,9 +412,6 @@ onMounted(() => {
 onUnmounted(() => {
   if (animationFrameId !== null) {
     cancelAnimationFrame(animationFrameId);
-  }
-  if (toastTimer) {
-    clearTimeout(toastTimer);
   }
 });
 </script>
@@ -930,48 +906,6 @@ onUnmounted(() => {
   font-size: 11px;
   color: #64748b;
   text-align: center;
-}
-
-/* ================= 统一 Toast ================= */
-.cloud-toast {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  padding: 12px 20px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  z-index: 9999;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  opacity: 0;
-  transform: translateY(16px);
-  pointer-events: none;
-  backdrop-filter: blur(12px);
-}
-
-.cloud-toast.is-visible {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-}
-
-.cloud-toast.toast-success {
-  background: rgba(6, 78, 59, 0.9);
-  border: 1px solid #10b981;
-  color: #a7f3d0;
-}
-
-.cloud-toast.toast-danger {
-  background: rgba(127, 29, 29, 0.9);
-  border: 1px solid #ef4444;
-  color: #fecaca;
-}
-
-.cloud-toast.toast-warning {
-  background: rgba(120, 53, 15, 0.9);
-  border: 1px solid #f59e0b;
-  color: #fde68a;
 }
 
 /* ================= 动画与响应式断点 ================= */

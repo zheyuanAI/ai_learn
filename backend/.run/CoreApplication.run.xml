@@ -1,6 +1,9 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="CoreApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <option name="ACTIVE_PROFILES" value="dev" />
     <module name="platform-core" />
+    <!-- IDEA 当前以 backend 为项目目录，因此本地 AI 配置位于项目目录上一级的 deploy/openwebui。 -->
+    <option name="PROGRAM_PARAMETERS" value="--spring.config.import=optional:file:$PROJECT_DIR$/../deploy/openwebui/windows.env[.properties]" />
     <option name="SPRING_BOOT_MAIN_CLASS" value="com.ailearn.platform.core.CoreApplication" />
     <method v="2">
       <option name="Make" enabled="true" />

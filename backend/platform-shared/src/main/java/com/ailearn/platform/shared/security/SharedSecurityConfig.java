@@ -2,6 +2,7 @@ package com.ailearn.platform.shared.security;
 
 import com.ailearn.platform.shared.api.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
@@ -63,6 +64,8 @@ public class SharedSecurityConfig {
                     .httpBasic(AbstractHttpConfigurer::disable)
                     .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                     .authorizeHttpRequests(auth -> auth
+                            // SSE 完成时的 ASYNC 二次派发不重新执行业务鉴权；原始请求已完成认证与方法权限校验。
+                            .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                             .requestMatchers(
                                     "/actuator/**",
                                     "/internal/**",

@@ -16,6 +16,8 @@
 - `docs/specs/00-project/阶段决策与续聊入口.md`：已确认阶段决策与新对话续聊入口
 - `docs/业务架构/index.html`：交互式业务架构预览入口；`总览.html` 展示跨模块关系与流程
 - `docs/prototype/index.html`：静态操作原型主入口
+- `docs/ai-knowledge/README.md`：Open WebUI 仅可同步的阶段 8 受控业务知识入口
+- `docs/verification/2026-09-12-13-阶段8-AI与OpenWebUI周末变更总结.md`：阶段 8 周末实现、实机验证、未完成项与 Open WebUI 相关入口
 - `docs/openspec/README.md`: 仅在显式 OpenSpec 任务下使用的协作说明
 
 ## 本地开发环境基线
@@ -69,6 +71,8 @@ ai_learn_developProject/
 │   │   ├── index.html                # 原型首页
 │   │   ├── pages/                    # 各业务页面原型
 │   │   └── assets/                   # 原型共用资源
+│   ├── ai-knowledge/                 # Open WebUI 清单控制的业务知识视图
+│   ├── verification/                 # 验证证据、问题记录和阶段变更总结
 │   ├── openspec/                     # 显式 OpenSpec 任务的协作工件
 │   │   ├── README.md
 │   │   ├── config.yaml
@@ -79,7 +83,9 @@ ai_learn_developProject/
 │       ├── specs/
 │       └── plans/
 ├── deploy/                           # 本地基础设施与部署编排
-│   ├── docker-compose.yml            # PostgreSQL、Redis、Mosquitto 编排
+│   ├── README.md                     # 基础依赖与 Windows Open WebUI 启动说明
+│   ├── docker-compose.yml            # PostgreSQL、Redis 与 Mosquitto 编排
+│   ├── openwebui/                    # Windows Open WebUI 安装、密钥和知识校验脚本
 │   ├── local/                        # 本机运行配置
 │   └── docker/                       # Compose 使用的配置
 └── runtime/                          # 本机运行时依赖与启动说明
@@ -93,9 +99,11 @@ ai_learn_developProject/
 - `docs/specs/`：项目级和领域级目标规格事实源，描述批准后的范围、模型、接口和验收要求；不能据此声称代码已经实现。
 - `docs/业务架构/`：以交互图说明模块关系、业务流程、事实归属和边界；全部一期模块的业务规则已经确认，架构图后续应按正式规格同步更新。
 - `docs/prototype/`：静态交互原型和演示页面基线，页面位于 `pages/`，共用资源位于 `assets/`。
+- `docs/ai-knowledge/`：面向 Open WebUI 的受控知识视图；只能同步 `knowledge-manifest.yaml` 中启用的文件，正式事实仍以代码与领域规格为准。
+- `docs/verification/`：保存已执行验证的证据、问题记录和阶段变更总结；只记录证据边界，不替代正式规格或实际代码。
 - `docs/openspec/`：仅在用户明确以 `OpenSpec` 或 `openspec` 开头时使用的协作规则、schema、模板和工件入口。
 - `docs/superpowers/`：设计规格与实施计划记录，服务于 AI/代理协作和变更追溯，不替代 `docs/specs/`。
-- `deploy/docker-compose.yml`：一期本地基础依赖编排，当前包含 PostgreSQL、Redis 和 Mosquitto；`deploy/local/` 保存本机配置，`deploy/docker/` 保存 Compose 使用的配置。
+- `deploy/docker-compose.yml`：一期本地依赖编排，只包含 PostgreSQL、Redis 和 Mosquitto；Open WebUI 按 Windows 本地服务运行，入口见 `deploy/openwebui/README.md`。
 - `runtime/README.md`：本机 Redis、Mosquitto 等运行时依赖的校验信息、手动启动命令和回退说明；`runtime/` 下的中间件包不纳入 Git。
 
 ### 关键后端模块入口
@@ -124,7 +132,7 @@ ai_learn_developProject/
 - 参考工程位于 `D:\AI\ai_learn_wms_ai\ai_learn_referenceProjects`，只读用于学习和对照，不属于本项目目录树。
 
 ## 开发原则
-- 黄金业务闭环优先于功能数量；一期不实现 MRP、APS、三维数字孪生、RAG 或完整财务
+- 黄金业务闭环优先于功能数量；一期不实现 MRP、APS、三维数字孪生、自建通用 RAG 平台或完整财务，阶段 8 只引入 Open WebUI 的受控项目知识能力
 - 使用 spec 驱动开发：先确认业务语义与验收，再同步原型、数据模型、接口契约和实现
 - AI 负责非核心代码编码、生成测试、文档样板；人工负责核心代码编码、规则定义、验收和关键决策
 - 普通任务默认不走 OpenSpec；仅显式以 `OpenSpec` 或 `openspec` 开头时，才读取 `docs/openspec/README.md`

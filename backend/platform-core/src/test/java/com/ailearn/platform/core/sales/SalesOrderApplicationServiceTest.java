@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import com.ailearn.platform.core.masterdata.domain.entity.Customer;
 import com.ailearn.platform.core.masterdata.domain.entity.Product;
 import com.ailearn.platform.core.masterdata.domain.port.MasterDataRepository;
+import com.ailearn.platform.core.operationaudit.application.OperationAuditCommand;
 import com.ailearn.platform.core.sales.application.SalesOrderApplicationServiceImpl;
 import com.ailearn.platform.core.sales.domain.SalesOrder;
 import com.ailearn.platform.core.sales.domain.SalesOrderLine;
@@ -33,6 +34,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -72,6 +74,7 @@ class SalesOrderApplicationServiceTest {
     private MasterDataRepository<Product> productRepository;
 
     private SalesOrderApplicationServiceImpl service;
+    private List<OperationAuditCommand> auditCommands;
 
     /**
      * 设置可信租户、用户、会话和请求上下文。
@@ -82,9 +85,12 @@ class SalesOrderApplicationServiceTest {
         RequestContextHolder.getContext().setUserId(USER_ID);
         RequestContextHolder.getContext().setJti(SESSION_ID);
         RequestContextHolder.getContext().setRequestId(REQUEST_ID);
+        RequestContextHolder.getContext().setUsername("sales-user");
         lenient().when(customerRepository.findById(eq(TENANT_A), eq(CUSTOMER_ID))).thenReturn(Optional.of(customer()));
         lenient().when(productRepository.findById(eq(TENANT_A), eq(PRODUCT_ID))).thenReturn(Optional.of(product()));
-        service = new SalesOrderApplicationServiceImpl(repository, customerRepository, productRepository);
+        auditCommands = new ArrayList<>();
+        service = new SalesOrderApplicationServiceImpl(repository, customerRepository, productRepository,
+                auditCommands::add);
     }
 
     /**
@@ -114,6 +120,10 @@ class SalesOrderApplicationServiceTest {
         assertEquals("0.000000", result.getLines().getFirst().activeReservedQty());
         assertEquals(List.of("update", "submit"), result.getAllowedActions().stream()
                 .map(action -> action.getAction()).toList());
+        assertEquals(1, auditCommands.size());
+        assertEquals("sales:order:create", auditCommands.getFirst().actionCode());
+        assertEquals("sales-user", auditCommands.getFirst().actorAccount());
+        assertEquals("Draft", auditCommands.getFirst().afterStatus());
     }
 
     /**
@@ -146,6 +156,8 @@ class SalesOrderApplicationServiceTest {
         assertEquals("Submitted", service.submit(ORDER_ID, "sales-submit-1").getStatus());
         when(repository.findById(TENANT_A, ORDER_ID)).thenReturn(Optional.of(submitted));
         assertEquals("Approved", service.approve(ORDER_ID, "sales-approve-1").getStatus());
+        assertEquals(List.of("sales:order:submit", "sales:order:approve"), auditCommands.stream()
+                .map(OperationAuditCommand::actionCode).toList());
         assertEquals(SalesOrderStatus.Approved, approved.status());
         when(repository.findById(TENANT_A, ORDER_ID)).thenReturn(Optional.of(approved));
         assertThrows(SalesOrderException.class, () -> service.submit(ORDER_ID, "sales-submit-invalid-1"));
@@ -208,6 +220,9 @@ class SalesOrderApplicationServiceTest {
         assertEquals(SESSION_ID, result.getCompletedSessionId());
         assertNotNull(result.getCompletedAt());
         assertEquals("5.000000", result.getLines().getFirst().shippedQty());
+        assertEquals("sales:order:complete", auditCommands.getFirst().actionCode());
+        assertEquals("Approved", auditCommands.getFirst().beforeStatus());
+        assertEquals("Completed", auditCommands.getFirst().afterStatus());
     }
 
     /**
@@ -239,7 +254,35 @@ class SalesOrderApplicationServiceTest {
 
         assertEquals(first.getId(), replay.getId());
         assertEquals(first.getLines().getFirst().orderedQty(), replay.getLines().getFirst().orderedQty());
+        assertEquals(1, auditCommands.size(), "幂等成功重放不得重复写入操作审计");
         verify(repository).insert(any(SalesOrder.class));
+    }
+
+    /** 审计存储失败必须向上传播，交由外层销售事务回滚，不能静默形成无审计的成功操作。 */
+    @Test
+    void auditFailureMustAbortSuccessfulCommandPath() {
+        when(repository.insert(any(SalesOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        SalesOrderApplicationServiceImpl strictService = new SalesOrderApplicationServiceImpl(
+                repository, customerRepository, productRepository,
+                command -> { throw new IllegalStateException("audit unavailable"); });
+
+        assertThrows(IllegalStateException.class,
+                () -> strictService.create(saveRequest("SO-AUDIT-FAIL", "1"), "sales-audit-fail-1"));
+    }
+
+    /** 修改 Draft 成功时记录固定字段摘要，不保存原始请求体。 */
+    @Test
+    void updateDraftRecordsStructuredAudit() {
+        SalesOrder draft = order(SalesOrderStatus.Draft, line("10", "0", "0", "0"), 0);
+        when(repository.findById(TENANT_A, ORDER_ID)).thenReturn(Optional.of(draft));
+        when(repository.update(any(SalesOrder.class), eq(0L))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        SalesOrderView result = service.update(ORDER_ID, saveRequest("SO-001", "12"), "sales-update-1");
+
+        assertEquals("Draft", result.getStatus());
+        assertEquals(1, auditCommands.size());
+        assertEquals("sales:order:update", auditCommands.getFirst().actionCode());
+        assertEquals("customerId,plannedShipDate,remark,lines", auditCommands.getFirst().changedFieldsSummary());
     }
 
     /**

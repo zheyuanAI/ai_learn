@@ -1,0 +1,27 @@
+version: 1
+revision: 2026-09-12.1
+owner: wms-project
+source_of_truth:
+  - ../specs/00-project/正式项目计划.md
+  - ../specs/00-project/架构设计.md
+  - ../specs/50-ai-assistant/AI助手业务规则.md
+rules:
+  allow_only_listed_files: true
+  exclude_history_plans: true
+  exclude_source_code: true
+  exclude_logs_and_secrets: true
+documents:
+  - path: 00-项目边界与事实源.md
+    enabled: true
+  - path: 10-统一术语.md
+    enabled: true
+  - path: 20-角色职责与权限.md
+    enabled: true
+  - path: 30-黄金业务闭环.md
+    enabled: true
+  - path: 40-状态与阻塞规则.md
+    enabled: true
+  - path: 50-常见问题与处理建议.md
+    enabled: true
+  - path: 60-AI工具目录.md
+    enabled: true

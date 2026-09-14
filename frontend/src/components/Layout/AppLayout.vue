@@ -19,7 +19,8 @@
               @click="toggleGroup(item.id)"
             >
               <div class="nav-group-title-box">
-                <span class="nav-icon">{{ item.icon || '📁' }}</span>
+                <!-- 修改说明：使用 resolveMenuIcon 将后端的 Ant Design 英文类名转换为纯净图形 Emoji，杜绝英文字符直接渲染 -->
+                <span class="nav-icon">{{ resolveMenuIcon(item.icon, true) }}</span>
                 <div class="nav-link-content">
                   <strong class="nav-link-title">{{ item.label }}</strong>
                   <span v-if="item.detail" class="nav-link-detail">{{ item.detail }}</span>
@@ -52,7 +53,8 @@
             :to="normalizeMenuRoutePath(item.path)"
           >
             <div class="nav-link-main">
-              <span class="nav-icon">{{ item.icon || '📄' }}</span>
+              <!-- 修改说明：普通菜单同样过滤图标英文类名 -->
+              <span class="nav-icon">{{ resolveMenuIcon(item.icon, false) }}</span>
               <div class="nav-link-content">
                 <strong class="nav-link-title">{{ item.label }}</strong>
                 <span v-if="item.detail" class="nav-link-detail">{{ item.detail }}</span>
@@ -172,6 +174,80 @@ function cleanMenuText(text: string): string {
 }
 
 /**
+ * 图标名称到 Emoji 的映射字典
+ * 中文说明：后端数据库或预设中常包含 Ant Design 图标字符串（如 DashboardOutlined、ShoppingOutlined 等），
+ * 此处将其精准转换为现代高辨识度图形 Emoji，杜绝英文字符裸露在侧边栏中。
+ */
+const ICON_NAME_MAP: Record<string, string> = {
+  // 一期核心顶级模块
+  DashboardOutlined: "📊",
+  dashboard: "📊",
+  DatabaseOutlined: "📦",
+  master_data: "📦",
+  ShoppingOutlined: "🛒",
+  purchase: "🛒",
+  ShopOutlined: "🏬",
+  sales: "🏬",
+  ToolOutlined: "⚙️",
+  mes: "⚙️",
+  ApiOutlined: "📡",
+  iot: "📡",
+  CompassOutlined: "🗺️",
+  gis: "🗺️",
+  RobotOutlined: "🤖",
+  ai: "🤖",
+  SettingOutlined: "⚙️",
+  system: "⚙️",
+
+  // 子功能模块映射
+  AppstoreOutlined: "📦",
+  HomeOutlined: "🏢",
+  TableOutlined: "📋",
+  FileTextOutlined: "📝",
+  InboxOutlined: "📥",
+  VerticalAlignTopOutlined: "⬆️",
+  FileProtectOutlined: "📑",
+  ExportOutlined: "📤",
+  ScheduleOutlined: "🗓️",
+  PlayCircleOutlined: "▶️",
+  SwapOutlined: "🔁",
+  HddOutlined: "💾",
+  AlertOutlined: "⚠️",
+};
+
+/**
+ * 解析并净化菜单图标
+ * 中文说明：入参为 rawIcon 原始图标字符串，出参为纯净的 Emoji 图标。
+ * 若原始字符串含英文字符（如各类 ...Outlined 类名），则匹配映射字典；若未命中则回退为通用图形，
+ * 彻底杜绝任何英文字符串作为图标内容渲染到界面上。
+ */
+function resolveMenuIcon(rawIcon: string | null | undefined, isGroup = false): string {
+  if (!rawIcon) return isGroup ? "📁" : "📄";
+  const trimmed = String(rawIcon).trim();
+
+  // 若不包含英文字符（例如已经是 📊、📦、⚙️ 等 Emoji 或图形符号），直接保留返回
+  if (!/[a-zA-Z]/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // 精准匹配字典
+  if (ICON_NAME_MAP[trimmed]) {
+    return ICON_NAME_MAP[trimmed];
+  }
+
+  // 不区分大小写与去除后缀后再次匹配（例如 dashboardoutlined -> dashboard）
+  const cleanKey = trimmed.replace(/outlined$/i, "").toLowerCase();
+  for (const [k, v] of Object.entries(ICON_NAME_MAP)) {
+    if (k.replace(/outlined$/i, "").toLowerCase() === cleanKey) {
+      return v;
+    }
+  }
+
+  // 未能匹配的任何未知英文字符串，坚决拦截，返回通用分组或文件图标，杜绝英文泄漏
+  return isGroup ? "📁" : "📄";
+}
+
+/**
  * 结构化侧边栏菜单（支持平铺与嵌套两种返回格式的无缝归一化）
  */
 const structuredMenus = computed<DisplayMenuItem[]>(() => {
@@ -205,7 +281,7 @@ const structuredMenus = computed<DisplayMenuItem[]>(() => {
       path: normalizeMenuRoutePath(m.routePath || m.path),
       label: cleanMenuText(rawLabel) || rawLabel,
       detail: cleanMenuText(rawDetail),
-      icon: m.icon || "",
+      icon: resolveMenuIcon(m.icon, false),
       children: [],
     });
   }
@@ -222,18 +298,25 @@ const structuredMenus = computed<DisplayMenuItem[]>(() => {
     }
   }
 
+  for (const node of roots) {
+    if (node.children && node.children.length > 0 && (!node.icon || node.icon === "📄")) {
+      node.icon = "📁";
+    }
+  }
+
   return roots;
 });
 
 function formatMenuNode(m: any): DisplayMenuItem {
   const rawLabel = m.menuName || m.label || m.name || "未命名菜单";
   const rawDetail = m.detail || "";
+  const isGroup = !!(m.children && m.children.length > 0);
   return {
     id: String(m.id || m.menuCode || m.routePath),
     path: normalizeMenuRoutePath(m.routePath || m.path),
     label: cleanMenuText(rawLabel) || rawLabel,
     detail: cleanMenuText(rawDetail),
-    icon: m.icon || "",
+    icon: resolveMenuIcon(m.icon, isGroup),
     children: m.children && m.children.length > 0 ? m.children.map(formatMenuNode) : undefined,
   };
 }

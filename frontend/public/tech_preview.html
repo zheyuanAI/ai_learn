@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>AI Learn 智造中枢 - 科技感登录页先锋设计方案交互评审</title>
+  <style>
+    :root {
+      --bg-dark: #040810;
+      --card-bg: rgba(10, 18, 30, 0.75);
+      --card-border: rgba(56, 189, 248, 0.3);
+      --primary-cyan: #38bdf8;
+      --primary-glow: rgba(56, 189, 248, 0.45);
+      --accent-neon: #00f2ff;
+      --warn-amber: #f59e0b;
+      --warn-bg: rgba(245, 158, 11, 0.12);
+      --text-main: #f1f5f9;
+      --text-sub: #94a3b8;
+      --input-bg: rgba(6, 12, 22, 0.85);
+      --input-border: rgba(56, 189, 248, 0.25);
+    }
+
+    /* 风格二变量：Linear 极简暗黑棱镜 */
+    body.theme-linear {
+      --bg-dark: #000206;
+      --card-bg: rgba(12, 14, 20, 0.8);
+      --card-border: rgba(255, 255, 255, 0.12);
+      --primary-cyan: #6366f1;
+      --primary-glow: rgba(99, 102, 241, 0.4);
+      --accent-neon: #a855f7;
+      --input-bg: rgba(18, 20, 28, 0.7);
+      --input-border: rgba(255, 255, 255, 0.1);
+    }
+
+    /* 风格三变量：流体深空星尘 */
+    body.theme-matrix {
+      --bg-dark: #02060d;
+      --card-bg: rgba(7, 16, 27, 0.82);
+      --card-border: rgba(45, 212, 191, 0.35);
+      --primary-cyan: #14b8a6;
+      --primary-glow: rgba(20, 184, 166, 0.5);
+      --accent-neon: #2dd4bf;
+      --input-bg: rgba(4, 13, 22, 0.9);
+      --input-border: rgba(45, 212, 191, 0.25);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow-x: hidden;
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      transition: background 0.6s ease;
+    }
+
+    /* 背景层画布 */
+    #bg-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* 顶部风格切换导航浮动条 */
+    .style-switcher-bar {
+      position: fixed;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      gap: 6px;
+      background: rgba(10, 17, 28, 0.88);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      padding: 5px 8px;
+      border-radius: 9999px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 15px rgba(56, 189, 248, 0.15);
+      max-width: 94vw;
+      overflow-x: auto;
+    }
+    .switcher-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-sub);
+      padding: 7px 14px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.25s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .switcher-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .switcher-btn.active {
+      background: var(--primary-cyan);
+      color: #ffffff;
+      box-shadow: 0 0 14px var(--primary-glow);
+      font-weight: 600;
+    }
+
+    /* 主界面布局容器 */
+    .viewport-container {
+      position: relative;
+      z-index: 10;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 70px 16px 30px;
+    }
+
+    /* 登录主卡片 */
+    .login-hud-card {
+      width: 100%;
+      max-width: 460px;
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      padding: 32px 30px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75), 0 0 30px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+      position: relative;
+      transition: all 0.4s ease;
+      animation: cardFloat 6s ease-in-out infinite alternate;
+    }
+    @keyframes cardFloat {
+      0% { transform: translateY(0px); }
+      100% { transform: translateY(-6px); }
+    }
+
+    /* 401 状态感知警告胶囊条 */
+    .alert-banner-401 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--warn-bg);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin-bottom: 22px;
+      font-size: 13px;
+      color: #fde68a;
+      box-shadow: 0 0 15px rgba(245, 158, 11, 0.15);
+      animation: alertPulse 2.5s infinite;
+    }
+    @keyframes alertPulse {
+      0%, 100% { border-color: rgba(245, 158, 11, 0.35); box-shadow: 0 0 10px rgba(245, 158, 11, 0.1); }
+      50% { border-color: rgba(245, 158, 11, 0.65); box-shadow: 0 0 20px rgba(245, 158, 11, 0.25); }
+    }
+    .alert-icon-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      background: rgba(245, 158, 11, 0.25);
+      border-radius: 50%;
+      color: #f59e0b;
+      font-weight: bold;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    /* 品牌标题区域 */
+    .brand-header {
+      text-align: center;
+      margin-bottom: 26px;
+    }
+    .brand-logo-glow {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(0, 242, 255, 0.05));
+      border: 1px solid var(--primary-cyan);
+      box-shadow: 0 0 20px var(--primary-glow);
+      margin-bottom: 12px;
+      font-size: 22px;
+    }
+    .brand-title {
+      font-size: 21px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      text-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+    }
+    .brand-sub {
+      font-size: 12px;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+    }
+
+    /* 表单组 */
+    .form-group {
+      margin-bottom: 18px;
+    }
+    .form-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 500;
+      color: #cbd5e1;
+      margin-bottom: 7px;
+    }
+    .form-input-box {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .form-input-box input, .form-input-box select {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 10px;
+      padding: 11px 14px 11px 38px;
+      color: #f8fafc;
+      font-size: 14px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+    .form-input-box select {
+      padding-left: 38px;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    .form-input-box input:focus, .form-input-box select:focus {
+      border-color: var(--primary-cyan);
+      box-shadow: 0 0 14px var(--primary-glow);
+      background: rgba(10, 20, 36, 0.95);
+    }
+    .input-icon {
+      position: absolute;
+      left: 12px;
+      color: #64748b;
+      font-size: 15px;
+      pointer-events: none;
+      transition: color 0.2s;
+    }
+    .form-input-box input:focus + .input-icon,
+    .form-input-box select:focus + .input-icon {
+      color: var(--primary-cyan);
+    }
+
+    /* 登录主按钮 */
+    .btn-login {
+      width: 100%;
+      background: linear-gradient(135deg, var(--primary-cyan), #0284c7);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+      padding: 13px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
+      box-shadow: 0 6px 20px var(--primary-glow);
+      transition: all 0.25s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      letter-spacing: 0.5px;
+    }
+    .btn-login:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 28px var(--primary-glow);
+      filter: brightness(1.1);
+    }
+    .btn-login:active {
+      transform: translateY(0);
+    }
+
+    /* 快捷演示角色区 */
+    .roles-section {
+      margin-top: 24px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .roles-title {
+      font-size: 12px;
+      color: var(--text-sub);
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .roles-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .role-chip {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 8px;
+      padding: 7px 6px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .role-chip:hover {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: var(--primary-cyan);
+      transform: scale(1.02);
+    }
+    .role-chip.active {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: var(--primary-cyan);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+    }
+    .role-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: #e2e8f0;
+      display: block;
+    }
+    .role-user {
+      font-size: 10px;
+      color: #64748b;
+      font-family: monospace;
+      margin-top: 2px;
+      display: block;
+    }
+
+    /* 底部安全状态微件 */
+    .security-bar {
+      margin-top: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: #64748b;
+      padding: 0 4px;
+    }
+    .sec-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sec-dot {
+      width: 7px;
+      height: 7px;
+      background: #10b981;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #10b981;
+      animation: dotBlink 2s infinite;
+    }
+    @keyframes dotBlink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* 底部方案说明指示 */
+    .footer-guide {
+      margin-top: 22px;
+      text-align: center;
+      font-size: 12px;
+      color: #64748b;
+      max-width: 500px;
+      line-height: 1.6;
+    }
+    .footer-guide strong {
+      color: var(--primary-cyan);
+    }
+
+    /* 移动端细微响应适配 */
+    @media (max-width: 480px) {
+      .login-hud-card {
+        padding: 24px 20px;
+        border-radius: 14px;
+      }
+      .roles-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+  </style>
+</head>
+<body class="theme-palantir">
+
+  <!-- 顶部风格方案切换器 -->
+  <div class="style-switcher-bar">
+    <button class="switcher-btn active" onclick="switchTheme('palantir', this)">
+      <span>🌐</span> 方案一：Palantir 工业雷达中枢
+    </button>
+    <button class="switcher-btn" onclick="switchTheme('linear', this)">
+      <span>✨</span> 方案二：Linear 极简暗黑棱镜
+    </button>
+    <button class="switcher-btn" onclick="switchTheme('matrix', this)">
+      <span>🌌</span> 方案三：数字流体星海中枢
+    </button>
+  </div>
+
+  <!-- 动态 Canvas 背景渲染 -->
+  <canvas id="bg-canvas"></canvas>
+
+  <!-- 主交互视口容器 -->
+  <div class="viewport-container">
+
+    <!-- 登录 HUD 控制舱卡片 -->
+    <div class="login-hud-card">
+      
+      <!-- 401 会话失效感知横幅 -->
+      <div class="alert-banner-401">
+        <div class="alert-icon-wrap">!</div>
+        <div>
+          <b style="display: block; color: #fbbf24; font-size: 12px; margin-bottom: 2px;">会话已过期 (401 SESSION EXPIRED)</b>
+          <span>检测到登录凭证已失效或在其他设备登录，请重新认证接入。</span>
+        </div>
+      </div>
+
+      <!-- 品牌标识 -->
+      <div class="brand-header">
+        <div class="brand-logo-glow">⚡</div>
+        <h1 class="brand-title">AI Learn 协同制造中枢</h1>
+        <div class="brand-sub">WMS & MES Industrial Intelligence Platform</div>
+      </div>
+
+      <!-- 认证表单 -->
+      <form onsubmit="event.preventDefault(); handleLogin();">
+        <div class="form-group">
+          <label class="form-label">
+            <span>企业租户编码 (Tenant Code)</span>
+            <span style="color: var(--primary-cyan); font-size: 11px;">● 多租户物理隔离</span>
+          </label>
+          <div class="form-input-box">
+            <span class="input-icon">🏢</span>
+            <select id="tenant-select">
+              <option value="tenant_demo_a">tenant_demo_a (华北智能工厂示范租户)</option>
+              <option value="tenant_demo_b">tenant_demo_b (华东高精尖装备制造租户)</option>
+              <option value="tenant_demo_c">tenant_demo_c (华南新能源超级工厂)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            <span>账号用户名 (Username)</span>
+          </label>
+          <div class="form-input-box">
+            <span class="input-icon">👤</span>
+            <input type="text" id="username-input" value="admin.zhang" placeholder="请输入管理员或业务账号" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            <span>登录密码 (Password)</span>
+            <span style="color: #64748b; font-size: 11px;">默认密码: 123456</span>
+          </label>
+          <div class="form-input-box">
+            <span class="input-icon">🔒</span>
+            <input type="password" id="password-input" value="123456" placeholder="请输入密码" />
+          </div>
+        </div>
+
+        <button type="submit" class="btn-login" id="login-btn">
+          <span>安全接入控制台 · SIGN IN</span>
+          <span>→</span>
+        </button>
+      </form>
+
+      <!-- 快捷演示角色快速注入 -->
+      <div class="roles-section">
+        <div class="roles-title">
+          <span>快速体验角色注入 (点击即刻填充)</span>
+          <span style="font-size: 11px; color: var(--primary-cyan)">6 种角色预设</span>
+        </div>
+        <div class="roles-grid">
+          <div class="role-chip active" onclick="pickRole('admin.zhang', '租户管理员', this)">
+            <span class="role-name">租户管理员</span>
+            <span class="role-user">admin.zhang</span>
+          </div>
+          <div class="role-chip" onclick="pickRole('sales.liu', '销售人员', this)">
+            <span class="role-name">销售人员</span>
+            <span class="role-user">sales.liu</span>
+          </div>
+          <div class="role-chip" onclick="pickRole('buyer.chen', '采购人员', this)">
+            <span class="role-name">采购人员</span>
+            <span class="role-user">buyer.chen</span>
+          </div>
+          <div class="role-chip" onclick="pickRole('wh.operator', '仓库操作员', this)">
+            <span class="role-name">仓库人员</span>
+            <span class="role-user">wh.operator</span>
+          </div>
+          <div class="role-chip" onclick="pickRole('mes.inspector', '生产质检员', this)">
+            <span class="role-name">生产质检</span>
+            <span class="role-user">mes.inspector</span>
+          </div>
+          <div class="role-chip" onclick="pickRole('iot.engineer', 'IoT工程师', this)">
+            <span class="role-name">IoT工程师</span>
+            <span class="role-user">iot.engineer</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部系统健康度与会话指示 -->
+      <div class="security-bar">
+        <div class="sec-status">
+          <div class="sec-dot"></div>
+          <span>Redis 会话监控中枢：正常</span>
+        </div>
+        <span>单会话替换机制已就绪</span>
+      </div>
+
+    </div>
+
+    <!-- 底部选型说明 -->
+    <div class="footer-guide" id="theme-guide-text">
+      当前呈现：<strong>方案一 · Palantir 工业雷达中枢</strong><br />
+      深邃深空网格，同心动态激光扫描雷达与坐标刻度，沉稳而庄重，呈现高端工业中枢级质感。
+    </div>
+
+  </div>
+
+  <script>
+    // 动态 Canvas 背景渲染系统（根据主题切换不同物理与粒子引擎）
+    const canvas = document.getElementById('bg-canvas');
+    const ctx = canvas.getContext('2d');
+    let currentTheme = 'palantir';
+    let animationFrameId;
+    let width, height;
+
+    function resize() {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // 粒子与几何系统
+    let radarAngle = 0;
+    const particles = [];
+    const particleCount = 70;
+
+    for (let i = 0; i < particleCount; i++) {
+      particles.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: (Math.random() - 0.5) * 0.6,
+        size: Math.random() * 2 + 1,
+        alpha: Math.random() * 0.6 + 0.2
+      });
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, width, height);
+
+      if (currentTheme === 'palantir') {
+        // 方案一：工业雷达 + 科技网格
+        // 1. 绘制极细经纬度激光网格
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.05)';
+        ctx.lineWidth = 1;
+        const gridSize = 60;
+        for (let x = 0; x < width; x += gridSize) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, height);
+          ctx.stroke();
+        }
+        for (let y = 0; y < height; y += gridSize) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(width, y);
+          ctx.stroke();
+        }
+
+        // 2. 绘制同心动态雷达环
+        const cx = width / 2;
+        const cy = height / 2;
+        const maxRadius = Math.min(width, height) * 0.65;
+
+        for (let r = 80; r < maxRadius; r += 90) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+          ctx.stroke();
+        }
+
+        // 3. 雷达激光扫描扇形
+        radarAngle += 0.01;
+        const sweepGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxRadius);
+        sweepGrad.addColorStop(0, 'rgba(56, 189, 248, 0.15)');
+        sweepGrad.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, maxRadius, radarAngle, radarAngle + 0.35);
+        ctx.closePath();
+        ctx.fillStyle = sweepGrad;
+        ctx.fill();
+        ctx.restore();
+
+      } else if (currentTheme === 'linear') {
+        // 方案二：Linear 极简暗黑棱镜极光
+        const time = Date.now() * 0.0008;
+        const g1 = ctx.createRadialGradient(width * 0.3 + Math.sin(time) * 120, height * 0.35 + Math.cos(time) * 80, 20, width * 0.3, height * 0.35, width * 0.45);
+        g1.addColorStop(0, 'rgba(99, 102, 241, 0.16)');
+        g1.addColorStop(1, 'transparent');
+        ctx.fillStyle = g1;
+        ctx.fillRect(0, 0, width, height);
+
+        const g2 = ctx.createRadialGradient(width * 0.7 + Math.cos(time) * 100, height * 0.65 + Math.sin(time) * 90, 20, width * 0.7, height * 0.65, width * 0.5);
+        g2.addColorStop(0, 'rgba(168, 85, 247, 0.12)');
+        g2.addColorStop(1, 'transparent');
+        ctx.fillStyle = g2;
+        ctx.fillRect(0, 0, width, height);
+
+        // 微点阵星光
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        for (let x = 30; x < width; x += 40) {
+          for (let y = 30; y < height; y += 40) {
+            if ((x + y) % 80 === 0) {
+              ctx.fillRect(x, y, 1.2, 1.2);
+            }
+          }
+        }
+
+      } else if (currentTheme === 'matrix') {
+        // 方案三：流体数字星海粒子连线
+        ctx.fillStyle = 'rgba(45, 212, 191, 0.7)';
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+          if (p.x < 0) p.x = width;
+          if (p.x > width) p.x = 0;
+          if (p.y < 0) p.y = height;
+          if (p.y > height) p.y = 0;
+
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 邻近粒子连线
+          for (let j = i + 1; j < particles.length; j++) {
+            const p2 = particles[j];
+            const dist = Math.hypot(p.x - p2.x, p.y - p2.y);
+            if (dist < 110) {
+              ctx.strokeStyle = `rgba(45, 212, 191, ${0.18 * (1 - dist / 110)})`;
+              ctx.beginPath();
+              ctx.moveTo(p.x, p.y);
+              ctx.lineTo(p2.x, p2.y);
+              ctx.stroke();
+            }
+          }
+        }
+      }
+
+      animationFrameId = requestAnimationFrame(draw);
+    }
+    draw();
+
+    // 切换风格函数
+    function switchTheme(theme, btn) {
+      currentTheme = theme;
+      document.body.className = 'theme-' + theme;
+      document.querySelectorAll('.switcher-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      const guideText = document.getElementById('theme-guide-text');
+      if (theme === 'palantir') {
+        guideText.innerHTML = '当前呈现：<strong>方案一 · Palantir 工业雷达中枢</strong><br />深邃深空网格，同心动态激光扫描雷达与坐标刻度，沉稳而庄重，呈现高端工业中枢级质感。';
+      } else if (theme === 'linear') {
+        guideText.innerHTML = '当前呈现：<strong>方案二 · Linear 极简暗黑棱镜</strong><br />先锋级深黑底色，融合柔和深邃的极光弥散与微光棱镜倒角，高雅克制，绝无冗余繁杂线条。';
+      } else {
+        guideText.innerHTML = '当前呈现：<strong>方案三 · 数字流体星海中枢</strong><br />轻盈的银河星尘粒子与动态神经突触连线流动，极具智能计算与数字流动美感。';
+      }
+    }
+
+    // 角色快速注入交互
+    function pickRole(username, roleName, el) {
+      document.getElementById('username-input').value = username;
+      document.querySelectorAll('.role-chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    // 登录动作模拟
+    function handleLogin() {
+      const btn = document.getElementById('login-btn');
+      btn.innerText = '认证鉴权中...';
+      btn.style.opacity = '0.75';
+      setTimeout(() => {
+        btn.innerText = '认证成功，正在载入中枢...';
+        btn.style.background = '#10b981';
+        btn.style.boxShadow = '0 0 20px rgba(16, 185, 129, 0.6)';
+        setTimeout(() => {
+          btn.innerHTML = '<span>安全接入控制台 · SIGN IN</span><span>→</span>';
+          btn.style.opacity = '1';
+          btn.style.background = '';
+          btn.style.boxShadow = '';
+        }, 1200);
+      }, 700);
+    }
+  </script>
+</body>
+</html>

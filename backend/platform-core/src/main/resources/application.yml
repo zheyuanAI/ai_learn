@@ -68,8 +68,8 @@ platform:
     base-url: ${WMS_AI_BASE_URL:https://api.deepseek.com}
     model: ${WMS_AI_MODEL:deepseek-v4-flash}
     api-key: ${WMS_AI_API_KEY:}
-    connect-timeout: ${WMS_AI_CONNECT_TIMEOUT:5s}
-    stream-timeout: ${WMS_AI_STREAM_TIMEOUT:60s}
+    connect-timeout: ${WMS_AI_CONNECT_TIMEOUT:6s}
+    stream-timeout: ${WMS_AI_STREAM_TIMEOUT:600s}
     tool-timeout: ${WMS_AI_TOOL_TIMEOUT:10s}
     max-tool-rounds: ${WMS_AI_MAX_TOOL_ROUNDS:4}
     max-tool-calls: ${WMS_AI_MAX_TOOL_CALLS:8}

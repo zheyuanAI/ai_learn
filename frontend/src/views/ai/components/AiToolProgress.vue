@@ -74,13 +74,14 @@ function statusLabel(status: AiToolProgressItem["status"]): string {
 </script>
 
 <style scoped>
-.tool-progress { display: grid; gap: 8px; margin: 12px 0; padding: 12px; border: 1px solid #dbe7f5; border-radius: 12px; background: #f8fbff; }
-.tool-row { display: flex; align-items: flex-start; gap: 10px; color: #29415e; }
-.tool-row strong { display: block; font-size: 13px; }
-.tool-row small { display: block; margin-top: 2px; color: #71839a; line-height: 1.45; }
-.tool-state { width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: #91a2b7; }
-.tool-state.is-running { background: #2d7ff9; box-shadow: 0 0 0 4px rgba(45, 127, 249, .12); animation: pulse 1.2s infinite; }
-.tool-state.is-success { background: #27a66c; }
-.tool-state.is-failed { background: #d94d5c; }
+/* --- 工具调用进度容器：加深边框，提升内部文字对比度 --- */
+.tool-progress { display: grid; gap: 9px; margin: 12px 0; padding: 13px 14px; border: 1px solid #c8d8ec; border-radius: 12px; background: #f5f9ff; }
+.tool-row { display: flex; align-items: flex-start; gap: 10px; color: #1e3350; }
+.tool-row strong { display: block; font-size: 13.5px; color: #1a2e48; }
+.tool-row small { display: block; margin-top: 3px; color: #526a84; font-size: 12.5px; line-height: 1.5; }
+.tool-state { width: 9px; height: 9px; margin-top: 6px; border-radius: 50%; background: #7d90a6; }
+.tool-state.is-running { background: #2d7ff9; box-shadow: 0 0 0 4px rgba(45, 127, 249, .14); animation: pulse 1.2s infinite; }
+.tool-state.is-success { background: #1f9960; }
+.tool-state.is-failed { background: #d63e4e; }
 @keyframes pulse { 50% { opacity: .45; } }
 </style>

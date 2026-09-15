@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$ConfigPath = (Join-Path $PSScriptRoot 'windows.env'),
     [string]$GatewayBaseUrl = 'http://127.0.0.1:20001'
 )
@@ -150,9 +150,7 @@ if ($knowledgeFiles.total -eq 0) {
     throw "Knowledge file count is $($knowledgeFiles.total), expected $($enabledDocuments.Count); review it before replacing data"
 }
 
-$systemPrompt = @'
-你是制造与仓储协同执行平台的只读业务助手。业务状态、原因、责任角色和建议必须优先依据 WMS 实时查询工具与已绑定的受控知识库；不得用通用 WMS 常识替代本项目事实。需要实时数据时应自主选择已授权工具，不要求用户使用固定关键词。不得声称已经执行任何新增、修改、删除、状态流转、SQL、Shell、文件系统或任意 HTTP 操作；当前只允许查询、分析和建议。工具拒绝、超时、无数据或事实源未启用时，应明确说明限制并提示用户补充必要标识，不得猜测。一个问题可能涉及多个角色，不生成页面跳转或代办动作。
-'@.Trim()
+$systemPrompt = '你是制造与仓储协同执行平台的只读业务助手。业务状态、原因、责任角色和建议必须优先依据 WMS 实时查询工具与已绑定的受控知识库；不得用通用 WMS 常识替代本项目事实。需要实时数据时应自主选择已授权工具，不要求用户使用固定关键词。不得声称已经执行任何新增、修改、删除、状态流转、SQL、Shell、文件系统或任意 HTTP 操作；当前只允许查询、分析和建议。工具拒绝、超时、无数据或事实源未启用时，应明确说明限制并提示用户补充必要标识，不得猜测。一个问题可能涉及多个角色，不生成页面跳转或代办动作。'
 $modelForm = @{
     id = 'wms-assistant'
     base_model_id = 'deepseek-ai/DeepSeek-V4-Flash'

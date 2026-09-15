@@ -142,6 +142,7 @@
           <configuration>
             <release>${java.version}</release>
             <encoding>${project.build.sourceEncoding}</encoding>
+            <parameters>true</parameters>
           </configuration>
         </plugin>
         <plugin>

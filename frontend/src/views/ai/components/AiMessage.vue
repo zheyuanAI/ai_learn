@@ -33,22 +33,35 @@ defineProps<{ message: AiUiMessage }>();
 <style scoped>
 .message-row { display: flex; gap: 12px; align-items: flex-start; }
 .message-row.is-user { flex-direction: row-reverse; }
-.avatar { flex: 0 0 34px; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 11px; color: #fff; background: linear-gradient(145deg, #173d72, #2d7ff9); font-size: 12px; font-weight: 800; box-shadow: 0 6px 18px rgba(31, 91, 169, .2); }
-.is-user .avatar { background: #64748b; }
-.message-body { max-width: min(780px, calc(100% - 52px)); padding: 14px 16px; border: 1px solid #dfe7f1; border-radius: 5px 16px 16px 16px; background: #fff; box-shadow: 0 6px 20px rgba(35, 57, 86, .05); }
-.is-user .message-body { border: 0; border-radius: 16px 5px 16px 16px; background: linear-gradient(145deg, #245fae, #2d7ff9); color: #fff; box-shadow: 0 8px 24px rgba(45, 127, 249, .2); }
-.message-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 8px; font-size: 13px; }
-.message-head span { color: #8190a3; font-size: 11px; font-weight: 600; }
-.is-user .message-head span { color: rgba(255, 255, 255, .72); }
-.message-content { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.72; }
-.thinking-line { display: flex; align-items: center; gap: 5px; color: #62738a; font-size: 13px; }
-.thinking-line span { width: 5px; height: 5px; border-radius: 50%; background: #2d7ff9; animation: blink 1.1s infinite; }
+.avatar { flex: 0 0 38px; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; color: #fff; background: linear-gradient(145deg, #173d72, #2d7ff9); font-size: 13px; font-weight: 800; box-shadow: 0 6px 18px rgba(31, 91, 169, .22); }
+/* --- 用户头像：与气泡统一蓝色系渐变 --- */
+.is-user .avatar { background: linear-gradient(145deg, #3670c2, #5a9cf5); box-shadow: 0 6px 18px rgba(54, 112, 194, .22); }
+/* --- AI 回复气泡：加强边框、阴影和内间距，提升整体可读性 --- */
+.message-body { max-width: min(780px, calc(100% - 56px)); padding: 18px 20px; border: 1px solid #c4d3e6; border-radius: 5px 16px 16px 16px; background: #fff; color: #1a2b3f; box-shadow: 0 4px 16px rgba(30, 55, 85, .10), 0 1px 3px rgba(30, 55, 85, .06); }
+/* --- 用户气泡：提亮渐变底色，让白色文字更通透清晰 --- */
+.is-user .message-body { border: 0; border-radius: 16px 5px 16px 16px; background: linear-gradient(145deg, #3b7ddf, #5a9cf5); color: #fff; box-shadow: 0 6px 20px rgba(58, 125, 220, .28), 0 2px 6px rgba(58, 125, 220, .10); }
+/* --- 头部：加深标题色、模型标签色 --- */
+.message-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 10px; font-size: 13.5px; }
+.message-head strong { color: #14253a; }
+.message-head span { color: #5c7290; font-size: 12px; font-weight: 600; }
+/* --- 用户气泡头部：纯白标题 + 半透明辅助文字，层次更清晰 --- */
+.is-user .message-head strong { color: #fff; text-shadow: 0 1px 3px rgba(30, 70, 140, .18); }
+.is-user .message-head span { color: rgba(255, 255, 255, .82); }
+/* --- 用户气泡正文：纯白 + 微量字间距增强可读性 --- */
+.is-user .message-content { color: #fff; letter-spacing: .02em; }
+/* --- 正文内容：加深颜色、增大字号和行高 --- */
+.message-content { white-space: pre-wrap; overflow-wrap: anywhere; color: #1a2b3f; font-size: 15px; line-height: 1.82; letter-spacing: .01em; }
+/* --- 流式生成中提示 --- */
+.thinking-line { display: flex; align-items: center; gap: 5px; color: #4a5e74; font-size: 13.5px; }
+.thinking-line span { width: 6px; height: 6px; border-radius: 50%; background: #2d7ff9; animation: blink 1.1s infinite; }
 .thinking-line span:nth-child(2) { animation-delay: .15s; }
-.thinking-line span:nth-child(3) { animation-delay: .3s; margin-right: 4px; }
-.message-error, .interrupted { margin-top: 10px; padding: 9px 11px; border-radius: 9px; color: #a53442; background: #fff1f2; font-size: 12px; }
-.evidence-grid { display: grid; gap: 8px; margin: 14px 0 0; padding-top: 12px; border-top: 1px solid #edf1f6; }
-.evidence-grid div { display: grid; grid-template-columns: 70px 1fr; gap: 8px; font-size: 12px; }
-.evidence-grid dt { color: #8291a4; }
-.evidence-grid dd { margin: 0; color: #465970; overflow-wrap: anywhere; }
+.thinking-line span:nth-child(3) { animation-delay: .3s; margin-right: 5px; }
+/* --- 错误和中断提示 --- */
+.message-error, .interrupted { margin-top: 10px; padding: 10px 13px; border-radius: 9px; color: #922030; background: #fff0f1; font-size: 13px; line-height: 1.6; }
+/* --- 证据栏（来源、时间、工具、请求编号）：加深颜色、增大字号 --- */
+.evidence-grid { display: grid; gap: 9px; margin: 16px 0 0; padding: 14px 0 0; border-top: 1px solid #dce4ef; }
+.evidence-grid div { display: grid; grid-template-columns: 76px 1fr; gap: 8px; font-size: 13px; }
+.evidence-grid dt { color: #5a6d82; font-weight: 600; }
+.evidence-grid dd { margin: 0; color: #2a3f57; overflow-wrap: anywhere; }
 @keyframes blink { 50% { opacity: .25; transform: translateY(-2px); } }
 </style>

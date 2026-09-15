@@ -1,0 +1,4 @@
+powershell -ExecutionPolicy Bypass -File .\start-windows.ps1
+
+邮箱：wms-openwebui-admin@local.invalid
+密码：123456

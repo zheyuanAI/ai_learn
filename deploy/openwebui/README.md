@@ -10,7 +10,7 @@
 - WMS 用户不直接登录 Open WebUI，也不接触 Open WebUI 或硅基流动 Key；
 - 不启用 Open Terminal、代码执行、联网搜索、通用 HTTP、文件系统或社区 Tool；
 - 不把整个项目目录交给模型，只导入 `docs/ai-knowledge/knowledge-manifest.yaml` 启用的 Markdown；
-- Open WebUI Tool 连接只能指向 WMS AI Tool 专用 OpenAPI，不能导入完整 WMS API。
+- Open WebUI Tool 连接只能指向 Gateway 从唯一 YAML 白名单生成的裁剪 OpenAPI，不能导入完整 WMS API。
 
 ## 1. 安装与本地密钥
 
@@ -67,13 +67,13 @@ powershell -ExecutionPolicy Bypass -File .\validate-knowledge.ps1
 
 在 Open WebUI 中创建 WMS Knowledge，只导入清单中 `enabled: true` 的文件，并绑定到专用模型预设 `wms-assistant`。本地文件存在不等于已进入知识库，必须完成导入和绑定。
 
-当新版 Core 已经启动后，可使用幂等配置脚本自动校验专用 OpenAPI、创建或更新 Tool Server、首次导入 Knowledge 并创建模型预设：
+当新版 Gateway、Core、IoT 已经启动后，可使用幂等配置脚本自动校验裁剪 OpenAPI、创建或更新 Tool Server、首次导入 Knowledge 并创建模型预设：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\configure-windows.ps1
 ```
 
-脚本默认连接 `http://127.0.0.1:10003`；临时验证实例可通过 `-CoreBaseUrl` 指定。已存在且文件数正确的 Knowledge 不会重复上传；文件数异常时脚本会停止，避免静默覆盖知识数据。
+脚本默认连接 Gateway `http://127.0.0.1:20001`；临时验证实例可通过 `-GatewayBaseUrl` 指定。已存在且文件数正确的 Knowledge 不会重复上传；文件数异常时脚本会停止，避免静默覆盖知识数据。
 
 首批核对问题：
 
@@ -83,13 +83,22 @@ powershell -ExecutionPolicy Bypass -File .\configure-windows.ps1
 - 采购质量退回涉及哪些角色，处理顺序是什么？
 - AI 当前能否删除订单或调整库存？
 
-## 4. WMS Tool Server
+## 4. WMS Tool Server 与唯一白名单
 
-在 Open WebUI 中创建 ID 为 `wms` 的 OpenAPI Tool Server：
+业务 API 只在以下文件维护一次：
 
 ```text
-http://127.0.0.1:10003/v3/api-docs/ai-tools
+deploy/openwebui/wms-ai-api-whitelist.yml
 ```
+
+文件按业务模块分组，角色权限不写入清单；每个操作必须使用精确 method + path。Gateway 读取该文件并发布：
+
+```text
+http://127.0.0.1:20001/v3/api-docs/ai-tools/core
+http://127.0.0.1:20001/v3/api-docs/ai-tools/iot
+```
+
+`configure-windows.ps1` 会自动创建 `wms_core`、`wms_iot` 两个 Tool Server，并移除旧 `wms*` 配置后重新绑定模型预设，不需要在 Open WebUI 中维护第二份接口清单。
 
 连接只配置以下固定 Header：
 
@@ -101,9 +110,9 @@ http://127.0.0.1:10003/v3/api-docs/ai-tools
 }
 ```
 
-服务密钥只证明请求来自本机 Open WebUI；chat/message 只作为 Redis 短期关联键。WMS 仍会重新验证有效 `jti`、实时权限、租户、代码注册表、部署启用名单、本次请求白名单和最大调用次数。
+服务密钥只证明请求来自本机 Open WebUI；chat/message 只作为 Redis 短期关联键。Gateway 重新验证有效 `jti`、唯一 YAML 白名单、本次请求限制和最大调用次数，再恢复当前用户与租户；业务服务继续使用现有 Spring Security 和数据范围做最终权限判断。
 
-## 5. 加载 Core 与 IoT 环境变量
+## 5. 加载 Gateway、Core 与 IoT 环境变量
 
 在启动 Core、IoT 的同一个 PowerShell 进程中执行：
 
@@ -111,7 +120,7 @@ http://127.0.0.1:10003/v3/api-docs/ai-tools
 . .\load-wms-ai-env.ps1
 ```
 
-仓库根目录作为 IDEA 项目时，`.run/CoreApplication.run.xml` 与 `.run/IotApplication.run.xml` 会引用 `$PROJECT_DIR$/deploy/openwebui/windows.env`；以 `backend` 作为 IDEA 项目时，实际使用 `backend/.run/CoreApplication.run.xml` 与 `backend/.run/IotApplication.run.xml`，引用 `$PROJECT_DIR$/../deploy/openwebui/windows.env`。因此完成本文件配置后，使用对应项目的一键启动即可同时加载 AI 配置和 Core/IoT 配对 HMAC；运行配置本身不会保存或打印密钥。若本机没有该文件，Core 会按默认值保持 AI 与跨服务追溯关闭。
+仓库根目录作为 IDEA 项目时，对应 Gateway、Core 与 IoT 的 `.run` 配置会引用 `deploy/openwebui/windows.env`；以 `backend` 作为 IDEA 项目时，实际使用 `backend/.run/*.run.xml`，引用 `$PROJECT_DIR$/../deploy/openwebui/windows.env`。Gateway 还会显式接收唯一 YAML 的绝对路径。因此完成本文件配置后，使用对应项目的一键启动即可加载 AI 配置和 Core/IoT 配对 HMAC；运行配置本身不会保存或打印密钥。若本机没有该文件，各模块按默认值保持 AI 与跨服务追溯关闭。
 
 ## 6. 停止
 
@@ -121,15 +130,15 @@ http://127.0.0.1:10003/v3/api-docs/ai-tools
 
 ### 7.1 它是独立服务，不是 Core 内嵌组件
 
-- 启动 WMS 后端不代表 Open WebUI 一定已启动；AI 不可用时先分别检查 `10003`、`3000` 和硅基流动连接；
-- `.run` 文件只帮助 Core/IoT 加载本地环境变量，不负责安装或自动升级 Open WebUI；
+- 启动 WMS 后端不代表 Open WebUI 一定已启动；AI 不可用时先分别检查 `20001`、`10003`、`10004`、`3000` 和硅基流动连接；
+- `.run` 文件只帮助 Gateway/Core/IoT 加载本地环境变量，不负责安装或自动升级 Open WebUI；
 - Open WebUI 故障必须只让 AI 降级，不能影响订单、库存、制造和 IoT 的正常业务接口。
 
 ### 7.2 配置分为三层
 
 - `windows.env` 保存本机运行密钥和 Core 连接参数；
 - Open WebUI 自己的本地数据库保存管理员、硅基流动连接、Knowledge、Tool Server 和模型预设；
-- Core 代码注册表、部署启用名单和 Spring Security 决定最终可调用工具。
+- 唯一 YAML 白名单、Gateway 委托过滤和下游 Spring Security 决定最终可调用接口。
 
 修改 `windows.env` 不会自动覆盖 Open WebUI 已持久化的硅基流动连接。连接、Knowledge 或工具配置变化后，应重新执行 `configure-windows.ps1` 并核对模型预设实际绑定结果。
 
@@ -143,7 +152,7 @@ http://127.0.0.1:10003/v3/api-docs/ai-tools
 ### 7.4 工具和知识不能随意扩展
 
 - 不要导入 WMS 完整 OpenAPI，不要添加通用 HTTP、Shell、Python、文件系统、联网搜索、社区 Tool 或任何写工具；
-- 即使当前用户拥有业务写权限，AI 仍只能使用代码注册表中的只读工具；不能仅靠 Prompt 声明“不要修改数据”；
+- 即使当前用户拥有业务写权限，AI 仍只能调用唯一 YAML 中精确登记的查询接口；不能仅靠 Prompt 声明“不要修改数据”；
 - 业务规则变化时先更新正式规格，再同步 `docs/ai-knowledge/`、提高 manifest revision、执行 `validate-knowledge.ps1`，最后重新导入或更新 Knowledge；
 - Knowledge 是静态规则摘要，不包含实时库存、订单状态、告警或操作历史，实时问题必须调用 WMS 工具。
 
@@ -156,9 +165,9 @@ http://127.0.0.1:10003/v3/api-docs/ai-tools
 
 ### 7.6 推荐排查顺序
 
-1. `GET /api/ai/capabilities` 是否显示 AI 启用和当前用户授权工具；
-2. Core 是否加载了正确的 `windows.env`，但不要把变量值打印到日志；
+1. `GET /api/ai/capabilities` 是否显示 AI 启用和唯一 YAML 的 operation 目录；
+2. Gateway、Core 与 IoT 是否加载了正确的 `windows.env`，但不要把变量值打印到日志；
 3. `http://127.0.0.1:3000` 是否可访问，Open WebUI 中硅基流动连接和 `wms-assistant` 是否可用；
-4. `configure-windows.ps1` 是否能核对 7 份 Knowledge、`wms` Tool Server 和模型预设；
-5. `/v3/api-docs/ai-tools` 是否只发布 10 个受控工具；
+4. `configure-windows.ps1` 是否能核对 7 份 Knowledge、`wms_core`/`wms_iot` Tool Server 和模型预设；
+5. Gateway `/v3/api-docs/ai-tools` 是否报告 36 个 operation，两个子目录是否只发布 YAML 登记接口；
 6. 根据 WMS `request_id` 查询 AI 工具审计，区分权限拒绝、工具失败、超时和 Provider 故障。

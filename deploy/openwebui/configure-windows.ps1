@@ -1,6 +1,6 @@
 param(
     [string]$ConfigPath = (Join-Path $PSScriptRoot 'windows.env'),
-    [string]$CoreBaseUrl = 'http://127.0.0.1:10003'
+    [string]$GatewayBaseUrl = 'http://127.0.0.1:20001'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -19,43 +19,74 @@ foreach ($name in @('WMS_OPENWEBUI_BASE_URL', 'WMS_OPENWEBUI_API_KEY', 'WMS_AI_T
 }
 
 $openWebUiBaseUrl = $env:WMS_OPENWEBUI_BASE_URL.TrimEnd('/')
-$coreBaseUrl = $CoreBaseUrl.TrimEnd('/')
+$gatewayBaseUrl = $GatewayBaseUrl.TrimEnd('/')
 $jsonHeaders = @{
     Authorization = "Bearer $env:WMS_OPENWEBUI_API_KEY"
     'Content-Type' = 'application/json'
 }
 $authHeaders = @{ Authorization = "Bearer $env:WMS_OPENWEBUI_API_KEY" }
 
-Write-Host 'Checking the dedicated WMS OpenAPI tool catalog...'
-$toolCatalog = Invoke-RestMethod -Uri "$coreBaseUrl/v3/api-docs/ai-tools"
-$toolPaths = @($toolCatalog.paths.PSObject.Properties.Name)
-if ($toolPaths.Count -eq 0 -or @($toolPaths | Where-Object { -not $_.StartsWith('/internal/ai/tools/') }).Count -gt 0) {
-    throw 'The WMS AI OpenAPI document contains no tools or exposes a path outside /internal/ai/tools/**'
+Write-Host 'Checking the WMS business API catalogs generated from the single whitelist...'
+$toolCatalogIndex = Invoke-RestMethod -Uri "$gatewayBaseUrl/v3/api-docs/ai-tools"
+$catalogServices = @($toolCatalogIndex.services)
+if ($catalogServices.Count -eq 0 -or [int]$toolCatalogIndex.operation_count -le 0) {
+    throw 'The WMS AI catalog index contains no services or operations'
 }
 
-$toolServer = @{
-    url = $coreBaseUrl
-    path = '/v3/api-docs/ai-tools'
-    type = 'openapi'
-    auth_type = 'none'
-    headers = @{
-        'X-WMS-AI-Service-Key' = $env:WMS_AI_TOOL_SERVICE_SECRET
-        'X-WMS-OpenWebUI-Chat-Id' = '{{CHAT_ID}}'
-        'X-WMS-OpenWebUI-Message-Id' = '{{MESSAGE_ID}}'
+$toolServers = @()
+$toolIds = @()
+$verifiedOperationCount = 0
+foreach ($service in $catalogServices) {
+    $serviceId = [string]$service.id
+    $catalogPath = [string]$service.catalog_path
+    $expectedOperationIds = @($service.operation_ids | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+    $filteredCatalog = Invoke-RestMethod -Uri "$gatewayBaseUrl$catalogPath"
+    $actualOperationIds = @()
+    foreach ($pathProperty in $filteredCatalog.paths.PSObject.Properties) {
+        foreach ($methodProperty in $pathProperty.Value.PSObject.Properties) {
+            if ($methodProperty.Name -in @('get', 'post', 'put', 'patch', 'delete')) {
+                $actualOperationIds += [string]$methodProperty.Value.operationId
+            }
+        }
     }
-    key = ''
-    config = @{ enable = $true }
-    info = @{
-        id = 'wms'
-        name = 'WMS 只读查询工具'
-        description = '仅允许调用当前登录 WMS 用户有权访问的受控只读业务查询'
+    $actualOperationIds = @($actualOperationIds | Sort-Object -Unique)
+    if (($actualOperationIds -join ',') -ne ($expectedOperationIds -join ',')) {
+        throw "Filtered OpenAPI operations do not match the whitelist for service $serviceId"
+    }
+    $verifiedOperationCount += $actualOperationIds.Count
+    $toolId = "server:wms_$serviceId"
+    $toolIds += $toolId
+    $toolServers += @{
+        url = $gatewayBaseUrl
+        path = $catalogPath
+        type = 'openapi'
+        auth_type = 'none'
+        headers = @{
+            'X-WMS-AI-Service-Key' = $env:WMS_AI_TOOL_SERVICE_SECRET
+            'X-WMS-OpenWebUI-Chat-Id' = '{{CHAT_ID}}'
+            'X-WMS-OpenWebUI-Message-Id' = '{{MESSAGE_ID}}'
+        }
+        key = ''
+        config = @{ enable = $true }
+        info = @{
+            id = "wms_$serviceId"
+            name = [string]$service.name
+            description = '由 WMS 唯一业务 API 白名单生成；最终权限由当前登录用户的 Spring Security 决定'
+        }
     }
 }
-$null = Invoke-RestMethod -Method Post -Uri "$openWebUiBaseUrl/api/v1/configs/tool_servers/verify" `
-    -Headers $jsonHeaders -Body ($toolServer | ConvertTo-Json -Depth 10)
+if ($verifiedOperationCount -ne [int]$toolCatalogIndex.operation_count) {
+    throw 'The total filtered OpenAPI operation count does not match the whitelist index'
+}
+foreach ($toolServer in $toolServers) {
+    $null = Invoke-RestMethod -Method Post -Uri "$openWebUiBaseUrl/api/v1/configs/tool_servers/verify" `
+        -Headers $jsonHeaders -Body ($toolServer | ConvertTo-Json -Depth 10)
+}
 $currentToolServers = Invoke-RestMethod -Uri "$openWebUiBaseUrl/api/v1/configs/tool_servers" -Headers $authHeaders
-$connections = @($currentToolServers.TOOL_SERVER_CONNECTIONS | Where-Object { $_.info.id -ne 'wms' })
-$connections += $toolServer
+$connections = @($currentToolServers.TOOL_SERVER_CONNECTIONS | Where-Object {
+    -not ([string]$_.info.id).StartsWith('wms')
+})
+$connections += $toolServers
 $null = Invoke-RestMethod -Method Post -Uri "$openWebUiBaseUrl/api/v1/configs/tool_servers" `
     -Headers $jsonHeaders -Body (@{ TOOL_SERVER_CONNECTIONS = $connections } | ConvertTo-Json -Depth 12)
 
@@ -143,7 +174,7 @@ $modelForm = @{
         }
         builtinTools = @{ knowledge = $true }
         knowledge = @(@{ id = $knowledge.id; name = $knowledgeName; type = 'collection' })
-        toolIds = @('server:wms')
+        toolIds = $toolIds
     }
     access_grants = @()
     is_active = $true
@@ -161,4 +192,4 @@ if (@($visibleModels.data.id) -notcontains 'wms-assistant') {
     throw 'The wms-assistant preset was saved but is not visible through the Open WebUI model API'
 }
 
-Write-Host "Open WebUI WMS setup passed: $($toolPaths.Count) tools, $($enabledDocuments.Count) knowledge files, model wms-assistant."
+Write-Host "Open WebUI WMS setup passed: $verifiedOperationCount business API tools, $($enabledDocuments.Count) knowledge files, model wms-assistant."

@@ -1,5 +1,7 @@
 package com.ailearn.platform.gateway.filter;
 
+import com.ailearn.platform.gateway.ai.AiApiWhitelistCatalog;
+import com.ailearn.platform.gateway.ai.AiDelegatedGatewayService;
 import com.ailearn.platform.gateway.config.GatewaySecurityProperties;
 import com.ailearn.platform.shared.constants.HeaderConstants;
 import com.ailearn.platform.shared.security.RsaKeyUtils;
@@ -12,6 +14,7 @@ import java.security.KeyPair;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -75,6 +78,42 @@ class JwtAuthGlobalFilterTest {
         objectMapper = new ObjectMapper();
         filter = new JwtAuthGlobalFilter(properties, redisTemplate, objectMapper);
         filter.setPublicKey(keyPair.getPublic());
+    }
+
+    @Test
+    @DisplayName("Open WebUI 委托请求只注入恢复后的身份，不接受调用方伪造权限")
+    void testAiDelegatedRequestInjectsOnlyTrustedIdentity() {
+        AiDelegatedGatewayService delegatedService = mock(AiDelegatedGatewayService.class);
+        filter = new JwtAuthGlobalFilter(properties, redisTemplate, objectMapper, delegatedService);
+        UUID tenantId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        AiApiWhitelistCatalog.Operation operation = new AiApiWhitelistCatalog.Operation(
+                "salesOrderDetail", "core", "sales", "销售查询", "GET",
+                "/api/sales-orders/{id}", "查询销售订单详情");
+        AiDelegatedGatewayService.DelegatedRequest delegated =
+                new AiDelegatedGatewayService.DelegatedRequest(tenantId, userId, "trusted-jti",
+                        "trusted-request", "invocation", "call", System.nanoTime(), operation);
+        when(delegatedService.isAttempt(any())).thenReturn(true);
+        when(delegatedService.authenticate(any(), anyString())).thenReturn(Mono.just(delegated));
+        when(delegatedService.recordFinished(any(), any())).thenReturn(Mono.empty());
+        when(filterChain.filter(any())).thenReturn(Mono.empty());
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest
+                .get("/api/sales-orders/00000000-0000-0000-0000-000000000001")
+                .header(HeaderConstants.X_USER_ID, "forged-user")
+                .header(HeaderConstants.X_AUTHORITIES, "admin")
+                .header(AiDelegatedGatewayService.SERVICE_KEY_HEADER, "secret")
+                .build());
+
+        StepVerifier.create(filter.filter(exchange, filterChain)).verifyComplete();
+
+        ArgumentCaptor<ServerWebExchange> captor = ArgumentCaptor.forClass(ServerWebExchange.class);
+        verify(filterChain).filter(captor.capture());
+        HttpHeaders headers = captor.getValue().getRequest().getHeaders();
+        assertEquals(userId.toString(), headers.getFirst(HeaderConstants.X_USER_ID));
+        assertEquals(tenantId.toString(), headers.getFirst(HeaderConstants.X_TENANT_ID));
+        assertEquals("trusted-jti", headers.getFirst(HeaderConstants.X_SESSION_ID));
+        assertNull(headers.getFirst(HeaderConstants.X_AUTHORITIES));
+        assertNull(headers.getFirst(AiDelegatedGatewayService.SERVICE_KEY_HEADER));
     }
 
     @Test

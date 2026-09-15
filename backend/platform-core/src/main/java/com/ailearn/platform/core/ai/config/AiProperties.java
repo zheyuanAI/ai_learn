@@ -30,8 +30,10 @@ public class AiProperties {
     private String openWebuiApiKey = "";
     private String openWebuiModel = "wms-assistant";
     private String openWebuiToolServerId = "server:wms";
+    private Set<String> openWebuiToolServerIds = new LinkedHashSet<>(Set.of("server:wms_core", "server:wms_iot"));
     private String toolServiceSecret = "";
     private Duration invocationContextTtl = Duration.ofMinutes(10);
+    private URI gatewayBaseUrl = URI.create("http://127.0.0.1:20001");
 
     public boolean isEnabled() {
         return enabled;
@@ -157,6 +159,16 @@ public class AiProperties {
         this.openWebuiToolServerId = openWebuiToolServerId;
     }
 
+    /** 返回由唯一 API 白名单生成并绑定到 Open WebUI 模型预设的 Tool Server 集合。 */
+    public Set<String> getOpenWebuiToolServerIds() {
+        return Set.copyOf(openWebuiToolServerIds);
+    }
+
+    public void setOpenWebuiToolServerIds(Set<String> openWebuiToolServerIds) {
+        this.openWebuiToolServerIds = openWebuiToolServerIds == null
+                ? new LinkedHashSet<>() : new LinkedHashSet<>(openWebuiToolServerIds);
+    }
+
     public String getToolServiceSecret() {
         return toolServiceSecret;
     }
@@ -171,5 +183,13 @@ public class AiProperties {
 
     public void setInvocationContextTtl(Duration invocationContextTtl) {
         this.invocationContextTtl = invocationContextTtl;
+    }
+
+    public URI getGatewayBaseUrl() {
+        return gatewayBaseUrl;
+    }
+
+    public void setGatewayBaseUrl(URI gatewayBaseUrl) {
+        this.gatewayBaseUrl = gatewayBaseUrl;
     }
 }

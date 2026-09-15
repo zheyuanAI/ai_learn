@@ -30,7 +30,7 @@ class OpenWebUiAgentClientTest {
     void shouldBuildNativeAgentPayloadWithoutArbitraryToolsOrHighRiskFeatures() {
         AiProperties properties = new AiProperties();
         properties.setOpenWebuiModel("wms-assistant");
-        properties.setOpenWebuiToolServerId("server:wms");
+        properties.setOpenWebuiToolServerIds(java.util.Set.of("server:wms"));
         OpenWebUiAgentClient client = new OpenWebUiAgentClient(properties, new ObjectMapper(),
                 mock(OpenWebUiInvocationContextStore.class));
 

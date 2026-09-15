@@ -69,6 +69,9 @@ if (Test-Path -LiteralPath $ConfigPath) {
         'CORE_FACTS_IOT_ENABLED=true'
         "CORE_FACTS_IOT_HMAC_SECRET=$factsSecret"
         "IOT_INTERNAL_S7_HMAC_SECRET=$factsSecret"
+        'WMS_AI_API_WHITELIST_PATH=../deploy/openwebui/wms-ai-api-whitelist.yml'
+        'WMS_AI_GATEWAY_BASE_URL=http://127.0.0.1:20001'
+        'WMS_OPENWEBUI_TOOL_SERVER_IDS=server:wms_core,server:wms_iot'
     )
     Write-Output "Local Open WebUI config already exists; added $added missing traceability setting(s): $ConfigPath"
     exit 0
@@ -93,6 +96,9 @@ $content = @(
     'WMS_OPENWEBUI_BASE_URL=http://127.0.0.1:3000'
     'WMS_OPENWEBUI_MODEL=wms-assistant'
     'WMS_OPENWEBUI_TOOL_SERVER_ID=server:wms'
+    'WMS_OPENWEBUI_TOOL_SERVER_IDS=server:wms_core,server:wms_iot'
+    'WMS_AI_API_WHITELIST_PATH=../deploy/openwebui/wms-ai-api-whitelist.yml'
+    'WMS_AI_GATEWAY_BASE_URL=http://127.0.0.1:20001'
     'WMS_AI_TOOL_TIMEOUT=10s'
 )
 [System.IO.File]::WriteAllLines($ConfigPath, $content, [System.Text.UTF8Encoding]::new($false))

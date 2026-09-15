@@ -7,7 +7,10 @@ import com.ailearn.platform.core.inventory.application.InventoryReservationPage;
 import com.ailearn.platform.core.inventory.application.InventoryReservationQuery;
 import com.ailearn.platform.core.inventory.application.InventoryTransactionPage;
 import com.ailearn.platform.core.inventory.application.InventoryTransactionQuery;
+import com.ailearn.platform.core.inventory.application.LowStockPage;
+import com.ailearn.platform.core.inventory.application.LowStockQueryService;
 import com.ailearn.platform.shared.api.ApiResponse;
+import com.ailearn.platform.shared.context.TenantContextHolder;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -25,14 +28,30 @@ import org.springframework.web.bind.annotation.RestController;
 public class InventoryController {
 
     private final InventoryQueryService queryService;
+    private final LowStockQueryService lowStockQueryService;
 
     /**
      * 注入库存查询端口。
      *
      * @param queryService 库存查询应用端口
      */
-    public InventoryController(InventoryQueryService queryService) {
+    public InventoryController(InventoryQueryService queryService,
+                               LowStockQueryService lowStockQueryService) {
         this.queryService = queryService;
+        this.lowStockQueryService = lowStockQueryService;
+    }
+
+    /**
+     * 查询低于商品安全库存阈值的库存缺口。
+     * 入参：可选仓库和结果上限；出参：当前可信租户的低库存列表；流程：复用现有低库存读模型，不建立 AI 专用查询。
+     */
+    @GetMapping("/low-stock")
+    @PreAuthorize("hasAuthority('inv:balance:view')")
+    public ApiResponse<LowStockPage> lowStock(
+            @RequestParam(name = "warehouse_id", required = false) UUID warehouseId,
+            @RequestParam(name = "limit", defaultValue = "50") int limit) {
+        return ApiResponse.success(lowStockQueryService.query(
+                TenantContextHolder.requireTenantId(), warehouseId, limit));
     }
 
     /**

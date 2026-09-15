@@ -1,0 +1,226 @@
+version: 1
+
+# AI 业务 API 唯一白名单。
+# 分组仅用于阅读与工具说明，不表达角色权限；最终权限始终由现有 Spring Security 判断。
+services:
+  core:
+    openapi-url: http://127.0.0.1:10003/v3/api-docs
+    catalog-path: /v3/api-docs/ai-tools/core
+    name: WMS 核心业务查询
+  iot:
+    openapi-url: http://127.0.0.1:10004/v3/api-docs
+    catalog-path: /v3/api-docs/ai-tools/iot
+    name: WMS IoT 业务查询
+
+groups:
+  master-data:
+    description: 解析商品、仓库和库位等业务对象，为后续事实查询取得可信 UUID
+    operations:
+      - id: productSearch
+        service: core
+        method: GET
+        path: /api/products
+        summary: 按关键字和状态分页查询商品
+      - id: productDetail
+        service: core
+        method: GET
+        path: /api/products/{id}
+        summary: 查询商品详情
+      - id: warehouseSearch
+        service: core
+        method: GET
+        path: /api/warehouses
+        summary: 按关键字和状态分页查询仓库
+      - id: warehouseDetail
+        service: core
+        method: GET
+        path: /api/warehouses/{id}
+        summary: 查询仓库详情
+      - id: locationSearch
+        service: core
+        method: GET
+        path: /api/locations
+        summary: 按关键字和状态分页查询库位
+      - id: locationDetail
+        service: core
+        method: GET
+        path: /api/locations/{id}
+        summary: 查询库位详情
+
+  sales:
+    description: 销售订单、拣货和发货履约事实查询
+    operations:
+      - id: salesOrderSearch
+        service: core
+        method: GET
+        path: /api/sales-orders
+        summary: 按关键字、状态、客户和履约状态分页查询销售订单
+      - id: salesOrderDetail
+        service: core
+        method: GET
+        path: /api/sales-orders/{id}
+        summary: 查询销售订单及明细履约详情
+      - id: salesPickTaskSearch
+        service: core
+        method: GET
+        path: /api/pick-tasks
+        summary: 查询可执行直接拣货及其履约状态的销售订单
+
+  purchasing:
+    description: 采购订单、收货质量处置和上架进度查询
+    operations:
+      - id: purchaseOrderSearch
+        service: core
+        method: GET
+        path: /api/purchase-orders
+        summary: 按关键字和状态分页查询采购订单
+      - id: purchaseOrderDetail
+        service: core
+        method: GET
+        path: /api/purchase-orders/{id}
+        summary: 查询采购订单及明细收货详情
+      - id: putawayTaskSearch
+        service: core
+        method: GET
+        path: /api/putaway-tasks
+        summary: 查询采购收货关联的上架任务
+
+  inventory:
+    description: 库存余额、预留、流水和安全库存缺口查询
+    operations:
+      - id: inventoryBalanceSearch
+        service: core
+        method: GET
+        path: /api/inventory/balances
+        summary: 按商品、仓库、库位和批次查询库存余额
+      - id: inventoryReservationSearch
+        service: core
+        method: GET
+        path: /api/inventory/reservations
+        summary: 按来源和库存维度查询库存预留及分配
+      - id: inventoryTransactionSearch
+        service: core
+        method: GET
+        path: /api/inventory/transactions
+        summary: 按来源、库存维度和时间范围查询库存流水
+      - id: inventoryLowStockSearch
+        service: core
+        method: GET
+        path: /api/inventory/low-stock
+        summary: 查询低于商品安全库存阈值的库存缺口
+
+  manufacturing:
+    description: 生产工单和工序执行事实查询
+    operations:
+      - id: workOrderSearch
+        service: core
+        method: GET
+        path: /api/work-orders
+        summary: 按关键字和状态分页查询生产工单
+      - id: workOrderDetail
+        service: core
+        method: GET
+        path: /api/work-orders/{id}
+        summary: 查询生产工单生命周期与执行进度详情
+      - id: operationExecutionSearch
+        service: core
+        method: GET
+        path: /api/operation-executions
+        summary: 查询工序执行记录
+      - id: operationExecutionDetail
+        service: core
+        method: GET
+        path: /api/operation-executions/{id}
+        summary: 查询单次工序执行详情
+
+  dashboard:
+    description: 跨模块运营摘要和异常视图查询
+    operations:
+      - id: dashboardInventory
+        service: core
+        method: GET
+        path: /api/dashboard/inventory
+        summary: 查询库存运营摘要
+      - id: dashboardFulfillment
+        service: core
+        method: GET
+        path: /api/dashboard/fulfillment
+        summary: 查询采购与销售履约摘要
+      - id: dashboardManufacturing
+        service: core
+        method: GET
+        path: /api/dashboard/manufacturing
+        summary: 查询制造执行摘要
+      - id: dashboardQuality
+        service: core
+        method: GET
+        path: /api/dashboard/quality
+        summary: 查询质量检验摘要
+      - id: dashboardDevice
+        service: core
+        method: GET
+        path: /api/dashboard/device
+        summary: 查询设备运行摘要
+      - id: dashboardAlarm
+        service: core
+        method: GET
+        path: /api/dashboard/alarms
+        summary: 查询设备告警摘要
+      - id: dashboardTraceability
+        service: core
+        method: GET
+        path: /api/dashboard/traceability
+        summary: 查询追溯运营摘要
+      - id: exceptionCenterSearch
+        service: core
+        method: GET
+        path: /api/exception-center
+        summary: 查询库存、生产和设备派生异常
+
+  traceability-audit:
+    description: 业务闭环关系和账号操作时间线查询
+    operations:
+      - id: traceabilityQuery
+        service: core
+        method: GET
+        path: /api/traceability
+        summary: 从指定业务对象查询黄金业务闭环追溯关系
+      - id: operationAuditSearch
+        service: core
+        method: GET
+        path: /api/operation-audits
+        summary: 查询指定业务对象的账号操作时间线
+
+  iot:
+    description: 设备、状态、遥测和告警事实查询
+    operations:
+      - id: deviceSearch
+        service: iot
+        method: GET
+        path: /api/devices
+        summary: 按设备编码和生命周期状态分页查询设备
+      - id: deviceDetail
+        service: iot
+        method: GET
+        path: /api/devices/{id}
+        summary: 查询设备身份与稳定归属详情
+      - id: deviceStatus
+        service: iot
+        method: GET
+        path: /api/devices/{id}/status
+        summary: 查询设备当前状态快照
+      - id: deviceTelemetry
+        service: iot
+        method: GET
+        path: /api/devices/{id}/telemetry
+        summary: 按指标和时间范围查询设备遥测事实
+      - id: deviceAlarmSearch
+        service: iot
+        method: GET
+        path: /api/device-alarms
+        summary: 按设备、状态、级别和时间范围分页查询告警
+      - id: deviceAlarmDetail
+        service: iot
+        method: GET
+        path: /api/device-alarms/{id}
+        summary: 查询告警详情与关联业务上下文

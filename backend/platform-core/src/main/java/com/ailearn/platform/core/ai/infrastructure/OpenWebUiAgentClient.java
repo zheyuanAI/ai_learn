@@ -3,6 +3,7 @@ package com.ailearn.platform.core.ai.infrastructure;
 import com.ailearn.platform.core.ai.application.AiRequestContext;
 import com.ailearn.platform.core.ai.application.AiStreamSink;
 import com.ailearn.platform.core.ai.application.OpenWebUiInvocationContextStore;
+import com.ailearn.platform.core.ai.application.OpenWebUiToolAuditRecorder;
 import com.ailearn.platform.core.ai.config.AiProperties;
 import com.ailearn.platform.core.ai.exception.AiErrorCode;
 import com.ailearn.platform.core.ai.exception.AiException;
@@ -23,6 +24,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 
 /**
@@ -35,13 +37,23 @@ public class OpenWebUiAgentClient {
     private final AiProperties properties;
     private final ObjectMapper objectMapper;
     private final OpenWebUiInvocationContextStore invocationContextStore;
+    private final OpenWebUiToolAuditRecorder toolAuditRecorder;
 
     /** 注入 Open WebUI 配置、JSON 映射器和工具回调授权映射。 */
+    @Autowired
     public OpenWebUiAgentClient(AiProperties properties, ObjectMapper objectMapper,
-                                OpenWebUiInvocationContextStore invocationContextStore) {
+                                OpenWebUiInvocationContextStore invocationContextStore,
+                                OpenWebUiToolAuditRecorder toolAuditRecorder) {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.invocationContextStore = invocationContextStore;
+        this.toolAuditRecorder = toolAuditRecorder;
+    }
+
+    /** 兼容协议单元测试；生产路径始终注入审计记录器。 */
+    public OpenWebUiAgentClient(AiProperties properties, ObjectMapper objectMapper,
+                                OpenWebUiInvocationContextStore invocationContextStore) {
+        this(properties, objectMapper, invocationContextStore, null);
     }
 
     /**
@@ -55,6 +67,7 @@ public class OpenWebUiAgentClient {
         String userMessageId = UUID.randomUUID().toString();
         String assistantMessageId = UUID.randomUUID().toString();
         String chatId = null;
+        boolean observationsAudited = false;
         try {
             JsonNode created = sendJson("POST", "/api/v1/chats/new",
                     createChatPayload(userMessageId, assistantMessageId, lastUserText(messages)));
@@ -65,7 +78,7 @@ public class OpenWebUiAgentClient {
             invocationContextStore.bind(chatId, assistantMessageId, localSessionId, context, allowedTools);
             sink.emit("progress", Map.of("stage", "agent_started", "message", "正在查询业务知识与授权实时数据"));
             sendJson("POST", "/api/chat/completions",
-                    completionPayload(chatId, assistantMessageId, messages, !allowedTools.isEmpty()));
+                    completionPayload(chatId, assistantMessageId, messages, true));
 
             String answer = waitForAnswer(chatId, assistantMessageId, sink, textDeltaConsumer);
             if (!StringUtils.hasText(answer)) {
@@ -75,12 +88,24 @@ public class OpenWebUiAgentClient {
             JsonNode usage = message.path("usage");
             List<OpenWebUiInvocationContextStore.ToolObservation> observations =
                     invocationContextStore.results(chatId, assistantMessageId);
+            if (toolAuditRecorder != null) {
+                observationsAudited = true;
+                toolAuditRecorder.record(context, localSessionId, observations);
+            }
             return new OpenWebUiAgentResult(answer, sourceSummary(message, observations),
                     timeRangeSummary(observations), toolSummary(observations),
                     properties.getOpenWebuiModel(), usage.path("prompt_tokens").asInt(0),
                     usage.path("completion_tokens").asInt(0));
         } finally {
             if (chatId != null) {
+                if (toolAuditRecorder != null && !observationsAudited) {
+                    try {
+                        toolAuditRecorder.record(context, localSessionId,
+                                invocationContextStore.results(chatId, assistantMessageId));
+                    } catch (RuntimeException ignored) {
+                        // 修改用途：Provider 已失败时保留原始故障，审计基础设施异常不能覆盖首要错误。
+                    }
+                }
                 invocationContextStore.remove(chatId, assistantMessageId);
                 deleteChatQuietly(chatId);
             }
@@ -130,7 +155,7 @@ public class OpenWebUiAgentClient {
         payload.put("background_tasks", Map.of("title_generation", false,
                 "tags_generation", false, "follow_up_generation", false));
         if (includeWmsTools) {
-            payload.put("tool_ids", List.of(properties.getOpenWebuiToolServerId()));
+            payload.put("tool_ids", properties.getOpenWebuiToolServerIds().stream().sorted().toList());
         }
         return payload;
     }
@@ -307,9 +332,10 @@ public class OpenWebUiAgentClient {
         if (!StringUtils.hasText(properties.getToolServiceSecret())) {
             throw providerError("WMS AI 工具服务密钥未配置");
         }
-        if (!StringUtils.hasText(properties.getOpenWebuiToolServerId())
-                || !properties.getOpenWebuiToolServerId().matches("server:[a-z0-9_]+")) {
-            throw providerError("Open WebUI WMS Tool Server ID 配置无效");
+        if (properties.getOpenWebuiToolServerIds().isEmpty()
+                || properties.getOpenWebuiToolServerIds().stream()
+                .anyMatch(id -> !StringUtils.hasText(id) || !id.matches("server:[a-z0-9_]+"))) {
+            throw providerError("Open WebUI WMS Tool Server ID 集合配置无效");
         }
     }
 

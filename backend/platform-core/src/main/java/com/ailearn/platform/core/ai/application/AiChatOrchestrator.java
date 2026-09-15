@@ -81,16 +81,14 @@ public class AiChatOrchestrator {
                 "model_id", configuredModel));
 
         try {
-            validateWhitelist(context, request.toolWhitelist());
-            List<AiReadTool> allowedTools = toolRegistry.availableTools(context, request.toolWhitelist());
             List<Map<String, Object>> input = buildInput(history, request);
             if (isOpenWebUiProvider()) {
                 if (openWebUiAgentClient == null) {
                     throw new AiException(AiErrorCode.AI_PROVIDER_001, "Open WebUI 客户端未装配");
                 }
+                validateRequestedOperations(request.toolWhitelist());
                 OpenWebUiAgentResult result = openWebUiAgentClient.run(context, sessionId,
-                        prependSystem(input), allowedTools.stream().map(AiReadTool::name)
-                                .collect(java.util.stream.Collectors.toSet()),
+                        prependSystem(input), request.toolWhitelist(),
                         safeSink, delta -> {
                             streamedText.append(delta);
                             safeSink.emit("delta", Map.of("text", delta));
@@ -102,6 +100,8 @@ public class AiChatOrchestrator {
             if (!"deepseek".equalsIgnoreCase(properties.getProvider())) {
                 throw new AiException(AiErrorCode.AI_PROVIDER_001, "不支持的 AI Provider 配置");
             }
+            validateWhitelist(context, request.toolWhitelist());
+            List<AiReadTool> allowedTools = toolRegistry.availableTools(context, request.toolWhitelist());
             List<AiToolDefinition> definitions = allowedTools.stream()
                     .map(tool -> new AiToolDefinition(tool.name(), tool.description(), tool.parametersSchema()))
                     .toList();
@@ -272,6 +272,15 @@ public class AiChatOrchestrator {
                     .orElseThrow(() -> new AiException(AiErrorCode.AI_TOOL_002, "工具未注册或未获许可"));
             if (!tool.isAllowed(context)) {
                 throw new AiException(AiErrorCode.AI_AUTH_001, "当前用户无指定工具权限");
+            }
+        }
+    }
+
+    /** Open WebUI 路径只校验请求级 operation ID 格式；全局存在性由 Gateway 唯一白名单校验。 */
+    private static void validateRequestedOperations(Set<String> requestedOperations) {
+        for (String operationId : requestedOperations) {
+            if (operationId == null || !operationId.matches("[A-Za-z][A-Za-z0-9_-]{0,127}")) {
+                throw new AiException(AiErrorCode.AI_INPUT_001, "tool_whitelist 包含无效 operation ID");
             }
         }
     }

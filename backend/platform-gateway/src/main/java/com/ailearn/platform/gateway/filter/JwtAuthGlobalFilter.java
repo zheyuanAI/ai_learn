@@ -1,5 +1,6 @@
 package com.ailearn.platform.gateway.filter;
 
+import com.ailearn.platform.gateway.ai.AiDelegatedGatewayService;
 import com.ailearn.platform.gateway.config.GatewaySecurityProperties;
 import com.ailearn.platform.shared.api.ApiResponse;
 import com.ailearn.platform.shared.constants.HeaderConstants;
@@ -40,6 +41,7 @@ import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.util.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -81,19 +83,30 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
     private final ReactiveStringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final WebClient webClient;
+    private final AiDelegatedGatewayService aiDelegatedGatewayService;
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
     private volatile PublicKey publicKey;
     private volatile Mono<PublicKey> jwksLoadMono;
 
+    @Autowired
     public JwtAuthGlobalFilter(
             GatewaySecurityProperties properties,
             ReactiveStringRedisTemplate redisTemplate,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            AiDelegatedGatewayService aiDelegatedGatewayService) {
         this.properties = properties;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.aiDelegatedGatewayService = aiDelegatedGatewayService;
         this.webClient = WebClient.builder().build();
+    }
+
+    /** 兼容既有过滤器单元测试；未注入委托服务时只执行原 JWT 链路。 */
+    public JwtAuthGlobalFilter(GatewaySecurityProperties properties,
+                               ReactiveStringRedisTemplate redisTemplate,
+                               ObjectMapper objectMapper) {
+        this(properties, redisTemplate, objectMapper, null);
     }
 
     /**
@@ -146,14 +159,23 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        // 3. 检查白名单放行
+        // 3. Open WebUI 不携带用户 JWT；先由唯一白名单和短期上下文恢复原用户，再走现有下游权限链。
+        if (aiDelegatedGatewayService != null && aiDelegatedGatewayService.isAttempt(request)) {
+            return aiDelegatedGatewayService.authenticate(request, finalRequestId)
+                    .flatMap(delegated -> forwardAiDelegatedRequest(exchange, chain, delegated))
+                    .onErrorResume(AiDelegatedGatewayService.AiGatewayException.class,
+                            exception -> writeErrorResponse(exchange, exception.status(),
+                                    exception.status().value(), exception.getMessage(), finalRequestId));
+        }
+
+        // 4. 检查普通免登录白名单放行
         if (isWhitelisted(path)) {
             // 白名单同样不能把客户端伪造的身份/权限头带入内部链路，只保留请求追踪 ID。
             ServerHttpRequest mutatedRequest = sanitizeClientContextHeaders(request, finalRequestId);
             return chain.filter(exchange.mutate().request(mutatedRequest).build());
         }
 
-        // 4. 提取 Authorization: Bearer <token>
+        // 5. 提取 Authorization: Bearer <token>
         String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (!StringUtils.hasText(authHeader) || !authHeader.startsWith(HeaderConstants.BEARER_PREFIX)) {
             log.warn("未提供认证令牌或格式不正确, path: {}", path);
@@ -165,7 +187,7 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
             return writeErrorResponse(exchange, HttpStatus.UNAUTHORIZED, 401, "认证令牌不能为空", finalRequestId);
         }
 
-        // 5. 使用 RSA 公钥校验 JWT；优先使用缓存公钥，失败时支持主动刷新 JWKS 重试一次
+        // 6. 使用 RSA 公钥校验 JWT；优先使用缓存公钥，失败时支持主动刷新 JWKS 重试一次
         return resolvePublicKey(false)
                 .onErrorResume(ex -> {
                     log.error("加载 Auth JWKS 验签公钥失败: {}", ex.getMessage(), ex);
@@ -176,6 +198,33 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
                     return Mono.error(new IllegalStateException("网关验签密钥未就绪"));
                 }))
                 .flatMap(key -> verifyAndForward(exchange, chain, token, key, finalRequestId, true));
+    }
+
+    /** 把已验证的 Open WebUI 调用转换为现有下游服务能够识别的可信用户请求。 */
+    private Mono<Void> forwardAiDelegatedRequest(ServerWebExchange exchange,
+                                                 GatewayFilterChain chain,
+                                                 AiDelegatedGatewayService.DelegatedRequest delegated) {
+        ServerHttpRequest.Builder builder = exchange.getRequest().mutate();
+        builder.headers(headers -> {
+            CLIENT_CONTEXT_HEADERS.forEach(headers::remove);
+            // 修改用途：服务签名和 Open WebUI 关联标识只供 Gateway 认证，不继续暴露给业务服务。
+            headers.remove(AiDelegatedGatewayService.SERVICE_KEY_HEADER);
+            headers.remove(AiDelegatedGatewayService.CHAT_ID_HEADER);
+            headers.remove(AiDelegatedGatewayService.MESSAGE_ID_HEADER);
+        });
+        builder.header(HeaderConstants.X_REQUEST_ID, delegated.requestId())
+                .header(HeaderConstants.X_USER_ID, delegated.userId().toString())
+                .header(HeaderConstants.X_TENANT_ID, delegated.tenantId().toString())
+                .header(HeaderConstants.X_SESSION_ID, delegated.jti());
+        exchange.getResponse().getHeaders().set(HeaderConstants.X_REQUEST_ID, delegated.requestId());
+        ServerWebExchange delegatedExchange = exchange.mutate().request(builder.build()).build();
+        return chain.filter(delegatedExchange)
+                .then(Mono.defer(() -> aiDelegatedGatewayService.recordFinished(delegated,
+                        exchange.getResponse().getStatusCode() instanceof HttpStatus status ? status
+                                : HttpStatus.OK)))
+                .onErrorResume(exception -> aiDelegatedGatewayService
+                        .recordFinished(delegated, HttpStatus.INTERNAL_SERVER_ERROR)
+                        .then(Mono.error(exception)));
     }
 
     /**

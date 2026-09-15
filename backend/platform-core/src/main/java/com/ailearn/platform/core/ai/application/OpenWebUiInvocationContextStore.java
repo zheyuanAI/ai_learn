@@ -112,7 +112,7 @@ public class OpenWebUiInvocationContextStore {
         validateCorrelation(chatId, messageId);
         String callId = UUID.randomUUID().toString();
         recordObservation(chatId, messageId, new ToolObservation(
-                toolName, "", "", "Running", callId));
+                toolName, "", "", "Running", callId, "", "", 0));
         return callId;
     }
 
@@ -126,7 +126,7 @@ public class OpenWebUiInvocationContextStore {
             return;
         }
         recordObservation(chatId, messageId, new ToolObservation(result.toolName(), result.sourceSummary(),
-                result.timeRangeSummary(), result.status().name(), callId));
+                result.timeRangeSummary(), result.status().name(), callId, "", "", 0));
     }
 
     /** 兼容独立调用与既有测试：没有开始事件时仍可直接记录成功结果。 */
@@ -138,7 +138,7 @@ public class OpenWebUiInvocationContextStore {
     public void recordFailure(String chatId, String messageId, String callId, String toolName) {
         validateCorrelation(chatId, messageId);
         recordObservation(chatId, messageId, new ToolObservation(
-                toolName, "", "", "Failed", callId));
+                toolName, "", "", "Failed", callId, "", "", 0));
     }
 
     /** 查询当前问答已完成工具的非敏感来源元数据，供最终回答汇总。 */
@@ -264,10 +264,16 @@ public class OpenWebUiInvocationContextStore {
 
     /** Open WebUI 回答收口和 SSE 进度所需的非敏感工具观察结果。 */
     public record ToolObservation(String toolName, String sourceSummary,
-                                  String timeRangeSummary, String status, String callId) {
+                                  String timeRangeSummary, String status, String callId,
+                                  String inputSummary, String outputSummary, long durationMs) {
         public ToolObservation(String toolName, String sourceSummary,
                                String timeRangeSummary, String status) {
-            this(toolName, sourceSummary, timeRangeSummary, status, "");
+            this(toolName, sourceSummary, timeRangeSummary, status, "", "", "", 0);
+        }
+
+        public ToolObservation(String toolName, String sourceSummary,
+                               String timeRangeSummary, String status, String callId) {
+            this(toolName, sourceSummary, timeRangeSummary, status, callId, "", "", 0);
         }
 
         public ToolObservation {
@@ -276,6 +282,9 @@ public class OpenWebUiInvocationContextStore {
             timeRangeSummary = timeRangeSummary == null ? "" : timeRangeSummary;
             status = status == null ? "" : status;
             callId = callId == null ? "" : callId;
+            inputSummary = inputSummary == null ? "" : inputSummary;
+            outputSummary = outputSummary == null ? "" : outputSummary;
+            durationMs = Math.max(0, durationMs);
         }
     }
 

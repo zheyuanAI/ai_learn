@@ -45,7 +45,7 @@ class AiChatOrchestratorTest {
         AiToolExecutor executor = mock(AiToolExecutor.class);
         FakeConversationStore store = new FakeConversationStore(sessionId);
         OpenWebUiAgentClient openWebUi = mock(OpenWebUiAgentClient.class);
-        when(openWebUi.run(any(), eq(sessionId), any(), eq(Set.of("queryTrace")), any(), any()))
+        when(openWebUi.run(any(), eq(sessionId), any(), eq(Set.of()), any(), any()))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
                     Consumer<String> delta = invocation.getArgument(5);
@@ -68,7 +68,7 @@ class AiChatOrchestratorTest {
         assertEquals("wms-assistant", response.modelId());
         assertTrue(response.navigationActions().isEmpty());
         assertEquals(List.of("meta", "delta", "done"), events);
-        verify(openWebUi).run(any(), eq(sessionId), any(), eq(Set.of("queryTrace")), any(), any());
+        verify(openWebUi).run(any(), eq(sessionId), any(), eq(Set.of()), any(), any());
     }
 
     @Test

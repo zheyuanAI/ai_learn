@@ -2,6 +2,8 @@
   <configuration default="false" name="GatewayApplication (20001)" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
     <module name="platform-gateway" />
     <option name="SPRING_BOOT_MAIN_CLASS" value="com.ailearn.platform.gateway.GatewayApplication" />
+    <!-- Gateway 与 Core 共用本机服务签名，并显式读取唯一业务 API 白名单。 -->
+    <option name="PROGRAM_PARAMETERS" value="--spring.config.import=optional:file:$PROJECT_DIR$/deploy/openwebui/windows.env[.properties] --gateway.ai.api-whitelist-path=$PROJECT_DIR$/deploy/openwebui/wms-ai-api-whitelist.yml" />
     <extension name="coverage">
       <pattern>
         <option name="PATTERN" value="com.ailearn.platform.gateway.*" />

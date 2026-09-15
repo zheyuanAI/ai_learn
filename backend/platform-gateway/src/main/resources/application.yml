@@ -20,7 +20,7 @@ spring:
         - id: core-service
           uri: ${CORE_SERVICE_URI:http://localhost:10003}
           predicates:
-            - Path=/api/core/**,/api/purchasing/**,/api/sales/**,/api/inventory/**,/api/manufacturing/**,/api/quality/**,/api/traceability/**,/api/dashboard/**,/api/exception-center/**,/api/ai/**,/api/uoms/**,/api/products/**,/api/customers/**,/api/suppliers/**,/api/warehouses/**,/api/locations/**,/api/purchase-orders/**,/api/purchase-receipts/**,/api/purchase-quality-dispositions/**,/api/putaway-tasks/**,/api/sales-orders/**,/api/pick-tasks/**,/api/sales-shipments/**,/api/transfers/**,/api/stocktakes/**,/api/boms/**,/api/routings/**,/api/work-orders/**,/api/dispatch-orders/**,/api/operation-executions/**,/api/work-reports/**,/api/quality-inspections/**,/api/material-issues/**,/api/material-returns/**,/api/finished-goods-receipts/**,/api/site-maps/**,/api/site-map/**
+            - Path=/api/core/**,/api/purchasing/**,/api/sales/**,/api/inventory/**,/api/manufacturing/**,/api/quality/**,/api/traceability/**,/api/operation-audits/**,/api/dashboard/**,/api/exception-center/**,/api/ai/**,/api/uoms/**,/api/products/**,/api/customers/**,/api/suppliers/**,/api/warehouses/**,/api/locations/**,/api/purchase-orders/**,/api/purchase-receipts/**,/api/purchase-quality-dispositions/**,/api/putaway-tasks/**,/api/sales-orders/**,/api/pick-tasks/**,/api/sales-shipments/**,/api/transfers/**,/api/stocktakes/**,/api/boms/**,/api/routings/**,/api/work-orders/**,/api/dispatch-orders/**,/api/operation-executions/**,/api/work-reports/**,/api/quality-inspections/**,/api/material-issues/**,/api/material-returns/**,/api/finished-goods-receipts/**,/api/site-maps/**,/api/site-map/**
 
         # IoT 物联网与设备告警服务路由 (10004)
         - id: iot-service
@@ -34,6 +34,12 @@ spring:
       timeout: 3000ms
 
 gateway:
+  ai:
+    enabled: ${WMS_AI_ENABLED:false}
+    api-whitelist-path: ${WMS_AI_API_WHITELIST_PATH:../deploy/openwebui/wms-ai-api-whitelist.yml}
+    tool-service-secret: ${WMS_AI_TOOL_SERVICE_SECRET:}
+    public-base-url: ${WMS_AI_GATEWAY_BASE_URL:http://127.0.0.1:20001}
+    max-tool-calls: ${WMS_AI_MAX_TOOL_CALLS:8}
   security:
     # RSA 验签公钥（若为空且处于非生产配置，网关可使用默认/共享测试公钥进行验签）
     public-key: ${GATEWAY_JWT_PUBLIC_KEY:}

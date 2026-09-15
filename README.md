@@ -17,7 +17,9 @@
 - `docs/业务架构/index.html`：交互式业务架构预览入口；`总览.html` 展示跨模块关系与流程
 - `docs/prototype/index.html`：静态操作原型主入口
 - `docs/ai-knowledge/README.md`：Open WebUI 仅可同步的阶段 8 受控业务知识入口
+- `deploy/openwebui/wms-ai-api-whitelist.yml`：Open WebUI 与 WMS 共同使用的唯一 AI 业务 API 白名单，按模块登记首批只读 operation
 - `docs/verification/2026-09-12-13-阶段8-AI与OpenWebUI周末变更总结.md`：阶段 8 周末实现、实机验证、未完成项与 Open WebUI 相关入口
+- `docs/verification/2026-09-14-阶段8-AI现有业务接口与统一白名单改造记录.md`：现有业务 API 复用、36 个首批白名单 operation、自动化验证结果与端到端待办
 - `docs/openspec/README.md`: 仅在显式 OpenSpec 任务下使用的协作说明
 
 ## 本地开发环境基线
@@ -41,7 +43,7 @@ ai_learn_developProject/
 │   ├── README.md                     # 后端模块说明
 │   ├── platform-gateway/             # 统一网关、鉴权转发与异常包装
 │   ├── platform-auth/                # 认证、用户、角色、菜单与租户上下文
-│   ├── platform-core/                # ERP/WMS、MES、质量、追溯与 AI 只读工具
+│   ├── platform-core/                # ERP/WMS、MES、质量、追溯与 AI 会话编排
 │   ├── platform-iot/                 # IoT 设备、遥测、状态与告警
 │   └── platform-shared/              # 后端公共基础库
 ├── frontend/                         # Vue 3 + Vite + TypeScript 前端工程

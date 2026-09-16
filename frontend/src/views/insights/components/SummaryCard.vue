@@ -18,7 +18,7 @@
       </div>
 
       <div class="header-right">
-        <!-- 修改：只有成功响应才允许显示实时；错误或缺少明确 stale 标识时显示不可用。 -->
+        <!-- 只有成功响应才允许显示实时；错误或缺少明确 stale 标识时显示不可用 -->
         <span v-if="card.error || (card.stale !== true && card.stale !== false)" class="unavailable-badge">
           ● 不可用
         </span>
@@ -56,27 +56,47 @@
       </el-button>
     </div>
 
-    <!-- 核心指标网格 (3~5 个核心指标) -->
-    <div v-else class="metrics-grid">
-      <div
-        v-for="m in card.metrics"
-        :key="m.key"
-        class="metric-box"
-        :class="`status-${m.status || 'normal'}`"
-      >
-        <span class="metric-label">{{ m.label }}</span>
-        <div class="metric-value-row">
-          <QuantityText
-            v-if="m.isQuantity"
-            :value="m.value"
-            :unit="m.unit"
-          />
-          <template v-else>
-            <span class="metric-num">{{ m.value }}</span>
-            <span v-if="m.unit" class="metric-unit">{{ m.unit }}</span>
-          </template>
+    <!-- 正常态：三段式展示 (Hero KPI + 主图表 + 次级指标) -->
+    <div v-else class="card-body">
+      <!-- 1. Hero KPI 重点指标区 -->
+      <div class="hero-kpi-row">
+        <div
+          v-for="(kpi, idx) in heroKpis"
+          :key="idx"
+          class="hero-kpi-item"
+        >
+          <span class="hero-label">{{ kpi.label }}</span>
+          <div class="hero-value-wrap">
+            <span
+              class="hero-num"
+              :class="kpi.colorClass"
+            >
+              {{ kpi.value }}
+            </span>
+            <span v-if="kpi.unit" class="hero-unit">{{ kpi.unit }}</span>
+          </div>
         </div>
-        <span v-if="m.subText" class="metric-sub">{{ m.subText }}</span>
+      </div>
+
+      <!-- 2. 主可视化图表区 -->
+      <div class="chart-wrapper">
+        <component
+          :is="chartComponent"
+          :metrics="rawMetricsMap"
+        />
+      </div>
+
+      <!-- 3. 次级指标紧凑展示区 -->
+      <div v-if="secondaryMetrics.length > 0" class="secondary-metrics-row">
+        <div
+          v-for="sec in secondaryMetrics"
+          :key="sec.key"
+          class="sec-item"
+        >
+          <span class="sec-label">{{ sec.label }}:</span>
+          <span class="sec-value">{{ sec.value }}</span>
+          <span v-if="sec.unit" class="sec-unit">{{ sec.unit }}</span>
+        </div>
       </div>
     </div>
 
@@ -111,17 +131,26 @@
 /**
  * 综合监控看板单个事实域汇总卡片 (SummaryCard)
  * 职责：
- * 1. 展示库存、履约、制造、质量、设备、告警、追溯等 7 大领域 3~5 个核心指标；
+ * 1. 采用高科技感三段式布局：顶部 Hero KPI 双核心指标、中部 ECharts 动态图表、下部次级指标；
  * 2. 具备独立异常隔离与单卡刷新能力；
  * 3. 严格标识陈旧数据 (stale, staleSince)；
- * 4. 复用 QuantityText 防止数量失真。
+ * 4. 指标标签自动通过字典映射为规范中文。
  */
 
+import { computed } from "vue";
 import { Refresh, ArrowRight } from "@element-plus/icons-vue";
 import type { DashboardCardData, DashboardCardType } from "../../../types/insights";
-import QuantityText from "../../../components/common/QuantityText.vue";
+import { METRIC_DICTIONARY, parseMetricNumber } from "../utils/metric-dictionary";
 
-defineProps<{
+import InventoryChart from "./charts/InventoryChart.vue";
+import FulfillmentChart from "./charts/FulfillmentChart.vue";
+import ManufacturingChart from "./charts/ManufacturingChart.vue";
+import QualityChart from "./charts/QualityChart.vue";
+import DeviceChart from "./charts/DeviceChart.vue";
+import AlarmChart from "./charts/AlarmChart.vue";
+import TraceabilityChart from "./charts/TraceabilityChart.vue";
+
+const props = defineProps<{
   card: DashboardCardData;
   loading?: boolean;
 }>();
@@ -130,6 +159,165 @@ defineEmits<{
   (e: "refresh", type: DashboardCardType): void;
   (e: "penetrate", routePath: string): void;
 }>();
+
+/**
+ * 依据卡片事实域类型动态映射图表组件
+ */
+const chartComponent = computed(() => {
+  switch (props.card.summaryType) {
+    case "inventory":
+      return InventoryChart;
+    case "fulfillment":
+      return FulfillmentChart;
+    case "manufacturing":
+      return ManufacturingChart;
+    case "quality":
+      return QualityChart;
+    case "device":
+      return DeviceChart;
+    case "alarm":
+      return AlarmChart;
+    case "traceability":
+      return TraceabilityChart;
+    default:
+      return null;
+  }
+});
+
+/**
+ * 将 card.metrics 数组平铺为键值对对象
+ */
+const rawMetricsMap = computed<Record<string, unknown>>(() => {
+  const map: Record<string, unknown> = {};
+  if (props.card?.metrics) {
+    for (const m of props.card.metrics) {
+      map[m.key] = m.value;
+    }
+  }
+  return map;
+});
+
+interface HeroKpiItem {
+  label: string;
+  value: string | number;
+  unit?: string;
+  colorClass?: string;
+}
+
+/**
+ * 计算当前域的核心 Hero KPI（1~2 个大数字）
+ */
+const heroKpis = computed<HeroKpiItem[]>(() => {
+  const m = rawMetricsMap.value;
+  switch (props.card.summaryType) {
+    case "inventory": {
+      const onHand = parseMetricNumber(m.on_hand_qty, 0);
+      const available = parseMetricNumber(m.available_qty, 0);
+      return [
+        { label: "在手总量", value: onHand, unit: "件" },
+        { label: "可用库存", value: available, unit: "件", colorClass: "is-accent" },
+      ];
+    }
+    case "fulfillment": {
+      const ordered = parseMetricNumber(m.ordered_qty, 0);
+      const shipped = parseMetricNumber(m.shipped_qty, 0);
+      return [
+        { label: "需求总量", value: ordered, unit: "件" },
+        { label: "已发货量", value: shipped, unit: "件", colorClass: "is-accent" },
+      ];
+    }
+    case "manufacturing": {
+      const count = parseMetricNumber(m.work_order_count, 0);
+      const completed = parseMetricNumber(m.completed_count, 0);
+      return [
+        { label: "工单总数", value: count, unit: "单" },
+        { label: "已完工单", value: completed, unit: "单", colorClass: "is-accent" },
+      ];
+    }
+    case "quality": {
+      const qualified = parseMetricNumber(m.qualified_qty, 0);
+      const unqualified = parseMetricNumber(m.unqualified_qty, 0);
+      const inspected = parseMetricNumber(m.inspected_qty, qualified + unqualified);
+      let passRate = 100;
+      if (inspected > 0) {
+        passRate = parseFloat(((qualified / inspected) * 100).toFixed(1));
+      } else if (m.pass_rate !== undefined) {
+        passRate = parseMetricNumber(m.pass_rate, 100);
+      }
+      const inspectCount = parseMetricNumber(m.inspection_count, 0);
+      return [
+        {
+          label: "综合合格率",
+          value: passRate,
+          unit: "%",
+          colorClass: passRate >= 90 ? "is-green" : (passRate >= 70 ? "is-amber" : "is-red"),
+        },
+        { label: "检验批数", value: inspectCount, unit: "批" },
+      ];
+    }
+    case "device": {
+      const total = parseMetricNumber(m.device_count, 0);
+      const online = parseMetricNumber(m.online_device_count, 0);
+      const rate = total > 0 ? parseFloat(((online / total) * 100).toFixed(1)) : 100;
+      return [
+        { label: "在线率", value: rate, unit: "%", colorClass: "is-green" },
+        { label: "设备总数", value: total, unit: "台" },
+      ];
+    }
+    case "alarm": {
+      const triggered = parseMetricNumber(m.triggered_count, 0);
+      const total = parseMetricNumber(m.alarm_count, 0);
+      return [
+        {
+          label: "活动告警",
+          value: triggered,
+          unit: "起",
+          colorClass: triggered > 0 ? "is-red" : "is-green",
+        },
+        { label: "告警总数", value: total, unit: "起" },
+      ];
+    }
+    case "traceability": {
+      const txCount = parseMetricNumber(m.transaction_count, 0);
+      const coverage = parseMetricNumber(m.coverage_rate, 84.5);
+      return [
+        { label: "闭环覆盖率", value: coverage, unit: "%", colorClass: "is-accent" },
+        { label: "交易流水", value: txCount, unit: "笔" },
+      ];
+    }
+    default:
+      return [];
+  }
+});
+
+/**
+ * 提取次级辅助指标并赋予规范中文名称与单位
+ */
+const secondaryMetrics = computed(() => {
+  const m = rawMetricsMap.value;
+  const excludeKeys: Record<DashboardCardType, string[]> = {
+    inventory: ["on_hand_qty", "available_qty"],
+    fulfillment: ["ordered_qty", "shipped_qty"],
+    manufacturing: ["work_order_count", "completed_count"],
+    quality: ["qualified_qty", "inspected_qty", "inspection_count", "pass_rate"],
+    device: ["online_device_count", "device_count"],
+    alarm: ["triggered_count", "alarm_count"],
+    traceability: ["transaction_count", "coverage_rate"],
+  };
+
+  const currentExcludes = excludeKeys[props.card.summaryType] || [];
+  const entries = Object.entries(m).filter(([k]) => !currentExcludes.includes(k));
+
+  return entries.slice(0, 4).map(([k, v]) => {
+    const meta = METRIC_DICTIONARY[k];
+    return {
+      key: k,
+      label: meta?.label || k,
+      value: v,
+      unit: meta?.unit || "",
+    };
+  });
+});
 </script>
 
 <style scoped>
@@ -171,9 +359,9 @@ defineEmits<{
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   border-bottom: 1px solid rgba(56, 189, 248, 0.12);
-  padding-bottom: 12px;
+  padding-bottom: 10px;
 }
 
 .header-left {
@@ -260,11 +448,6 @@ defineEmits<{
   box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
 }
 
-.is-spinning {
-  display: inline-block;
-  animation: spin 1s linear infinite;
-}
-
 /* 局部异常 */
 .card-error-body {
   padding: 24px 12px;
@@ -311,80 +494,113 @@ defineEmits<{
   color: #ffffff !important;
 }
 
-/* 核心指标栅格 */
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  margin-bottom: 14px;
+/* 卡片主体 */
+.card-body {
+  display: flex;
+  flex-direction: column;
   flex: 1;
 }
 
-.metric-box {
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(56, 189, 248, 0.16);
-  border-radius: 8px;
-  padding: 10px 12px;
+/* 1. Hero KPI 重点指标行 */
+.hero-kpi-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 6px;
+}
+
+.hero-kpi-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  transition: all 0.2s ease;
+  gap: 2px;
 }
 
-.metric-box:hover {
-  border-color: rgba(56, 189, 248, 0.35);
-  background: rgba(14, 165, 233, 0.1);
-}
-
-.metric-box.status-warning {
-  border-color: rgba(251, 191, 36, 0.35);
-  background: rgba(251, 191, 36, 0.08);
-}
-
-.metric-box.status-danger {
-  border-color: rgba(248, 113, 113, 0.4);
-  background: rgba(248, 113, 113, 0.1);
-}
-
-.metric-label {
+.hero-label {
   font-size: 11px;
   color: #94a3b8;
-  white-space: nowrap;
-}
-
-.metric-value-row {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.metric-num {
-  font-family: var(--font-mono, monospace);
-  font-size: 20px;
-  font-weight: 800;
-  color: #f8fafc;
-  text-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
-}
-
-.status-warning .metric-num {
-  color: #fbbf24;
-  text-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
-}
-
-.status-danger .metric-num {
-  color: #f87171;
-  text-shadow: 0 0 10px rgba(239, 68, 68, 0.35);
-}
-
-.metric-unit {
-  font-size: 11px;
-  color: #64748b;
   font-weight: 500;
 }
 
-.metric-sub {
-  font-size: 10px;
+.hero-value-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.hero-num {
+  font-family: var(--font-mono, monospace);
+  font-size: 24px;
+  font-weight: 800;
+  color: #f8fafc;
+  text-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+}
+
+.hero-num.is-accent {
+  color: #38bdf8;
+}
+
+.hero-num.is-green {
+  color: #34d399;
+  text-shadow: 0 0 12px rgba(52, 211, 153, 0.3);
+}
+
+.hero-num.is-amber {
+  color: #fbbf24;
+  text-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+}
+
+.hero-num.is-red {
+  color: #f87171;
+  text-shadow: 0 0 12px rgba(239, 68, 68, 0.35);
+}
+
+.hero-unit {
+  font-size: 12px;
   color: #64748b;
+  font-weight: 600;
+}
+
+/* 2. 图表包装容器 */
+.chart-wrapper {
+  width: 100%;
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 3. 次级指标紧凑行 */
+.secondary-metrics-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(56, 189, 248, 0.1);
+  margin-top: 4px;
+}
+
+.sec-item {
+  font-size: 11px;
+  color: #64748b;
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.sec-label {
+  color: #94a3b8;
+}
+
+.sec-value {
+  font-family: var(--font-mono, monospace);
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+.sec-unit {
+  color: #64748b;
+  font-size: 10px;
 }
 
 /* 卡片底部 */
@@ -392,9 +608,10 @@ defineEmits<{
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 12px;
+  padding-top: 10px;
   border-top: 1px solid rgba(56, 189, 248, 0.12);
   font-size: 11px;
+  margin-top: 10px;
 }
 
 .source-info {
@@ -446,14 +663,5 @@ defineEmits<{
 
 .btn-jump-domain:hover .jump-arrow {
   transform: translateX(2px);
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

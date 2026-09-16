@@ -659,7 +659,7 @@ onUnmounted(() => {
 /* 七类卡片网格布局 */
 .cards-dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(370px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
   gap: 22px;
 }
 

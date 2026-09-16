@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>综合监控看板 · 图表可视化原型</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"></script>
+<style>
+  /* ========== 完全复用项目现有设计语言 ========== */
+  :root {
+    --bg-deep: #050a15;
+    --bg-card: rgba(8, 16, 33, 0.84);
+    --border-card: rgba(56, 189, 248, 0.26);
+    --border-hover: #38bdf8;
+    --accent: #38bdf8;
+    --accent-deep: #0284c7;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-dim: #64748b;
+    --green: #34d399;
+    --amber: #f59e0b;
+    --red: #f87171;
+    --purple: #a78bfa;
+    --font-mono: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+    --shadow-card: 0 10px 30px rgba(0,0,0,0.7), 0 0 20px rgba(56,189,248,0.04);
+    --shadow-hover: 0 0 24px rgba(56,189,248,0.25), 0 16px 45px rgba(0,0,0,0.85);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    padding: 24px 32px 48px;
+    min-height: 100vh;
+  }
+
+  /* 顶部标题栏 */
+  .page-header {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(56,189,248,0.12);
+  }
+  .page-header h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.5px;
+  }
+  .page-header .tag {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    margin-top: 4px;
+  }
+  .page-header .desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 8px;
+    max-width: 800px;
+    line-height: 1.6;
+  }
+
+  /* 卡片网格 */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 22px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  /* ===== 单卡片：完全复用 SummaryCard.vue 样式 ===== */
+  .card {
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border-card);
+    border-radius: 14px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: var(--shadow-card);
+    position: relative;
+    overflow: hidden;
+  }
+  .card:hover {
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-2px);
+  }
+
+  /* 卡片头部 */
+  .card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid rgba(56,189,248,0.12);
+    padding-bottom: 12px;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .card-icon {
+    font-size: 26px;
+    line-height: 1;
+    filter: drop-shadow(0 0 8px rgba(56,189,248,0.3));
+  }
+  .card-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.3px;
+  }
+  .card-time {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .live-badge {
+    font-size: 11px;
+    color: var(--green);
+    background: rgba(16,185,129,0.15);
+    padding: 3px 8px;
+    border-radius: 9999px;
+    border: 1px solid rgba(16,185,129,0.4);
+    box-shadow: 0 0 8px rgba(16,185,129,0.2);
+    font-weight: 600;
+  }
+
+  /* Hero KPI 区域 */
+  .hero-kpi {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 14px;
+  }
+  .kpi-item {
+    flex: 1;
+  }
+  .kpi-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 2px;
+  }
+  .kpi-value {
+    font-family: var(--font-mono);
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--text-primary);
+    text-shadow: 0 0 10px rgba(56,189,248,0.25);
+  }
+  .kpi-unit {
+    font-size: 13px;
+    color: var(--text-dim);
+    font-weight: 500;
+    margin-left: 2px;
+  }
+  .kpi-value.accent { color: var(--accent); }
+  .kpi-value.green { color: var(--green); }
+  .kpi-value.red { color: var(--red); }
+
+  /* 图表容器 */
+  .chart-area {
+    width: 100%;
+    height: 200px;
+    margin-bottom: 12px;
+  }
+
+  /* 次级指标 */
+  .secondary-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(56,189,248,0.1);
+  }
+  .sec-metric {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+  }
+  .sec-metric b {
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+
+  /* 卡片底部 */
+  .card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 10px;
+    border-top: 1px solid rgba(56,189,248,0.12);
+    font-size: 11px;
+    margin-top: 8px;
+  }
+  .source-text { color: var(--text-dim); }
+  .btn-penetrate {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(14,165,233,0.12);
+    border: 1px solid rgba(56,189,248,0.3);
+    color: var(--accent);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 600;
+  }
+  .btn-penetrate:hover {
+    background: var(--accent-deep);
+    border-color: var(--accent);
+    color: #fff;
+    box-shadow: 0 0 12px rgba(56,189,248,0.4);
+  }
+
+  /* 告警卡片特殊样式 */
+  .card.is-alarm {
+    border-color: rgba(239,68,68,0.4);
+    box-shadow: 0 0 20px rgba(239,68,68,0.12), 0 10px 30px rgba(0,0,0,0.7);
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>首页综合监控看板</h1>
+  <div class="tag">DASHBOARD / CHART VISUALIZATION PREVIEW</div>
+  <div class="desc">图表可视化原型预览 — 完全复用项目现有设计语言，仅将纯数字网格替换为 ECharts 图表。</div>
+</div>
+
+<div class="cards-grid">
+
+  <!-- 1. 库存资产监控 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="header-left">
+        <span class="card-icon">📦</span>
+        <div><div class="card-title">库存资产监控</div><div class="card-time">今日 00:00 - 23:59</div></div>
+      </div>
+      <span class="live-badge">● 实时</span>
+    </div>
+    <div class="hero-kpi">
+      <div class="kpi-item"><div class="kpi-label">在手总量</div><div class="kpi-value">940<span class="kpi-unit">件</span></div></div>
+      <div class="kpi-item"><div class="kpi-label">可用库存</div><div class="kpi-value accent">920<span class="kpi-unit">件</span></div></div>
+    </div>
+    <div class="chart-area" id="chart-inventory"></div>
+    <div class="secondary-metrics">
+      <span class="sec-metric">预留: <b>20</b>件</span>
+      <span class="sec-metric">库位数: <b>12</b>条</span>
+    </div>
+    <div class="card-footer">
+      <span class="source-text">源: inventory balance</span>
+      <button class="btn-penetrate">穿透 →</button>
+    </div>
+  </div>
+
+  <!-- 2. 履约时效监控 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="header-left">
+        <span class="card-icon">🚚</span>
+        <div><div class="card-title">履约时效监控</div><div class="card-time">今日 00:00 - 23:59</div></div>
+      </div>
+      <span class="live-badge">● 实时</span>
+    </div>
+    <div class="hero-kpi">
+      <div class="kpi-item"><div class="kpi-label">需求总量</div><div class="kpi-value">200<span class="kpi-unit">件</span></div></div>
+      <div class="kpi-item"><div class="kpi-label">已发货</div><div class="kpi-value accent">60<span class="kpi-unit">件</span></div></div>
+    </div>
+    <div class="chart-area" id="chart-fulfillment"></div>
+    <div class="secondary-metrics">
+      <span class="sec-metric">采购单: <b>5</b></span>
+      <span class="sec-metric">销售单: <b>8</b></span>
+      <span class="sec-metric">完结: <b>3</b></span>
+    </div>
+    <div class="card-footer">
+      <span class="source-text">源: purchasing + sales order</span>
+      <button class="btn-penetrate">穿透 →</button>
+    </div>
+  </div>
+
+  <!-- 3. 生产执行监控 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="header-left">
+        <span class="card-icon">⚙️</span>
+        <div><div class="card-title">生产执行监控</div><div class="card-time">今日 00:00 - 23:59</div></div>
+      </div>
+      <span class="live-badge">● 实时</span>
+    </div>
+    <div class="hero-kpi">
+      <div class="kpi-item"><div class="kpi-label">工单总数</div><div class="kpi-value">19<span class="kpi-unit">单</span></div></div>
+      <div class="kpi-item"><div class="kpi-label">已完工</div><div class="kpi-value accent">12<span class="kpi-unit">单</span></div></div>
+    </div>
+    <div class="chart-area" id="chart-manufacturing"></div>
+    <div class="secondary-metrics">
+      <span class="sec-metric">计划量: <b>180</b></span>
+      <span class="sec-metric">领料: <b>160</b></span>
+      <span class="sec-metric">退料: <b>5</b></span>
+      <span class="sec-metric">缺陷: <b>7</b></span>
+    </div>
+    <div class="card-footer">
+      <span class="source-text">源: manufacturing execution</span>
+      <button class="btn-penetrate">穿透 →</button>
+    </div>
+  </div>
+
+  <!-- 4. 质量合格监控 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="header-left">
+        <span class="card-icon">🔍</span>
+        <div><div class="card-title">质量合格监控</div><div class="card-time">今日 00:00 - 23:59</div></div>
+      </div>
+      <span class="live-badge">● 实时</span>
+    </div>
+    <div class="hero-kpi">
+      <div class="kpi-item"><div class="kpi-label">综合合格率</div><div class="kpi-value green">97.2<span class="kpi-unit">%</span></div></div>
+      <div class="kpi-item"><div class="kpi-label">检验批数</div><div class="kpi-value">15<span class="kpi-unit">批</span></div></div>
+    </div>
+    <div class="chart-area" id="chart-quality"></div>
+    <div class="secondary-metrics">
+      <span class="sec-metric">处置: <b>3</b>单</span>
+      <span class="sec-metric">放行: <b>145</b>件</span>
+      <span class="sec-metric">报废: <b>7</b>件</span>
+    </div>
+    <div class="card-footer">
+      <span class="source-text">源: purchase quality</span>
+      <button class="btn-penetrate">穿透 →</button>
+    </div>
+  </div>
+
+  <!-- 5. 设备健康度 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="header-left">
+        <span class="card-icon">📟</span>
+        <div><div class="card-title">设备健康度监控</div><div class="card-time">今日 00:00 - 23:59</div></div>
+      </div>
+      <span class="live-badge">● 实时</span>
+    </div>
+    <div class="hero-kpi">
+      <div class="kpi-item"><div class="kpi-label">在线率</div><div class="kpi-value green">94.4<span class="kpi-unit">%</span></div></div>
+      <div class="kpi-item"><div class="kpi-label">设备总数</div><div class="kpi-value">18<span class="kpi-unit">台</span></div></div>
+    </div>
+    <div class="chart-area" id="chart-device"></div>
+    <div class="secondary-metrics">
+      <span class="sec-metric">激活: <b>18</b>台</span>
+      <span class="sec-metric">离线: <b>1</b>台</span>
+    </div>
+    <div class="card-footer">
+      <span class="source-text">源: iot device</span>
+      <button class="btn-penetrate">穿透 →</button>
+    </div>
+  </div>
+
+  <!-- 6. 异常告警监控 -->
+  <div class="card is-alarm">
+    <div class="card-header">
+      <div class="header-left">
+        <span class="card-icon">🚨</span>
+        <div><div class="card-title">异常告警监控</div><div class="card-time">今日 00:00 - 23:59</div></div>
+      </div>
+      <span class="live-badge" style="color:#f87171;background:rgba(239,68,68,0.15);border-color:rgba(239,68,68,0.4);box-shadow:0 0 8px rgba(239,68,68,0.2);">● 1 活动</span>
+    </div>
+    <div class="hero-kpi">
+      <div class="kpi-item"><div class="kpi-label">活动告警</div><div class="kpi-value red">1<span class="kpi-unit">起</span></div></div>
+      <div class="kpi-item"><div class="kpi-label">告警总数</div><div class="kpi-value">6<span class="kpi-unit">起</span></div></div>
+    </div>
+    <div class="chart-area" id="chart-alarm"></div>
+    <div class="secondary-metrics">
+      <span class="sec-metric">已确认: <b>2</b></span>
+      <span class="sec-metric">恢复未确认: <b>0</b></span>
+      <span class="sec-metric">已闭环: <b>3</b></span>
+    </div>
+    <div class="card-footer">
+      <span class="source-text">源: iot alarm</span>
+      <button class="btn-penetrate">穿透 →</button>
+    </div>
+  </div>
+
+  <!-- 7. 追溯完整率 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="header-left">
+        <span class="card-icon">🔗</span>
+        <div><div class="card-title">追溯完整率监控</div><div class="card-time">今日 00:00 - 23:59</div></div>
+      </div>
+      <span class="live-badge">● 实时</span>
+    </div>
+    <div class="hero-kpi">
+      <div class="kpi-item"><div class="kpi-label">闭环覆盖率</div><div class="kpi-value accent">84.5<span class="kpi-unit">%</span></div></div>
+      <div class="kpi-item"><div class="kpi-label">交易流水</div><div class="kpi-value">256<span class="kpi-unit">笔</span></div></div>
+    </div>
+    <div class="chart-area" id="chart-trace"></div>
+    <div class="secondary-metrics">
+      <span class="sec-metric">可追溯: <b>42</b>单</span>
+      <span class="sec-metric">工单: <b>19</b></span>
+      <span class="sec-metric">检验: <b>15</b></span>
+    </div>
+    <div class="card-footer">
+      <span class="source-text">源: traceability aggregation</span>
+      <button class="btn-penetrate">穿透 →</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ========== 项目统一配色 ========== */
+const C = {
+  accent: '#38bdf8', accentDeep: '#0284c7',
+  green: '#34d399', greenDeep: '#059669',
+  amber: '#f59e0b', amberDeep: '#d97706',
+  red: '#f87171', redDeep: '#dc2626',
+  purple: '#a78bfa',
+  textPri: '#f8fafc', textSec: '#94a3b8', textDim: '#64748b',
+  border: 'rgba(56,189,248,0.15)',
+};
+
+/* 通用 tooltip 样式 */
+const tooltipStyle = {
+  backgroundColor: 'rgba(8,16,33,0.95)',
+  borderColor: 'rgba(56,189,248,0.3)',
+  textStyle: { color: '#f8fafc', fontSize: 12 },
+};
+
+/* ====== 1. 库存 - 环形占比图 ====== */
+echarts.init(document.getElementById('chart-inventory')).setOption({
+  tooltip: { ...tooltipStyle, trigger: 'item', formatter: '{b}: {c}件 ({d}%)' },
+  series: [{
+    type: 'pie', radius: ['52%', '78%'],
+    center: ['50%', '50%'],
+    itemStyle: { borderColor: '#080d1a', borderWidth: 3, borderRadius: 6 },
+    label: {
+      show: true, position: 'center',
+      formatter: '97%\n可用率',
+      fontSize: 22, fontWeight: 800, fontFamily: 'monospace',
+      color: C.accent, lineHeight: 28,
+      textShadowColor: 'rgba(56,189,248,0.3)', textShadowBlur: 12,
+    },
+    emphasis: { label: { fontSize: 24 }, scaleSize: 6 },
+    data: [
+      { value: 920, name: '可用库存', itemStyle: { color: { type:'linear', x:0,y:0,x2:1,y2:1, colorStops:[{offset:0,color:'#38bdf8'},{offset:1,color:'#0284c7'}] } } },
+      { value: 20, name: '业务预留', itemStyle: { color: { type:'linear', x:0,y:0,x2:1,y2:1, colorStops:[{offset:0,color:'#f59e0b'},{offset:1,color:'#d97706'}] } } },
+    ],
+    animationType: 'scale', animationEasing: 'cubicOut',
+  }],
+});
+
+/* ====== 2. 履约 - 水平管道柱状图 ====== */
+echarts.init(document.getElementById('chart-fulfillment')).setOption({
+  tooltip: { ...tooltipStyle, trigger: 'axis', axisPointer: { type: 'shadow' } },
+  grid: { left: 70, right: 50, top: 8, bottom: 8, containLabel: false },
+  xAxis: { type: 'value', show: false, max: 220 },
+  yAxis: {
+    type: 'category', inverse: true,
+    data: ['需求总量', '已收货', '已预留', '已拣货', '已发货'],
+    axisLine: { show: false }, axisTick: { show: false },
+    axisLabel: { color: C.textSec, fontSize: 12 },
+  },
+  series: [{
+    type: 'bar', barWidth: 22, barCategoryGap: '30%',
+    data: [200, 140, 120, 80, 60],
+    itemStyle: {
+      borderRadius: [0, 6, 6, 0],
+      color: (p) => ({
+        type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+        colorStops: [
+          { offset: 0, color: C.accentDeep },
+          { offset: 1, color: C.accent },
+        ],
+      }),
+    },
+    label: { show: true, position: 'right', color: C.textSec, fontSize: 12, fontFamily: 'monospace', fontWeight: 600 },
+    emphasis: { itemStyle: { shadowBlur: 16, shadowColor: 'rgba(56,189,248,0.4)' } },
+  }],
+});
+
+/* ====== 3. 生产 - 柱状图 + 良品率环形 ====== */
+echarts.init(document.getElementById('chart-manufacturing')).setOption({
+  tooltip: { ...tooltipStyle, trigger: 'item' },
+  grid: { left: 16, right: '48%', top: 20, bottom: 24, containLabel: true },
+  xAxis: {
+    type: 'category', data: ['已完工', '执行中', '质量阻滞'],
+    axisLine: { lineStyle: { color: C.border } },
+    axisTick: { show: false },
+    axisLabel: { color: C.textDim, fontSize: 10 },
+  },
+  yAxis: {
+    type: 'value', splitLine: { lineStyle: { color: C.border } },
+    axisLabel: { color: C.textDim, fontSize: 10 },
+  },
+  series: [
+    {
+      type: 'bar', barWidth: 28,
+      data: [
+        { value: 12, itemStyle: { color: { type:'linear',x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:C.green},{offset:1,color:C.greenDeep}] }, borderRadius: [4,4,0,0] } },
+        { value: 3, itemStyle: { color: { type:'linear',x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:C.accent},{offset:1,color:C.accentDeep}] }, borderRadius: [4,4,0,0] } },
+        { value: 1, itemStyle: { color: { type:'linear',x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:C.amber},{offset:1,color:C.amberDeep}] }, borderRadius: [4,4,0,0] } },
+      ],
+      label: { show: true, position: 'top', color: C.textSec, fontFamily: 'monospace', fontWeight: 700 },
+      emphasis: { itemStyle: { shadowBlur: 12, shadowColor: 'rgba(56,189,248,0.3)' } },
+    },
+    {
+      type: 'pie', radius: ['36%', '56%'],
+      center: ['78%', '50%'],
+      itemStyle: { borderColor: '#080d1a', borderWidth: 2, borderRadius: 4 },
+      label: { show: true, position: 'center', formatter: '96%\n良品率', fontSize: 16, fontWeight: 800, color: C.green, lineHeight: 22, textShadowColor:'rgba(52,211,153,0.3)', textShadowBlur:8 },
+      data: [
+        { value: 173, name: '合格', itemStyle: { color: { type:'linear',x:0,y:0,x2:1,y2:1, colorStops:[{offset:0,color:C.green},{offset:1,color:C.greenDeep}] } } },
+        { value: 7, name: '缺陷', itemStyle: { color: 'rgba(100,116,139,0.4)' } },
+      ],
+      silent: false,
+    },
+  ],
+});
+
+/* ====== 4. 质量 - 仪表盘 ====== */
+echarts.init(document.getElementById('chart-quality')).setOption({
+  series: [
+    {
+      type: 'gauge', startAngle: 200, endAngle: -20,
+      radius: '90%', center: ['50%', '58%'],
+      min: 0, max: 100,
+      axisLine: {
+        lineStyle: {
+          width: 16, color: [
+            [0.6, { type:'linear',x:0,y:0,x2:1,y2:0, colorStops:[{offset:0,color:'#dc2626'},{offset:1,color:'#f87171'}] }],
+            [0.8, { type:'linear',x:0,y:0,x2:1,y2:0, colorStops:[{offset:0,color:'#f59e0b'},{offset:1,color:'#fbbf24'}] }],
+            [1,   { type:'linear',x:0,y:0,x2:1,y2:0, colorStops:[{offset:0,color:'#059669'},{offset:1,color:'#34d399'}] }],
+          ],
+        },
+      },
+      axisTick: { length: 4, lineStyle: { color: 'rgba(148,163,184,0.3)', width: 1 } },
+      splitLine: { length: 10, lineStyle: { color: 'rgba(148,163,184,0.4)', width: 2 } },
+      axisLabel: { distance: 18, color: C.textDim, fontSize: 10 },
+      pointer: {
+        length: '65%', width: 5,
+        itemStyle: { color: C.textPri, shadowBlur: 8, shadowColor: 'rgba(56,189,248,0.4)' },
+      },
+      anchor: { show: true, size: 10, itemStyle: { color: C.accent, borderWidth: 2, borderColor: C.textPri } },
+      detail: {
+        valueAnimation: true, fontSize: 24, fontWeight: 800,
+        fontFamily: 'monospace', color: C.green,
+        formatter: '{value}%', offsetCenter: [0, '32%'],
+        textShadowColor: 'rgba(52,211,153,0.3)', textShadowBlur: 10,
+      },
+      data: [{ value: 97.2 }],
+    },
+  ],
+});
+
+/* ====== 5. 设备 - 状态环形图 ====== */
+echarts.init(document.getElementById('chart-device')).setOption({
+  tooltip: { ...tooltipStyle, trigger: 'item', formatter: '{b}: {c}台 ({d}%)' },
+  series: [{
+    type: 'pie', radius: ['52%', '78%'],
+    center: ['50%', '50%'],
+    itemStyle: { borderColor: '#080d1a', borderWidth: 3, borderRadius: 6 },
+    label: {
+      show: true, position: 'center',
+      formatter: '17/18\n在线', fontSize: 22, fontWeight: 800,
+      color: C.green, lineHeight: 28,
+      textShadowColor: 'rgba(52,211,153,0.3)', textShadowBlur: 12,
+    },
+    data: [
+      { value: 17, name: '在线', itemStyle: { color: { type:'linear',x:0,y:0,x2:1,y2:1, colorStops:[{offset:0,color:C.green},{offset:1,color:C.greenDeep}] } } },
+      { value: 1, name: '离线', itemStyle: { color: { type:'linear',x:0,y:0,x2:1,y2:1, colorStops:[{offset:0,color:C.red},{offset:1,color:C.redDeep}] } } },
+    ],
+    animationType: 'scale',
+  }],
+});
+
+/* ====== 6. 告警 - 生命周期环形 ====== */
+echarts.init(document.getElementById('chart-alarm')).setOption({
+  tooltip: { ...tooltipStyle, trigger: 'item', formatter: '{b}: {c}起' },
+  legend: {
+    bottom: 0, itemWidth: 10, itemHeight: 10, itemGap: 14,
+    textStyle: { color: C.textDim, fontSize: 11 },
+  },
+  series: [{
+    type: 'pie', radius: ['48%', '74%'],
+    center: ['50%', '44%'],
+    itemStyle: { borderColor: '#080d1a', borderWidth: 3, borderRadius: 6 },
+    label: { show: false },
+    data: [
+      { value: 1, name: '触发中', itemStyle: { color: { type:'linear',x:0,y:0,x2:1,y2:1, colorStops:[{offset:0,color:'#ef4444'},{offset:1,color:'#dc2626'}] } } },
+      { value: 2, name: '已确认', itemStyle: { color: { type:'linear',x:0,y:0,x2:1,y2:1, colorStops:[{offset:0,color:C.amber},{offset:1,color:C.amberDeep}] } } },
+      { value: 0, name: '恢复未确认', itemStyle: { color: C.accent } },
+      { value: 3, name: '已闭环', itemStyle: { color: { type:'linear',x:0,y:0,x2:1,y2:1, colorStops:[{offset:0,color:C.green},{offset:1,color:C.greenDeep}] } } },
+    ],
+    animationType: 'scale',
+  }],
+});
+
+/* ====== 7. 追溯 - 雷达覆盖图 ====== */
+echarts.init(document.getElementById('chart-trace')).setOption({
+  tooltip: { ...tooltipStyle },
+  radar: {
+    indicator: [
+      { name: '采购', max: 50 }, { name: '销售', max: 50 },
+      { name: '工单', max: 50 }, { name: '质检', max: 50 },
+      { name: '设备', max: 50 }, { name: '告警', max: 50 },
+    ],
+    shape: 'polygon',
+    splitArea: { areaStyle: { color: ['rgba(56,189,248,0.03)', 'rgba(56,189,248,0.06)'] } },
+    splitLine: { lineStyle: { color: 'rgba(56,189,248,0.15)' } },
+    axisLine: { lineStyle: { color: 'rgba(56,189,248,0.2)' } },
+    axisName: { color: C.textSec, fontSize: 11 },
+  },
+  series: [{
+    type: 'radar',
+    data: [{
+      value: [42, 35, 19, 15, 18, 6],
+      name: '事实覆盖',
+      areaStyle: { color: 'rgba(56,189,248,0.15)' },
+      lineStyle: { color: C.accent, width: 2 },
+      itemStyle: { color: C.accent, borderColor: '#fff', borderWidth: 1 },
+      symbol: 'circle', symbolSize: 6,
+    }],
+  }],
+});
+
+/* 响应式自适应 */
+window.addEventListener('resize', () => {
+  document.querySelectorAll('.chart-area').forEach(el => {
+    const inst = echarts.getInstanceByDom(el);
+    if (inst) inst.resize();
+  });
+});
+</script>
+</body>
+</html>

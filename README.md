@@ -31,7 +31,9 @@
 
 ---
 
-![image-20260916114805907](C:\Users\zhangzy\AppData\Roaming\Typora\typora-user-images\image-20260916114805907.png)
+![登录](./登录.png)
+
+![image-20260916114805907](./首页.png)
 
 ## 🎯 黄金业务闭环（The Golden Business Loop）
 

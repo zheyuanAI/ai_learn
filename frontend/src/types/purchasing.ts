@@ -35,21 +35,22 @@ export interface PurchaseOrderLine {
   targetWarehouseId: string;
   targetWarehouseName?: string;
   orderedQty: string;          // 采购要求总数量
-  arrivedQty: string;          // 累计到货验收量
-  rejectedQty: string;         // 累计收货前外观拒收量
+  // 修改用途：详情返回真实累计；列表与写命令未查询这些事实，null 表示未提供而非零。
+  arrivedQty: string | null;   // 累计到货验收量
+  rejectedQty: string | null;  // 累计收货前外观拒收量
   rejectionReason?: string;    // 最近一次拒收原因
   receivedQty: string;         // 累计实际接收进入 QualityHold 量
   inspectedQty: string;        // 累计完成到货质检量
-  qualifiedQty: string;        // 累计质检合格量
+  qualifiedQty: string | null; // 累计质检合格量
   unqualifiedQty: string;      // 累计质检不合格量
   unqualifiedReason?: string;  // 不合格原因
   releaseDecidedQty: string;   // 决定放行量
   scrapDecidedQty: string;     // 决定报废量
   returnDecidedQty: string;    // 决定退回供应方量
-  releaseExecutedQty: string;  // 已执行放行移至 RS 量
+  releaseExecutedQty: string | null;  // 已执行放行移至 RS 量
   scrapExecutedQty: string;    // 已执行报废扣减量
   returnExecutedQty: string;   // 已执行退回扣减量
-  putawayQty: string;          // 累计上架到 Storage 量
+  putawayQty: string | null;   // 累计上架到 Storage 量
   pendingQty: string;          // 剩余待收货数量 = orderedQty - receivedQty
   sourceWorkOrderId?: string;  // 关联来源生产工单（仅表达追溯，不触发MRP）
   lotNo?: string;

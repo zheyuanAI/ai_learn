@@ -33,8 +33,17 @@ export function usePermission() {
    */
   function hasPermission(permCode: string): boolean {
     if (!permCode) return true;
+    // 修改用途：兼容演示权限配置中附带的中文说明，避免说明文本导致按钮误判为无权。
+    const normalizePermission = (permission: string) =>
+      String(permission).trim().split(/[\s（(]/, 1)[0];
+    const normalizedCode = normalizePermission(permCode);
     return permissions.value.some(
-      (p) => p === permCode || p.startsWith(permCode.split(":").slice(0, 2).join(":") + ":") && p.endsWith(":manage"),
+      (p) => {
+        const normalizedPermission = normalizePermission(p);
+        return normalizedPermission === normalizedCode
+          || normalizedPermission.startsWith(normalizedCode.split(":").slice(0, 2).join(":") + ":")
+            && normalizedPermission.endsWith(":manage");
+      },
     );
   }
 

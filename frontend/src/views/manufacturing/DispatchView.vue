@@ -113,7 +113,7 @@
         <div style="display: flex; gap: 8px; justify-content: center">
           <!-- 下达派工 (Draft -> Released) -->
           <el-button
-            v-if="row.status === 'Draft'"
+            v-if="row.status === 'Draft' && hasPermission('mes:dispatch:manage')"
             type="primary"
             link
             size="small"
@@ -125,7 +125,7 @@
           </el-button>
           <!-- 前往执行 (Released -> Executions) -->
           <el-button
-            v-else-if="row.status === 'Released'"
+            v-else-if="row.status === 'Released' && hasPermission('mes:execution:manage')"
             type="primary"
             link
             size="small"
@@ -135,7 +135,11 @@
           >
             前往执行
           </el-button>
-          <span v-else class="text-muted" style="font-size: 12px">已执行</span>
+          <span
+            v-else-if="row.status === 'Processing' || row.status === 'Completed'"
+            class="text-muted"
+            style="font-size: 12px"
+          >已执行</span>
         </div>
       </template>
     </DataTable>
@@ -541,13 +545,17 @@ async function submitCreateDispatch() {
     return;
   }
   if (!createForm.workOrderId || !createForm.operationId || !createForm.operatorId || !createForm.dispatchQty) return;
+  // 修改用途：派工对象、人员、数量和设备使用首次快照，同键重试不读实时表单。
+  const requestPayload = JSON.parse(JSON.stringify(createForm));
+  const originalForm = JSON.stringify(createForm);
   try {
     await execute(async (key) => {
-      const created = await createDispatchOrder(createForm, key);
+      const created = await createDispatchOrder(requestPayload, key);
       if (!created?.data?.id) {
         throw new Error("服务端未返回 dispatchOrderId，已阻止继续派工");
       }
-      createModalVisible.value = false;
+      // 修改用途：retry 成功只关闭原派工草稿，后来编辑的新稿保留。
+      if (JSON.stringify(createForm) === originalForm) createModalVisible.value = false;
       await fetchDispatchList();
     }, { onConflict: fetchDispatchList });
   } catch (err: any) {
@@ -562,11 +570,14 @@ function promptRelease(item: DispatchOrderItem) {
 
 async function handleConfirmRelease() {
   if (!releaseConfirm.item) return;
+  // 修改用途：固定首次下达的派工单，避免切换确认对象后重试另一单据。
+  const dispatchId = releaseConfirm.item.id as string;
   releaseConfirm.loading = true;
   try {
     await execute(async (key) => {
-      await releaseDispatchOrder(releaseConfirm.item!.id as string, key);
-      releaseConfirm.visible = false;
+      await releaseDispatchOrder(dispatchId, key);
+      // 修改用途：用户已切换下达对象时不关闭新确认弹窗。
+      if (releaseConfirm.item?.id === dispatchId) releaseConfirm.visible = false;
       await fetchDispatchList();
     }, { onConflict: fetchDispatchList });
   } catch (err: any) {

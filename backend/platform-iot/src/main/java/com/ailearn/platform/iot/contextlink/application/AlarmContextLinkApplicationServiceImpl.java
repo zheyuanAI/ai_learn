@@ -73,6 +73,20 @@ public class AlarmContextLinkApplicationServiceImpl implements AlarmContextLinkA
     }
 
     /**
+     * 用途：与告警事实同事务持久化待补链任务，隔离遥测线程与 Core 网络请求。
+     * 入参：可信租户和告警 ID；无出参；流程：校验 ID、读取本租户告警，未关联时仅本地入队。
+     * 数据库异常不在此处吞掉，保证事实和任务一起回滚并允许 MQTT 重投。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void enqueue(UUID tenantId, UUID alarmId) {
+        requireIds(tenantId, alarmId);
+        repository.findAlarm(tenantId, alarmId)
+                .filter(candidate -> !isLinked(candidate))
+                .ifPresent(candidate -> repository.enqueue(tenantId, candidate.id(), now()));
+    }
+
+    /**
      * 自动补链一条告警：先建立/领取重试任务，再查询 Core 活动工序上下文；未匹配或依赖不可用只进入重试，不改写告警原始时间线。
      */
     @Override

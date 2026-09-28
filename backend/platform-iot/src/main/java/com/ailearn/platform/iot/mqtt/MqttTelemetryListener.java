@@ -2,11 +2,20 @@ package com.ailearn.platform.iot.mqtt;
 
 import com.ailearn.platform.iot.device.exception.IotException;
 import com.ailearn.platform.iot.telemetry.exception.TelemetryException;
+import com.ailearn.platform.iot.telemetry.application.TelemetryIngestionCommand;
 import com.ailearn.platform.shared.exception.ServiceUnavailableException;
+import java.util.ArrayDeque;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.eclipse.paho.client.mqttv3.IMqttActionListener;
@@ -33,6 +42,8 @@ import org.springframework.context.SmartLifecycle;
  */
 public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtended {
     private static final Logger log = LoggerFactory.getLogger(MqttTelemetryListener.class);
+    private static final int CONSUMER_THREADS = 4;
+    private static final int MAX_PENDING_MESSAGES = 64;
 
     private final MqttBrokerProperties properties;
     private final MqttTelemetryMessageParser parser;
@@ -42,6 +53,7 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
     private volatile MqttAsyncClient client;
     private volatile ScheduledExecutorService reconnectExecutor;
     private volatile ScheduledFuture<?> reconnectFuture;
+    private volatile ProcessingDispatcher dispatcher;
 
     /**
      * 用途：组装 MQTT 生命周期组件；入参为外部配置和已经复用统一摄取链的消息解析器。
@@ -57,6 +69,8 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
         if (!running.compareAndSet(false, true)) {
             return;
         }
+        // 每次启动使用新的有界调度器，避免旧连接的工作项在重启后确认新的 packet id。
+        dispatcher = new ProcessingDispatcher();
         if (!validConfiguration()) {
             return;
         }
@@ -74,6 +88,11 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
     public void stop() {
         if (!running.compareAndSet(true, false)) {
             return;
+        }
+        ProcessingDispatcher previous = dispatcher;
+        dispatcher = null;
+        if (previous != null) {
+            previous.close();
         }
         synchronized (lifecycleMonitor) {
             if (reconnectFuture != null) {
@@ -140,6 +159,10 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
     @Override
     public void connectionLost(Throwable cause) {
         connecting.set(false);
+        ProcessingDispatcher current = dispatcher;
+        if (current != null) {
+            current.invalidate();
+        }
         if (running.get()) {
             log.warn("IoT MQTT 连接丢失，将自动重连：{}", cause == null ? "unknown" : cause.getMessage());
             scheduleReconnect();
@@ -149,15 +172,38 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
     /** Paho v3 没有发布端认证头；主题中的 credential_reference 是应用侧可见的可信定位键。 */
     @Override
     public void messageArrived(String topic, MqttMessage message) throws Exception {
+        ProcessingDispatcher current = dispatcher;
+        if (current == null || message == null) {
+            throw new ServiceUnavailableException("MQTT QoS 1 消费调度器不可用");
+        }
+        if (message.getQos() != 1) {
+            // 发布端降级到 QoS 0 时没有可靠重投能力，不让它进入一期 QoS 1 事实链。
+            log.warn("IoT MQTT 拒绝非 QoS 1 消息，topic={}", topic);
+            return;
+        }
+        // 回调线程先占用全局容量，再解析可信设备；容量耗尽时反压到 Paho，绝不提前 PUBACK。
+        long deliveryEpoch = current.acquire(message.getId(), topic, message.getPayload());
+        if (deliveryEpoch < 0) {
+            // 同连接同 packet id 的 QoS 1 重传由首次入队工作项确认，重复回调不能产生第二次晚到 ACK。
+            return;
+        }
+        boolean submitted = false;
         try {
-            parser.accept(topic, message == null ? null : message.getPayload());
+            TelemetryIngestionCommand command = parser.prepare(topic, message.getPayload());
+            current.submit(command, message.getId(), message.getQos(), deliveryEpoch);
+            submitted = true;
         } catch (IotException | TelemetryException | IllegalArgumentException exception) {
-            // 格式、凭证、租户或设备归属错误不可重试；返回后让 Broker 确认该无效消息，避免毒消息阻塞订阅。
+            // 格式、凭证、租户或设备归属错误不可重试；手动确认无效消息，避免毒消息阻塞订阅。
             log.warn("IoT MQTT 消息被拒绝，topic={}，原因={}", topic, exception.getMessage());
+            current.acknowledge(message.getId(), message.getQos(), deliveryEpoch);
         } catch (ServiceUnavailableException exception) {
-            // 依赖数据库暂不可用时抛出，让 Paho 断开连接并依靠 QoS1 持久会话重新投递。
+            // 凭证查询或本地调度不可用时仍在 Paho 回调线程，抛出并让持久会话重投。
             log.error("IoT MQTT 消息摄取依赖暂不可用，触发重连，topic={}", topic, exception);
             throw exception;
+        } finally {
+            if (!submitted) {
+                current.release();
+            }
         }
     }
 
@@ -186,10 +232,11 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
             return false;
         }
         if (properties.getQos() != 1
+                || properties.isCleanSession()
                 || properties.getConnectionTimeoutSeconds() < 1
                 || properties.getKeepAliveSeconds() < 1
                 || properties.getReconnectDelaySeconds() < 1) {
-            log.error("IoT MQTT 必须使用 QoS 1，且超时和重连参数必须为正数；监听器保持等待，不阻断应用启动");
+            log.error("IoT MQTT 必须使用 QoS 1、持久会话，且超时和重连参数必须为正数；监听器保持等待，不阻断应用启动");
             return false;
         }
         return true;
@@ -206,6 +253,8 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
         MqttAsyncClient created = new MqttAsyncClient(properties.getServerUri().trim(),
                 properties.getClientId().trim(), persistence);
         created.setCallback(this);
+        // Paho 默认在 messageArrived 返回后自动 PUBACK；异步摄取必须改为提交事务后手动确认。
+        created.setManualAcks(true);
         client = created;
     }
 
@@ -225,6 +274,10 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
                 @Override
                 public void onSuccess(IMqttToken asyncActionToken) {
                     connecting.set(false);
+                    ProcessingDispatcher currentDispatcher = dispatcher;
+                    if (currentDispatcher != null) {
+                        currentDispatcher.activate();
+                    }
                     subscribe(current);
                 }
 
@@ -312,6 +365,226 @@ public class MqttTelemetryListener implements SmartLifecycle, MqttCallbackExtend
             if (reconnectFuture == null || reconnectFuture.isDone() || reconnectFuture.isCancelled()) {
                 reconnectFuture = reconnectExecutor.schedule(this::connect,
                         properties.getReconnectDelaySeconds(), TimeUnit.SECONDS);
+            }
+        }
+    }
+
+    /** 用途：用可信租户与设备标识聚合同设备消息；入参和出参均为摄取命令中的可信身份。 */
+    private record DeviceKey(UUID tenantId, UUID deviceId) { }
+
+    /** 用途：保存有界队列内的单条 QoS 1 消息；入参包含认证命令、packet id 和连接代次。 */
+    private record PendingMessage(TelemetryIngestionCommand command, int packetId, int qos, long epoch) { }
+
+    /** 用途：辨认同一连接上未确认 packet id 的重复投递；入参为主题与载荷，保留有界副本。 */
+    private record PacketIdentity(String topic, byte[] payload) {
+        private boolean same(String otherTopic, byte[] otherPayload) {
+            return topic.equals(otherTopic) && Arrays.equals(payload, otherPayload);
+        }
+    }
+
+    /**
+     * 用途：对 MQTT 消息施加全局反压并按设备顺序调度；入参来自已认证的摄取命令；处理完成后才发送 PUBACK。
+     * 同设备始终只有一个 drain 任务，不同设备最多由四个 worker 并行；失败使本代未确认消息由持久会话重投。
+     */
+    private final class ProcessingDispatcher {
+        private final Object capacityMonitor = new Object();
+        private final Map<DeviceKey, ArrayDeque<PendingMessage>> lanes = new HashMap<>();
+        private final Map<Integer, PacketIdentity> inFlightPackets = new HashMap<>();
+        private final Object sessionMonitor = new Object();
+        private final ThreadPoolExecutor workers;
+        private volatile long epoch;
+        private volatile boolean active = true;
+        private int usedSlots;
+
+        /** 用途：创建容量固定的工作池；无入参和出参；任务与每设备队列均受同一信号量上限约束。 */
+        private ProcessingDispatcher() {
+            ThreadFactory factory = runnable -> {
+                Thread thread = new Thread(runnable, "iot-mqtt-consumer");
+                thread.setDaemon(true);
+                return thread;
+            };
+            workers = new ThreadPoolExecutor(CONSUMER_THREADS, CONSUMER_THREADS, 0L,
+                    TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(MAX_PENDING_MESSAGES), factory);
+        }
+
+        /** 用途：占用一条待处理消息容量；无入参；返回当前连接代次，容量耗尽时阻塞 Paho 回调形成反压。 */
+        private long acquire(int packetId, String topic, byte[] payload) throws InterruptedException {
+            long arrivalEpoch = epoch;
+            synchronized (capacityMonitor) {
+                while (usedSlots >= MAX_PENDING_MESSAGES && active && arrivalEpoch == epoch && running.get()) {
+                    capacityMonitor.wait();
+                }
+                if (!active || arrivalEpoch != epoch || !running.get()) {
+                    throw new ServiceUnavailableException("MQTT 连接已失效，等待未确认消息重投");
+                }
+                usedSlots++;
+            }
+            synchronized (sessionMonitor) {
+                if (active && arrivalEpoch == epoch && running.get()) {
+                    PacketIdentity previous = inFlightPackets.get(packetId);
+                    if (previous != null) {
+                        release();
+                        if (previous.same(topic, payload)) {
+                            return -1;
+                        }
+                        throw new ServiceUnavailableException("未确认的 MQTT packet id 被不同消息复用");
+                    }
+                    inFlightPackets.put(packetId, new PacketIdentity(topic, payload.clone()));
+                    return epoch;
+                }
+            }
+            release();
+            throw new ServiceUnavailableException("MQTT 连接已失效，等待未确认消息重投");
+        }
+
+        /** 用途：归还未成功入队的消息容量；无入参与出参；已入队的容量由 worker 在结束时归还。 */
+        private void release() {
+            synchronized (capacityMonitor) {
+                usedSlots--;
+                capacityMonitor.notifyAll();
+            }
+        }
+
+        /** 用途：按可信设备身份排入 FIFO；入参为已认证命令、packet id、QoS 和连接代次；无返回值。 */
+        private void submit(TelemetryIngestionCommand command, int packetId, int qos, long deliveryEpoch) {
+            synchronized (sessionMonitor) {
+                if (!active || deliveryEpoch != epoch) {
+                    throw new ServiceUnavailableException("MQTT 连接已失效，等待未确认消息重投");
+                }
+            }
+            DeviceKey key = new DeviceKey(command.credentialContext().tenantId(), command.deviceId());
+            PendingMessage pending = new PendingMessage(command, packetId, qos, deliveryEpoch);
+            synchronized (lanes) {
+                ArrayDeque<PendingMessage> lane = lanes.computeIfAbsent(key, ignored -> new ArrayDeque<>());
+                boolean first = lane.isEmpty();
+                lane.addLast(pending);
+                if (first) {
+                    try {
+                        workers.execute(() -> drain(key));
+                    } catch (RejectedExecutionException exception) {
+                        lane.removeLast();
+                        lanes.remove(key);
+                        throw new ServiceUnavailableException("MQTT 消费工作池不可用", exception);
+                    }
+                }
+            }
+        }
+
+        /** 用途：顺序消费一台设备的待处理消息；入参为可信设备键；事务返回且连接代次仍有效时手动确认。 */
+        private void drain(DeviceKey key) {
+            while (true) {
+                PendingMessage pending;
+                synchronized (lanes) {
+                    ArrayDeque<PendingMessage> lane = lanes.get(key);
+                    if (lane == null || lane.isEmpty()) {
+                        lanes.remove(key);
+                        return;
+                    }
+                    pending = lane.peekFirst();
+                }
+                try {
+                    if (isActive(pending.epoch())) {
+                        try {
+                            // consume 经 Spring 事务代理返回后，遥测、状态和本地告警任务才算提交。
+                            try {
+                                parser.consume(pending.command());
+                            } catch (IotException | TelemetryException | IllegalArgumentException exception) {
+                                log.warn("IoT MQTT 消息被拒绝，deviceId={}，原因={}",
+                                        key.deviceId(), exception.getMessage());
+                            }
+                            acknowledge(pending.packetId(), pending.qos(), pending.epoch());
+                        } catch (RuntimeException | MqttException exception) {
+                            failAndRedeliver(pending.epoch(), exception);
+                        }
+                    }
+                } finally {
+                    synchronized (lanes) {
+                        ArrayDeque<PendingMessage> lane = lanes.get(key);
+                        if (lane != null && lane.peekFirst() == pending) {
+                            lane.removeFirst();
+                            if (lane.isEmpty()) {
+                                lanes.remove(key);
+                            }
+                        }
+                    }
+                    release();
+                }
+            }
+        }
+
+        /** 用途：检查工作项是否仍属于当前活动连接；入参为入队代次；返回可否继续处理。 */
+        private boolean isActive(long deliveryEpoch) {
+            synchronized (sessionMonitor) {
+                return active && deliveryEpoch == epoch && running.get();
+            }
+        }
+
+        /** 用途：完成 QoS 1 手动确认；入参为 packet id、QoS 和连接代次；旧连接工作项绝不确认新连接的 id。 */
+        private void acknowledge(int packetId, int qos, long deliveryEpoch) throws MqttException {
+            synchronized (sessionMonitor) {
+                if (active && deliveryEpoch == epoch && running.get() && client != null) {
+                    client.messageArrivedComplete(packetId, qos);
+                    inFlightPackets.remove(packetId);
+                }
+            }
+        }
+
+        /** 用途：处理工作线程摄取或 ACK 故障；入参为失败原因；断开持久会话触发所有未确认 QoS 1 消息重投。 */
+        private void failAndRedeliver(long deliveryEpoch, Exception exception) {
+            synchronized (sessionMonitor) {
+                if (!active || deliveryEpoch != epoch) {
+                    return;
+                }
+                epoch++;
+                active = false;
+                inFlightPackets.clear();
+            }
+            synchronized (capacityMonitor) {
+                capacityMonitor.notifyAll();
+            }
+            log.error("IoT MQTT 消费失败，断开连接并重投未确认消息", exception);
+            MqttAsyncClient current = client;
+            if (current != null) {
+                try {
+                    current.disconnectForcibly(1000, 1000, false);
+                } catch (MqttException disconnectException) {
+                    log.warn("IoT MQTT 消费失败后的断连调用失败，将继续安排重连", disconnectException);
+                }
+            }
+            scheduleReconnect();
+        }
+
+        /** 用途：新连接建立后启用新代次；无入参与出参；旧代次未确认消息须等 Broker 重投。 */
+        private void activate() {
+            synchronized (sessionMonitor) {
+                epoch++;
+                active = true;
+                inFlightPackets.clear();
+            }
+            synchronized (capacityMonitor) {
+                capacityMonitor.notifyAll();
+            }
+        }
+
+        /** 用途：让断开连接的旧工作项失效；无入参与出参；禁止其在重连后误确认同号新消息。 */
+        private void invalidate() {
+            synchronized (sessionMonitor) {
+                epoch++;
+                active = false;
+                inFlightPackets.clear();
+            }
+            // 唤醒因队列满而停在 Paho 回调内的线程，防止 stop/断连等待回调时死锁。
+            synchronized (capacityMonitor) {
+                capacityMonitor.notifyAll();
+            }
+        }
+
+        /** 用途：关闭工作池并丢弃内存中未确认任务；无入参与出参；Broker 持久会话负责重投。 */
+        private void close() {
+            invalidate();
+            workers.shutdownNow();
+            synchronized (lanes) {
+                lanes.clear();
             }
         }
     }

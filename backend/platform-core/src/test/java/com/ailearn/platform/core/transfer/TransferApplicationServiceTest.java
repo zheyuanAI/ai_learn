@@ -165,6 +165,13 @@ class TransferApplicationServiceTest {
         assertEquals(new InventoryDimension(PRODUCT_ID, WAREHOUSE_ID, TO_LOCATION, "LOT-1"),
                 command.toDimension());
         assertEquals("TRANSFER", command.metadata().transactionType());
+        // 修改用途：调拨需在首次 move 前通过应用端口预锁全部源/目标，不能逐行占锁。
+        var locks = ArgumentCaptor.forClass(java.util.Collection.class);
+        var commandOrder = org.mockito.Mockito.inOrder(inventoryCommandService);
+        commandOrder.verify(inventoryCommandService).lockBalances(locks.capture());
+        commandOrder.verify(inventoryCommandService).move(any());
+        assertEquals(java.util.Set.of(command.fromDimension(), command.toDimension()),
+                new java.util.HashSet<>(locks.getValue()));
         verify(repository).confirm(eq(TENANT_A), eq(ORDER_ID), eq(0L), eq(USER_ID), any(OffsetDateTime.class));
     }
 

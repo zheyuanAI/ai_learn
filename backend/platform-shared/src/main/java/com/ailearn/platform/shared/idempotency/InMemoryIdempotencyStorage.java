@@ -151,7 +151,8 @@ public class InMemoryIdempotencyStorage implements IdempotencyStorage {
         String fullKey = buildStorageKey(key, tenantId);
         IdempotentRecord record = storage.get(fullKey);
         if (record != null && record.getExpireAt() != null && record.getExpireAt().isBefore(OffsetDateTime.now())) {
-            storage.remove(fullKey);
+            // 修改用途：只清理本次读取的旧对象；equals 仅比较租户和键，不能用值相等删除并发建立的新 claim。
+            storage.computeIfPresent(fullKey, (ignored, current) -> current == record ? null : current);
             return Optional.empty();
         }
         return Optional.ofNullable(record);

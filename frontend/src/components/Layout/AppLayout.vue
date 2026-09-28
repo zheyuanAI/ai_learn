@@ -35,7 +35,10 @@
                 v-for="sub in item.children"
                 :key="sub.path"
                 class="sub-nav-link"
+                :class="{ 'is-active': isSubMenuActive(sub) }"
                 :to="normalizeMenuRoutePath(sub.path)"
+                active-class="sub-nav-route-active"
+                exact-active-class="sub-nav-route-exact-active"
               >
                 <span class="sub-dot"></span>
                 <div class="sub-link-content">
@@ -134,7 +137,15 @@
 import { ref, computed, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useAuthStore } from "../../stores/auth";
-import { getMenuRoutePathname, normalizeMenuRoutePath } from "../../router/menuRouteMap";
+import {
+  filterMenuTreeByAccess,
+  getMenuRoutePathname,
+  getMenuRoutePermissionOverride,
+  hasAnyRoutePermission,
+  isMenuRouteActive,
+  normalizeMenuRoutePath,
+  type RoutePermissionRequirement,
+} from "../../router/menuRouteMap";
 
 interface DisplayMenuItem {
   id: string;
@@ -253,21 +264,14 @@ function resolveMenuIcon(rawIcon: string | null | undefined, isGroup = false): s
 const structuredMenus = computed<DisplayMenuItem[]>(() => {
   const storeMenus = authStore.menus;
   if (!storeMenus || storeMenus.length === 0) {
-    // 默认基础菜单（全中文）
-    return [
-      { id: "1", path: "/", label: "一期总览", detail: "一条黄金业务闭环", icon: "📊" },
-      { id: "2", path: "/erp-wms", label: "供需与仓储", detail: "人工关联、预留、收发存", icon: "📦" },
-      { id: "3", path: "/mes", label: "制造执行", detail: "领退料、工序执行、质检", icon: "🏭" },
-      { id: "4", path: "/iot", label: "设备事实", detail: "遥测、状态、告警分离", icon: "📡" },
-      { id: "5", path: "/gis", label: "地图与看板", detail: "业务事实只读展示", icon: "🗺️" },
-      { id: "6", path: "/ai", label: "智能只读助手", detail: "受控查询、来源与审计", icon: "🤖" },
-    ];
+    // 授权菜单为空时保持空导航，禁止用前端预设补出未授权页面。
+    return [];
   }
 
   // 检查是否已有嵌套 children
   const hasNestedChildren = storeMenus.some((m) => m.children && m.children.length > 0);
   if (hasNestedChildren) {
-    return storeMenus.map((m) => formatMenuNode(m));
+    return filterMenuTreeByAccess(storeMenus.map((m) => formatMenuNode(m)), canAccessMenuPage);
   }
 
   // 若为平铺结构，组织为树
@@ -304,8 +308,22 @@ const structuredMenus = computed<DisplayMenuItem[]>(() => {
     }
   }
 
-  return roots;
+  return filterMenuTreeByAccess(roots, canAccessMenuPage);
 });
+
+/**
+ * 用途：判断菜单指向的页面是否允许当前角色访问。
+ * 入参：菜单路由；出参：是否应在侧边栏展示。
+ * 流程：主数据同页签菜单优先使用精确覆盖权限，其余菜单复用路由守卫的 requiredPermission 语义。
+ */
+function canAccessMenuPage(menuPath: string): boolean {
+  const normalizedPath = normalizeMenuRoutePath(menuPath);
+  const override = getMenuRoutePermissionOverride(normalizedPath);
+  const resolved = router.resolve(normalizedPath);
+  const requiredPermission =
+    override ?? (resolved.meta.requiredPermission as RoutePermissionRequirement);
+  return hasAnyRoutePermission(requiredPermission, authStore.permissions || []);
+}
 
 function formatMenuNode(m: any): DisplayMenuItem {
   const rawLabel = m.menuName || m.label || m.name || "未命名菜单";
@@ -329,6 +347,14 @@ function isParentActive(item: DisplayMenuItem): boolean {
     return route.path === getMenuRoutePathname(item.path);
   }
   return item.children.some((sub) => route.path.startsWith(getMenuRoutePathname(sub.path)));
+}
+
+/**
+ * 用途：按路径和查询参数判断二级菜单高亮，修复同一页面不同 tab 同时高亮。
+ * 入参：当前二级菜单；出参：是否为当前精确菜单。
+ */
+function isSubMenuActive(item: DisplayMenuItem): boolean {
+  return isMenuRouteActive(route.path, route.query, item.path);
 }
 
 /**
@@ -519,7 +545,7 @@ async function handleLogout() {
   background: rgba(103, 210, 255, 0.06);
 }
 
-.sub-nav-link.router-link-active {
+.sub-nav-link.is-active {
   color: var(--accent, #67d2ff);
   background: rgba(103, 210, 255, 0.12);
   font-weight: 600;

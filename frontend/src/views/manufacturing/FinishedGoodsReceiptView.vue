@@ -128,7 +128,7 @@
         <div class="action-btn-group">
           <!-- 确认入库 (Draft -> Confirmed) -->
           <el-button
-            v-if="row.status === 'Draft'"
+            v-if="row.status === 'Draft' && hasPermission('mes:finished:confirm')"
             link
             type="primary"
             :disabled="!isActionAllowed(row, 'confirm')"
@@ -137,7 +137,7 @@
           >
             确认入库
           </el-button>
-          <span v-else class="text-muted font-xs">已完成增加</span>
+          <span v-else-if="row.status === 'Confirmed'" class="text-muted font-xs">已完成增加</span>
         </div>
       </template>
     </DataTable>
@@ -492,15 +492,21 @@ async function submitCreateReceipt() {
   }
   // 修改用途：成品入库单号是服务端事实的必填标识，由页面一次生成并在幂等执行期间复用。
   const receiptNo = `FGR-${crypto.randomUUID()}`;
+  // 修改用途：固定首次成品入库全部字段及单号，同键重试不重新读取表单。
+  const requestPayload = { ...createForm, receiptNo };
+  const originalForm = JSON.stringify(createForm);
   try {
-    const created = await execute((key) => createFinishedGoodsReceipt({ ...createForm, receiptNo }, key), { onConflict: fetchReceiptList });
-    if (!created?.data?.id) {
-      throw new Error("服务端未返回成品入库单 ID，已阻止继续确认");
-    }
-    createModalVisible.value = false;
-    ElMessage.success("成品入库申请单创建成功！请在列表点击【确认入库】将货物正式移入库位。");
-    selectedWorkOrderId.value = createForm.workOrderId;
-    await fetchReceiptList();
+    const originalSelectedOrderId = selectedWorkOrderId.value;
+    await execute(async (key) => {
+      const created = await createFinishedGoodsReceipt(requestPayload, key);
+      if (!created?.data?.id) throw new Error("服务端未返回成品入库单 ID，已阻止继续确认");
+      // 修改用途：retry 成功恢复原申请；用户已编辑新稿或切换列表工单时不覆盖新上下文。
+      if (JSON.stringify(createForm) === originalForm) createModalVisible.value = false;
+      if (selectedWorkOrderId.value === originalSelectedOrderId) selectedWorkOrderId.value = requestPayload.workOrderId;
+      ElMessage.success("成品入库申请单创建成功！请在列表点击【确认入库】将货物正式移入库位。");
+      await fetchReceiptList();
+      return created;
+    }, { onConflict: fetchReceiptList });
   } catch (err: any) {
     ElMessage.error(`创建入库单失败：${err.message}`);
   }
@@ -515,12 +521,17 @@ function promptConfirm(item: FinishedGoodsReceiptItem) {
 /** 执行成品入库确认 */
 async function handleExecuteConfirm() {
   if (!confirmDialog.item) return;
+  // 修改用途：固定首次入库确认的单据 ID，切换列表选中对象不改变同键重试。
+  const receiptId = confirmDialog.item.id as string;
   confirmDialog.loading = true;
   try {
-    await execute((key) => confirmFinishedGoodsReceipt(confirmDialog.item!.id as string, key), { onConflict: fetchReceiptList });
-    confirmDialog.visible = false;
-    ElMessage.success("成品入库确认已成功完成！");
-    await fetchReceiptList();
+    await execute(async (key) => {
+      await confirmFinishedGoodsReceipt(receiptId, key);
+      // 修改用途：retry 成功只关闭原入库确认对象，同时复读列表事实。
+      if (confirmDialog.item?.id === receiptId) confirmDialog.visible = false;
+      ElMessage.success("成品入库确认已成功完成！");
+      await fetchReceiptList();
+    }, { onConflict: fetchReceiptList });
   } catch (err: any) {
     ElMessage.error(`确认入库失败：${err.message}`);
   } finally {

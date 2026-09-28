@@ -1,0 +1,67 @@
+- generic [ref=e190]:
+  - banner [ref=e191]:
+    - generic [ref=e192]:
+      - generic [ref=e193]: AI
+      - generic [ref=e195]:
+        - generic [ref=e196]: AI Learn 智能协同智造中枢
+        - generic [ref=e197]: ENTERPRISE CLOUD PLATFORM · WMS & MES
+  - alert [ref=e198]:
+    - generic [ref=e199]: ⚠️
+    - generic [ref=e200]:
+      - strong [ref=e201]: 会话状态已失效 (401 Displaced / Session Expired)
+      - generic [ref=e202]: 检测到单会话已被新设备顶替或认证令牌已超时。请重新输入账号凭证接入系统。
+    - button "✕" [ref=e203] [cursor=pointer]
+  - main [ref=e204]:
+    - region "统一身份认证主控制舱" [ref=e205]:
+      - generic [ref=e206]:
+        - generic [ref=e207]: AUTH // 统一身份认证
+        - heading "欢迎登录云端控制台" [level=2] [ref=e208]
+        - paragraph [ref=e209]: 承接多租户识别、鉴权通行、动态权限与单会话追踪
+      - generic [ref=e210]:
+        - generic [ref=e211]:
+          - generic [ref=e212]:
+            - generic [ref=e213]: 企业租户编码 (Tenant Code)
+            - generic [ref=e214]: "*"
+          - generic [ref=e216] [cursor=pointer]:
+            - generic:
+              - combobox "企业租户编码 (Tenant Code) *" [ref=e218]
+              - generic [ref=e219]: tenant_demo_a (华北智能工厂示范租户)
+        - generic [ref=e224]:
+          - generic [ref=e225]:
+            - generic [ref=e226]:
+              - generic [ref=e227]: 账号用户名 (Username)
+              - generic [ref=e228]: "*"
+            - generic [ref=e229]: 可手动填写或点击下方角色快速填报
+          - generic [ref=e231]:
+            - generic: 👤
+            - textbox "账号用户名 (Username) *" [ref=e234]:
+              - /placeholder: 请输入用户名或从下方快速选择
+              - text: admin.zhang
+          - generic "正式角色快捷填报" [ref=e236]:
+            - button "租户管理员" [ref=e237] [cursor=pointer]
+            - button "销售人员" [ref=e240] [cursor=pointer]
+            - button "采购人员" [ref=e243] [cursor=pointer]
+            - button "仓库人员" [ref=e246] [cursor=pointer]
+            - button "生产质检人员" [ref=e249] [cursor=pointer]
+            - button "物联人员" [ref=e252] [cursor=pointer]
+        - generic [ref=e255]:
+          - generic [ref=e256]:
+            - generic [ref=e257]: 登录密码 (Password)
+            - generic [ref=e258]: "*"
+          - generic [ref=e260]:
+            - generic: 🔒
+            - textbox "登录密码 (Password) *" [ref=e263]:
+              - /placeholder: 请输入登录密码
+        - button "登录进入系统 POST /api/auth/login" [ref=e264] [cursor=pointer]:
+          - generic [ref=e265]:
+            - generic [ref=e266]: 登录进入系统
+            - generic [ref=e267]: POST /api/auth/login
+      - generic [ref=e268]:
+        - generic [ref=e269]: Redis 单一会话指纹监听
+        - generic [ref=e271]: "|"
+        - generic [ref=e272]:
+          - generic [ref=e273]: 🛡️
+          - text: TLS 256-bit 加密
+  - contentinfo [ref=e274]:
+    - generic [ref=e275]: PRODUCTION / AUTHENTICATED WORKSPACE
+    - generic [ref=e276]: 基于 Vue 3 + Pinia + Axios 真实前后端链路，承载 6 类正式角色鉴权与动态菜单流转。

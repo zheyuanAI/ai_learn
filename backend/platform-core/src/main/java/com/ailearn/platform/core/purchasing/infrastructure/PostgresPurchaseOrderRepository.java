@@ -3,6 +3,7 @@ package com.ailearn.platform.core.purchasing.infrastructure;
 import com.ailearn.platform.core.purchasing.domain.PurchaseCompletionType;
 import com.ailearn.platform.core.purchasing.domain.PurchaseOrder;
 import com.ailearn.platform.core.purchasing.domain.PurchaseOrderLine;
+import com.ailearn.platform.core.purchasing.domain.PurchaseOrderLineCumulative;
 import com.ailearn.platform.core.purchasing.domain.PurchaseOrderPage;
 import com.ailearn.platform.core.purchasing.domain.PurchaseOrderPageQuery;
 import com.ailearn.platform.core.purchasing.domain.PurchaseOrderRepository;
@@ -21,7 +22,9 @@ import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -83,6 +86,94 @@ public class PostgresPurchaseOrderRepository implements PurchaseOrderRepository 
         return database(() -> {
             try (Connection connection = dataSource.getConnection()) {
                 return Optional.ofNullable(findInternal(connection, tenantId, id, true));
+            }
+        });
+    }
+
+    /**
+     * 按有效采购订单行及已确认收货事实汇总五类实际数量。
+     * 入参：可信租户和订单 ID；出参：各有效订单行的累计快照。
+     * 流程：收货行是唯一归属键，各类事实先分别按该订单行聚合，再合并，避免多质检/处置/上架行相乘。
+     */
+    @Override
+    public Map<UUID, PurchaseOrderLineCumulative> findLineCumulatives(UUID tenantId, UUID orderId) {
+        return database(() -> {
+            try (Connection connection = dataSource.getConnection();
+                 PreparedStatement statement = connection.prepareStatement("""
+                         WITH order_lines AS (
+                             SELECT pol.id, pol.tenant_id
+                               FROM purchase_order_line pol
+                               JOIN purchase_order po ON po.tenant_id = pol.tenant_id
+                                                     AND po.id = pol.purchase_order_id AND po.isdel = 0
+                              WHERE pol.tenant_id = ? AND pol.purchase_order_id = ? AND pol.isdel = 0
+                         ), receipt_lines AS (
+                             SELECT prl.id, prl.tenant_id, prl.purchase_receipt_id,
+                                    prl.purchase_order_line_id, prl.arrived_qty, prl.rejected_qty
+                               FROM purchase_receipt_line prl
+                               JOIN order_lines ol ON ol.tenant_id = prl.tenant_id
+                                                  AND ol.id = prl.purchase_order_line_id
+                               JOIN purchase_receipt pr ON pr.tenant_id = prl.tenant_id
+                                                       AND pr.id = prl.purchase_receipt_id
+                                                       AND pr.purchase_order_id = ?
+                                                       AND pr.status = 'Confirmed' AND pr.isdel = 0
+                              WHERE prl.isdel = 0
+                         ), receipts AS (
+                             SELECT purchase_order_line_id, SUM(arrived_qty) AS arrived_qty,
+                                    SUM(rejected_qty) AS rejected_qty
+                               FROM receipt_lines GROUP BY purchase_order_line_id
+                         ), inspections AS (
+                             SELECT rl.purchase_order_line_id, SUM(qi.qualified_qty) AS qualified_qty
+                               FROM receipt_lines rl
+                               JOIN purchase_quality_inspection qi ON qi.tenant_id = rl.tenant_id
+                                   AND qi.purchase_receipt_id = rl.purchase_receipt_id
+                                   AND qi.purchase_receipt_line_id = rl.id AND qi.isdel = 0
+                              GROUP BY rl.purchase_order_line_id
+                         ), releases AS (
+                             SELECT rl.purchase_order_line_id,
+                                    SUM(qd.disposition_qty) AS release_executed_qty
+                               FROM receipt_lines rl
+                               JOIN purchase_quality_inspection qi ON qi.tenant_id = rl.tenant_id
+                                   AND qi.purchase_receipt_id = rl.purchase_receipt_id
+                                   AND qi.purchase_receipt_line_id = rl.id AND qi.isdel = 0
+                               JOIN purchase_quality_disposition qd ON qd.tenant_id = qi.tenant_id
+                                   AND qd.purchase_quality_inspection_id = qi.id
+                                   AND qd.disposition_type = 'Release' AND qd.status = 'Completed'
+                                   AND qd.isdel = 0
+                              GROUP BY rl.purchase_order_line_id
+                         ), putaways AS (
+                             SELECT rl.purchase_order_line_id, SUM(pt.putaway_qty) AS putaway_qty
+                               FROM receipt_lines rl
+                               JOIN putaway_task pt ON pt.tenant_id = rl.tenant_id
+                                   AND pt.purchase_receipt_id = rl.purchase_receipt_id
+                                   AND pt.purchase_receipt_line_id = rl.id
+                                   AND pt.status = 'Confirmed' AND pt.isdel = 0
+                              GROUP BY rl.purchase_order_line_id
+                         )
+                         SELECT ol.id AS line_id, COALESCE(r.arrived_qty, 0) AS arrived_qty,
+                                COALESCE(r.rejected_qty, 0) AS rejected_qty,
+                                COALESCE(i.qualified_qty, 0) AS qualified_qty,
+                                COALESCE(d.release_executed_qty, 0) AS release_executed_qty,
+                                COALESCE(p.putaway_qty, 0) AS putaway_qty
+                           FROM order_lines ol
+                           LEFT JOIN receipts r ON r.purchase_order_line_id = ol.id
+                           LEFT JOIN inspections i ON i.purchase_order_line_id = ol.id
+                           LEFT JOIN releases d ON d.purchase_order_line_id = ol.id
+                           LEFT JOIN putaways p ON p.purchase_order_line_id = ol.id
+                          ORDER BY ol.id
+                         """)) {
+                statement.setObject(1, tenantId);
+                statement.setObject(2, orderId);
+                statement.setObject(3, orderId);
+                Map<UUID, PurchaseOrderLineCumulative> result = new LinkedHashMap<>();
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) {
+                        result.put(rows.getObject("line_id", UUID.class), new PurchaseOrderLineCumulative(
+                                rows.getBigDecimal("arrived_qty"), rows.getBigDecimal("rejected_qty"),
+                                rows.getBigDecimal("qualified_qty"), rows.getBigDecimal("release_executed_qty"),
+                                rows.getBigDecimal("putaway_qty")));
+                    }
+                }
+                return result;
             }
         });
     }

@@ -9,11 +9,17 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.inOrder;
 
 import com.ailearn.platform.core.inventory.application.InventoryCommandService;
 import com.ailearn.platform.core.inventory.application.InventoryIncreaseCommand;
 import com.ailearn.platform.core.inventory.application.InventoryMutationResult;
 import com.ailearn.platform.core.inventory.domain.InventoryTransaction;
+import com.ailearn.platform.core.inventory.domain.InventoryDimension;
+import com.ailearn.platform.core.operationaudit.application.OperationAuditCommand;
+import com.ailearn.platform.shared.idempotency.InMemoryIdempotencyStorage;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.ailearn.platform.core.manufacturing.foundation.domain.WorkOrderSourceFact;
 import com.ailearn.platform.core.manufacturing.foundation.domain.WorkOrderStatus;
 import com.ailearn.platform.core.manufacturing.foundation.domain.port.WorkOrderSourcePort;
@@ -21,6 +27,7 @@ import com.ailearn.platform.core.purchasing.application.PurchaseOrderApplication
 import com.ailearn.platform.core.purchasing.application.PurchasingApplicationServiceImpl;
 import com.ailearn.platform.core.purchasing.domain.PurchaseOrder;
 import com.ailearn.platform.core.purchasing.domain.PurchaseOrderLine;
+import com.ailearn.platform.core.purchasing.domain.PurchaseOrderLineCumulative;
 import com.ailearn.platform.core.purchasing.domain.PurchaseOrderPage;
 import com.ailearn.platform.core.purchasing.domain.PurchaseOrderPageQuery;
 import com.ailearn.platform.core.purchasing.domain.PurchaseOrderRepository;
@@ -82,12 +89,15 @@ class PurchasingApplicationServiceTest {
 
     private InMemoryPurchaseOrderRepository repository;
     private PurchaseOrderApplicationService service;
+    private List<OperationAuditCommand> operationRecords;
 
     @BeforeEach
     void setUp() {
         repository = new InMemoryPurchaseOrderRepository();
+        operationRecords = new ArrayList<>();
         service = new PurchasingApplicationServiceImpl(repository, referencePort, workOrderSourcePort,
-                inventoryCommandService);
+                inventoryCommandService, new InMemoryIdempotencyStorage(),
+                new ObjectMapper().registerModule(new JavaTimeModule()), operationRecords::add);
         RequestContextHolder.getContext().setTenantId(tenantId);
         RequestContextHolder.getContext().setUserId(userId);
         RequestContextHolder.getContext().setJti("jti-purchasing-test");
@@ -157,6 +167,15 @@ class PurchasingApplicationServiceTest {
         assertEquals("PartiallyReceived", persisted.status().name());
         assertEquals(new BigDecimal("8.000000"), persisted.lines().get(0).receivedQty());
         assertEquals(new BigDecimal("2.000000"), persisted.lines().get(0).pendingQty());
+        // 修改用途：详情同时保留订单实际接收快照，并按该行真实收货事实显示到货和拒收。
+        var detailLine = service.detail(approved.getId()).getLines().getFirst();
+        assertEquals("10.000000", detailLine.arrivedQty());
+        assertEquals("2.000000", detailLine.rejectedQty());
+        assertEquals("8.000000", detailLine.receivedQty());
+        assertEquals("2.000000", detailLine.pendingQty());
+        assertEquals("0.000000", detailLine.qualifiedQty());
+        assertEquals("0.000000", detailLine.releaseExecutedQty());
+        assertEquals("0.000000", detailLine.putawayQty());
 
         ArgumentCaptor<InventoryIncreaseCommand> captor = ArgumentCaptor.forClass(InventoryIncreaseCommand.class);
         verify(inventoryCommandService, times(1)).increase(captor.capture());
@@ -167,6 +186,50 @@ class PurchasingApplicationServiceTest {
         assertEquals(holdLocationId, command.dimension().locationId());
         assertEquals("PURCHASE_RECEIPT", command.metadata().sourceType());
         assertEquals(receipt.getId(), command.metadata().sourceId());
+        // 修改：整个实收维度必须在第一次库存增加之前统一占锁。
+        var ordered = inOrder(inventoryCommandService);
+        ordered.verify(inventoryCommandService).lockBalances(List.of(
+                new InventoryDimension(productId, warehouseId, holdLocationId, "")));
+        ordered.verify(inventoryCommandService).increase(any());
+    }
+
+    /** 验证采购动作记录保留真实账号和状态，重放创建及收货不会重复追加。 */
+    @Test
+    void recordsPurchaseActionsOnceAndKeepsTrustedActor() {
+        RequestContextHolder.getContext().setUsername("buyer.chen");
+        PurchaseOrderSaveRequest request = orderRequest("PO-RECORD", "13");
+        PurchaseOrderView created = service.create(request, "record-create");
+        service.create(request, "record-create");
+        service.submit(created.getId(), "record-submit");
+        PurchaseOrderView approved = service.approve(created.getId(), "record-approve");
+        PurchaseReceiptConfirmRequest receipt = receiptRequest(approved, "9", "1", "8", "外箱受潮");
+        service.confirmReceipt(receipt, "record-receipt");
+        service.confirmReceipt(receipt, "record-receipt");
+
+        assertEquals(List.of("pur:order:create", "pur:order:submit", "pur:order:approve", "pur:receipt:confirm"),
+                operationRecords.stream().map(OperationAuditCommand::actionCode).toList());
+        assertEquals("Draft", operationRecords.get(1).beforeStatus());
+        assertEquals("Submitted", operationRecords.get(1).afterStatus());
+        for (OperationAuditCommand record : operationRecords) {
+            assertEquals("PURCHASE_ORDER", record.entityType());
+            assertEquals(created.getId(), record.entityId());
+            assertEquals(tenantId, record.tenantId());
+            assertEquals(userId, record.actorId());
+            assertEquals("buyer.chen", record.actorAccount());
+            assertEquals("jti-purchasing-test", record.sessionId());
+            assertEquals("request-purchasing-test", record.requestId());
+        }
+    }
+
+    /** 验证拒绝的收货不会生成操作记录，也不会触发库存预锁或写入。 */
+    @Test
+    void rejectedReceiptDoesNotRecordSuccessOrLockBalances() {
+        PurchaseOrderView approved = approvedOrder("PO-REJECT-RECORD", "13");
+        int recordsBefore = operationRecords.size();
+        assertThrows(PurchasingException.class, () -> service.confirmReceipt(
+                receiptRequest(approved, "14", "0", "14", null), "over-record"));
+        assertEquals(recordsBefore, operationRecords.size());
+        verifyNoInteractions(inventoryCommandService);
     }
 
     @Test
@@ -384,6 +447,30 @@ class PurchasingApplicationServiceTest {
         @Override
         public Optional<PurchaseOrder> findByIdForUpdate(UUID tenantId, UUID id) {
             return findById(tenantId, id);
+        }
+
+        /**
+         * 用途：focused 适配器仅汇总已确认到货，不伪造质检、放行或上架事实。
+         * 入参：租户与订单；出参：按订单行 ID 的五项累计，空单据返回零。
+         */
+        @Override
+        public Map<UUID, PurchaseOrderLineCumulative> findLineCumulatives(UUID tenantId, UUID orderId) {
+            Map<UUID, PurchaseOrderLineCumulative> result = new LinkedHashMap<>();
+            findById(tenantId, orderId).ifPresent(order -> order.lines().forEach(
+                    line -> result.put(line.id(), PurchaseOrderLineCumulative.ZERO)));
+            receipts.stream().filter(receipt -> receipt.tenantId().equals(tenantId)
+                    && receipt.purchaseOrderId().equals(orderId)
+                    && receipt.status() == com.ailearn.platform.core.purchasing.domain.PurchaseReceiptStatus.Confirmed)
+                    .flatMap(receipt -> receipt.lines().stream()).forEach(line -> {
+                        PurchaseOrderLineCumulative previous = result.get(line.purchaseOrderLineId());
+                        if (previous != null) {
+                            result.put(line.purchaseOrderLineId(), new PurchaseOrderLineCumulative(
+                                    previous.arrivedQty().add(line.arrivedQty()),
+                                    previous.rejectedQty().add(line.rejectedQty()),
+                                    previous.qualifiedQty(), previous.releaseExecutedQty(), previous.putawayQty()));
+                        }
+                    });
+            return result;
         }
 
         @Override

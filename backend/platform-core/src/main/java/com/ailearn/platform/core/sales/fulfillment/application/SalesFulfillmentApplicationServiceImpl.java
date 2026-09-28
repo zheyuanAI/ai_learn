@@ -54,6 +54,7 @@ import java.security.MessageDigest;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -142,38 +143,23 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
         return idempotencyExecutor.execute("sales:pick:confirm", actor.tenantId(), idempotencyKey,
                 digest("pick", List.of(pickTaskId, request)), SalesFulfillmentResult.class, () -> {
                     SalesOrder order = approvedOrder(request.getSalesOrderId(), actor.tenantId());
-                    Map<UUID, PickLineRequest> requested = uniquePickLines(request.getLines());
+                    // 修改：先确定所有行的来源批次并通过库存端口统一预锁，避免 reserve 先占来源锁而退拣先占暂存锁。
+                    List<PickPlan> plans = preparePicksAndLockBalances(order, request.getLines(), actor);
                     List<SalesOrderLine> updatedLines = new ArrayList<>(order.lines());
                     List<SalesFulfillmentFact> facts = new ArrayList<>();
                     List<UUID> transactionIds = new ArrayList<>();
                     List<UUID> reservationIds = new ArrayList<>();
-                    for (PickLineRequest lineRequest : request.getLines()) {
-                        SalesOrderLine line = line(order, lineRequest.getSalesOrderLineId());
-                        BigDecimal quantity = positive(lineRequest.getPickedQty(), "pickedQty");
-                        if (quantity.compareTo(line.unshippedQty()) > 0) {
-                            throw new SalesOrderException(SalesOrderErrorCode.SO_002,
-                                    "拣货数量超过订单行未发货数量");
-                        }
-                        LocationSnapshot source = activeLocation(actor.tenantId(), lineRequest.getSourceLocationId());
-                        LocationSnapshot shipping = activeLocation(actor.tenantId(), lineRequest.getShippingLocationId());
-                        requirePickLocations(source, shipping);
-                        List<ReservationPart> sourceParts = partsAt(order, line, source.id(), actor.tenantId());
-                        BigDecimal existingAtSource = sum(sourceParts);
-                        if (line.unpickedQty().compareTo(existingAtSource) > 0
-                                && quantity.compareTo(line.unpickedQty()) <= 0) {
-                            throw new SalesOrderException(SalesOrderErrorCode.SO_002,
-                                    "订单行已有未拣预留不在请求来源库位");
-                        }
-                        BigDecimal reserveQty = quantity.subtract(existingAtSource).max(BigDecimal.ZERO);
-                        if (reserveQty.compareTo(line.unreservedQty()) > 0) {
-                            throw new SalesOrderException(SalesOrderErrorCode.SO_002,
-                                    "自动预留数量超过订单行未预留数量");
-                        }
+                    for (PickPlan plan : plans) {
+                        SalesOrderLine line = plan.line();
+                        BigDecimal quantity = plan.quantity();
+                        LocationSnapshot source = plan.source();
+                        LocationSnapshot shipping = plan.shipping();
+                        List<ReservationPart> sourceParts = plan.sourceParts();
+                        BigDecimal reserveQty = plan.reserveQty();
                         if (reserveQty.signum() > 0) {
-                            String sourceLotNo = resolveSourceLot(actor.tenantId(), line, source, reserveQty);
                             InventoryMutationResult reserved = inventoryCommandService.reserve(
                                     reserveCommand(actor, idempotencyKey, pickTaskId, order.id(), line, source,
-                                            reserveQty, sourceLotNo));
+                                            reserveQty, plan.sourceLotNo()));
                             collectTransactions(reserved, transactionIds);
                             InventoryReservation reservation = requiredReservation(reserved);
                             reservationIds.add(reservation.id());
@@ -241,6 +227,19 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
         return idempotencyExecutor.execute("sales:pick:return", actor.tenantId(), idempotencyKey,
                 digest("pick-return", List.of(pickTaskId, request)), SalesFulfillmentResult.class, () -> {
                     SalesOrder order = approvedOrder(request.getSalesOrderId(), actor.tenantId());
+                    // 修改：先收齐退拣所有来源与目标批次，避免多行请求按不同顺序逐行持锁。
+                    Map<UUID, LocationSnapshot> targets = new LinkedHashMap<>();
+                    for (PickTaskReturnLineRequest lineRequest : request.getLines()) {
+                        if (lineRequest == null || targets.containsKey(lineRequest.getSalesOrderLineId())) {
+                            throw new ValidationException("退回明细不能为空且不能重复");
+                        }
+                        line(order, lineRequest.getSalesOrderLineId());
+                        LocationSnapshot target = activeLocation(actor.tenantId(), lineRequest.getToLocationId());
+                        requireReturnTarget(target);
+                        targets.put(lineRequest.getSalesOrderLineId(), target);
+                    }
+                    Map<UUID, List<ReservationPart>> stagedByLine = prelockReservationParts(order,
+                            targets.keySet(), false, targets, actor);
                     List<SalesOrderLine> updatedLines = new ArrayList<>(order.lines());
                     List<SalesFulfillmentFact> facts = new ArrayList<>();
                     List<UUID> transactionIds = new ArrayList<>();
@@ -256,10 +255,8 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
                             throw new SalesOrderException(SalesOrderErrorCode.SO_002,
                                     "退回数量超过未发货暂存数量");
                         }
-                        LocationSnapshot target = activeLocation(actor.tenantId(), lineRequest.getToLocationId());
-                        requireReturnTarget(target);
-                        List<ReservationPart> staged = partsByType(order, line, LocationType.ShippingStaging,
-                                actor.tenantId());
+                        LocationSnapshot target = targets.get(line.id());
+                        List<ReservationPart> staged = stagedByLine.get(line.id());
                         BigDecimal remaining = quantity;
                         int index = 0;
                         for (ReservationPart part : staged) {
@@ -313,6 +310,16 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
         return idempotencyExecutor.execute("sales:reservation:release", actor.tenantId(), idempotencyKey,
                 digest("reservation-release", List.of(salesOrderId, request)), SalesFulfillmentResult.class, () -> {
                     SalesOrder order = approvedOrder(salesOrderId, actor.tenantId());
+                    // 修改：多行释放在第一次写入前统一预锁，后续只使用本次预锁对应的分配快照。
+                    List<UUID> requestedLineIds = new ArrayList<>();
+                    for (ReservationReleaseLineRequest lineRequest : request.getReleaseLines()) {
+                        if (lineRequest == null || requestedLineIds.contains(lineRequest.getSalesOrderLineId())) {
+                            throw new ValidationException("释放明细不能为空且不能重复");
+                        }
+                        requestedLineIds.add(lineRequest.getSalesOrderLineId());
+                    }
+                    Map<UUID, List<ReservationPart>> partsByLine = prelockReservationParts(order,
+                            requestedLineIds, true, Map.of(), actor);
                     List<SalesOrderLine> updatedLines = new ArrayList<>(order.lines());
                     List<SalesFulfillmentFact> facts = new ArrayList<>();
                     List<UUID> transactionIds = new ArrayList<>();
@@ -331,8 +338,7 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
                             throw new SalesOrderException(SalesOrderErrorCode.SO_003,
                                     "释放数量超过未拣预留，已拣数量必须先退回");
                         }
-                        List<ReservationPart> parts = partsNotAtType(order, line, LocationType.ShippingStaging,
-                                actor.tenantId());
+                        List<ReservationPart> parts = partsByLine.get(line.id());
                         BigDecimal remaining = quantity;
                         int index = 0;
                         for (ReservationPart part : parts) {
@@ -394,6 +400,16 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
         return idempotencyExecutor.execute("sales:shipment:confirm", actor.tenantId(), idempotencyKey,
                 digest("shipment", List.of(shipmentId, request)), SalesFulfillmentResult.class, () -> {
                     SalesOrder order = approvedOrder(request.getSalesOrderId(), actor.tenantId());
+                    // 修改：发货的释放与实物扣减共享全行预锁集合，避免按订单行顺序形成余额锁反序。
+                    List<UUID> requestedLineIds = new ArrayList<>();
+                    for (ShipmentLineRequest lineRequest : request.getShipmentLines()) {
+                        if (lineRequest == null || requestedLineIds.contains(lineRequest.getSalesOrderLineId())) {
+                            throw new ValidationException("发货明细不能为空且不能重复");
+                        }
+                        requestedLineIds.add(lineRequest.getSalesOrderLineId());
+                    }
+                    Map<UUID, List<ReservationPart>> stagedByLine = prelockReservationParts(order,
+                            requestedLineIds, false, Map.of(), actor);
                     List<SalesOrderLine> updatedLines = new ArrayList<>(order.lines());
                     List<SalesFulfillmentFact> facts = new ArrayList<>();
                     List<UUID> transactionIds = new ArrayList<>();
@@ -413,8 +429,7 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
                             throw new SalesOrderException(SalesOrderErrorCode.SO_002,
                                     "发货数量超过发货暂存数量");
                         }
-                        List<ReservationPart> staged = partsByType(order, line, LocationType.ShippingStaging,
-                                actor.tenantId());
+                        List<ReservationPart> staged = stagedByLine.get(line.id());
                         BigDecimal remaining = quantity;
                         int index = 0;
                         for (ReservationPart part : staged) {
@@ -470,6 +485,10 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
                 digest("manual-complete", List.of(salesOrderId, request.getCompletionReason().trim())),
                 SalesFulfillmentResult.class, () -> {
                     SalesOrder order = approvedOrder(salesOrderId, actor.tenantId());
+                    // 修改：人工完成可能释放多行预留，必须先取得所有未拣分配的余额锁。
+                    Map<UUID, List<ReservationPart>> partsByLine = prelockReservationParts(order,
+                            order.lines().stream().filter(line -> line.unpickedQty().signum() > 0)
+                                    .map(SalesOrderLine::id).toList(), true, Map.of(), actor);
                     List<SalesOrderLine> updatedLines = new ArrayList<>(order.lines());
                     List<SalesFulfillmentFact> facts = new ArrayList<>();
                     List<UUID> transactionIds = new ArrayList<>();
@@ -479,8 +498,7 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
                         if (quantity.signum() == 0) {
                             continue;
                         }
-                        List<ReservationPart> parts = partsNotAtType(order, line, LocationType.ShippingStaging,
-                                actor.tenantId());
+                        List<ReservationPart> parts = partsByLine.get(line.id());
                         BigDecimal remaining = quantity;
                         int index = 0;
                         for (ReservationPart part : parts) {
@@ -513,6 +531,80 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
                     SalesOrder saved = repository.updateFulfillment(completed, order.version(), facts);
                     return result("MANUAL_COMPLETE", salesOrderId, saved, transactionIds, reservationIds);
                 });
+    }
+
+    /**
+     * 为完整拣货请求准备批次与预留分配，并在库存写入前统一取得余额锁。
+     * 入参：已批准订单、请求行与可信操作人；出参：按请求顺序执行的不可变拣货计划；
+     * 流程：校验行与库位，扣除同批次已计划预留数量，收齐来源和暂存维度，再委托库存端口稳定排序预锁。
+     */
+    private List<PickPlan> preparePicksAndLockBalances(SalesOrder order, List<PickLineRequest> requests, Actor actor) {
+        uniquePickLines(requests);
+        List<PickPlan> plans = new ArrayList<>();
+        List<InventoryDimension> dimensions = new ArrayList<>();
+        Map<InventoryDimension, BigDecimal> plannedReservations = new HashMap<>();
+        for (PickLineRequest request : requests) {
+            SalesOrderLine line = line(order, request.getSalesOrderLineId());
+            BigDecimal quantity = positive(request.getPickedQty(), "pickedQty");
+            if (quantity.compareTo(line.unshippedQty()) > 0) {
+                throw new SalesOrderException(SalesOrderErrorCode.SO_002, "拣货数量超过订单行未发货数量");
+            }
+            LocationSnapshot source = activeLocation(actor.tenantId(), request.getSourceLocationId());
+            LocationSnapshot shipping = activeLocation(actor.tenantId(), request.getShippingLocationId());
+            requirePickLocations(source, shipping);
+            List<ReservationPart> sourceParts = partsAt(order, line, source.id(), actor.tenantId());
+            BigDecimal existingAtSource = sum(sourceParts);
+            if (line.unpickedQty().compareTo(existingAtSource) > 0
+                    && quantity.compareTo(line.unpickedQty()) <= 0) {
+                throw new SalesOrderException(SalesOrderErrorCode.SO_002, "订单行已有未拣预留不在请求来源库位");
+            }
+            BigDecimal reserveQty = quantity.subtract(existingAtSource).max(BigDecimal.ZERO);
+            if (reserveQty.compareTo(line.unreservedQty()) > 0) {
+                throw new SalesOrderException(SalesOrderErrorCode.SO_002, "自动预留数量超过订单行未预留数量");
+            }
+            String lotNo = null;
+            if (reserveQty.signum() > 0) {
+                lotNo = resolveSourceLot(actor.tenantId(), line, source, reserveQty, plannedReservations);
+                InventoryDimension sourceDimension = dimension(line, source, lotNo);
+                plannedReservations.merge(sourceDimension, reserveQty, BigDecimal::add);
+                dimensions.add(sourceDimension);
+                dimensions.add(dimension(line, shipping, lotNo));
+            }
+            for (ReservationPart part : sourceParts) {
+                dimensions.add(part.allocation().dimension());
+                dimensions.add(dimension(line, shipping, part.allocation().dimension().normalizedLotNo()));
+            }
+            plans.add(new PickPlan(line, source, shipping, quantity, reserveQty, lotNo, sourceParts));
+        }
+        inventoryCommandService.lockBalances(dimensions);
+        return List.copyOf(plans);
+    }
+
+    /**
+     * 将多行销售预留操作涉及的完整余额集合通过库存应用端口预锁。
+     * 入参：订单、行 ID、是否排除暂存位、可选退回目标以及可信操作人；出参：每行本次锁定的分配快照；
+     * 流程：读取有效分配，收集其原批次及可选目标批次，一次预锁后复用快照，禁止写入阶段新增未预锁维度。
+     */
+    private Map<UUID, List<ReservationPart>> prelockReservationParts(SalesOrder order, Collection<UUID> lineIds,
+            boolean excludeShipping, Map<UUID, LocationSnapshot> targets, Actor actor) {
+        Map<UUID, List<ReservationPart>> partsByLine = new LinkedHashMap<>();
+        List<InventoryDimension> dimensions = new ArrayList<>();
+        for (UUID lineId : lineIds) {
+            SalesOrderLine line = line(order, lineId);
+            List<ReservationPart> parts = excludeShipping
+                    ? partsNotAtType(order, line, LocationType.ShippingStaging, actor.tenantId())
+                    : partsByType(order, line, LocationType.ShippingStaging, actor.tenantId());
+            partsByLine.put(lineId, parts);
+            for (ReservationPart part : parts) {
+                dimensions.add(part.allocation().dimension());
+                LocationSnapshot target = targets.get(lineId);
+                if (target != null) {
+                    dimensions.add(dimension(line, target, part.allocation().dimension().normalizedLotNo()));
+                }
+            }
+        }
+        inventoryCommandService.lockBalances(dimensions);
+        return partsByLine;
     }
 
     private SalesOrder approvedOrder(UUID id, UUID tenantId) {
@@ -634,21 +726,24 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
 
     /**
      * 为直接拣货自动预留选择来源库位的单一可用批次。
-     * 入参：可信租户、销售订单行、来源库位和本次待预留数量；出参：可承载完整数量的规范化批次号；
+     * 入参：可信租户、销售订单行、来源库位、本次待预留数量和前行已计划预留数量；出参：可承载完整数量的规范化批次号；
      * 流程：按产品/仓库/库位读取余额，优先选择可用量最大的批次并以批次号稳定排序，避免批次库存被错误降级为空批次。
      */
     private String resolveSourceLot(UUID tenantId, SalesOrderLine line, LocationSnapshot source,
-                                    BigDecimal quantity) {
+                                    BigDecimal quantity, Map<InventoryDimension, BigDecimal> plannedReservations) {
         InventoryBalancePage page = inventoryQueryService.queryBalances(new InventoryBalanceQuery(
                 tenantId, line.productId(), source.warehouseId(), source.id(), null, 1, QUERY_SIZE));
         if (page == null || page.content() == null) {
             throw new ServiceUnavailableException("直接拣货来源库存查询不可用");
         }
+        // 修改：预锁前尚未写入前行预留，选批次时扣除计划数量，保持原逐行写入后的批次选择行为。
+        java.util.function.Function<InventoryBalance, BigDecimal> remaining = balance -> balance.availableQty()
+                .subtract(plannedReservations.getOrDefault(balance.dimension(), BigDecimal.ZERO));
         return page.content().stream()
                 .filter(balance -> balance != null && balance.dimension() != null
                         && source.id().equals(balance.dimension().locationId())
-                        && balance.availableQty().compareTo(quantity) >= 0)
-                .sorted(Comparator.comparing(InventoryBalance::availableQty).reversed()
+                        && remaining.apply(balance).compareTo(quantity) >= 0)
+                .sorted(Comparator.comparing(remaining).reversed()
                         .thenComparing(balance -> balance.dimension().normalizedLotNo()))
                 .map(balance -> balance.dimension().normalizedLotNo())
                 .findFirst()
@@ -697,9 +792,12 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
                                       BigDecimal quantity, UUID fromLocationId, UUID toLocationId,
                                       UUID reservationId, UUID allocationId, String idempotencyKey,
                                       OffsetDateTime occurredAt) {
+        // 修改：同一订单行一次动作可以消费多个预留分配；共用父键会违反履约事实唯一约束。
+        // 复用既有子键生成器区分每个分配，父请求键仍由上层幂等协调器保护，适用于拣货、退回、释放及发货。
+        String factKey = childKey(idempotencyKey, "fact|" + action + "|" + operationId + "|" + lineId + "|" + allocationId);
         return new SalesFulfillmentFact(UUID.randomUUID(), actor.tenantId(),
                 salesOrderId, lineId, action, operationId, quantity, fromLocationId, toLocationId,
-                reservationId, allocationId, idempotencyKey, actor.userId(), actor.sessionId(),
+                reservationId, allocationId, factKey, actor.userId(), actor.sessionId(),
                 actor.requestId(), occurredAt);
     }
 
@@ -863,6 +961,12 @@ public class SalesFulfillmentApplicationServiceImpl implements SalesFulfillmentA
     }
 
     private record Actor(UUID tenantId, UUID userId, String sessionId, String requestId) {
+    }
+
+    /** 完整请求预锁后使用的拣货计划，批次与原分配在写入阶段保持不变。 */
+    private record PickPlan(SalesOrderLine line, LocationSnapshot source, LocationSnapshot shipping,
+                            BigDecimal quantity, BigDecimal reserveQty, String sourceLotNo,
+                            List<ReservationPart> sourceParts) {
     }
 
     private record ReservationPart(InventoryReservation reservation,

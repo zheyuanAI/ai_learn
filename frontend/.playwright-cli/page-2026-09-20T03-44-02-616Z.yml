@@ -1,0 +1,73 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e287]:
+    - complementary [ref=e288]:
+      - generic [ref=e289]:
+        - heading "制造与仓储协同执行平台" [level=1] [ref=e290]
+        - paragraph [ref=e291]: 一期壳层按黄金业务闭环组织；动态挂载当前角色授权菜单。
+      - navigation [ref=e292]:
+        - link "📊 控制台看板" [ref=e293] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=e294]:
+            - generic [ref=e295]: 📊
+            - strong [ref=e297]: 控制台看板
+        - button "📦 主数据管理 ▼" [ref=e299] [cursor=pointer]:
+          - generic [ref=e300]:
+            - generic [ref=e301]: 📦
+            - strong [ref=e303]: 主数据管理
+          - generic [ref=e304]: ▼
+        - button "🛒 采购入库 ▼" [ref=e306] [cursor=pointer]:
+          - generic [ref=e307]:
+            - generic [ref=e308]: 🛒
+            - strong [ref=e310]: 采购入库
+          - generic [ref=e311]: ▼
+        - button "⚙️ 制造执行 ▼" [ref=e313] [cursor=pointer]:
+          - generic [ref=e314]:
+            - generic [ref=e315]: ⚙️
+            - strong [ref=e317]: 制造执行
+          - generic [ref=e318]: ▼
+        - link "🗺️ 厂区二维地图" [ref=e319] [cursor=pointer]:
+          - /url: /gis/site-maps
+          - generic [ref=e320]:
+            - generic [ref=e321]: 🗺️
+            - strong [ref=e323]: 厂区二维地图
+        - button "🤖 智能助手与追溯 ▼" [ref=e325] [cursor=pointer]:
+          - generic [ref=e326]:
+            - generic [ref=e327]: 🤖
+            - strong [ref=e329]: 智能助手与追溯
+          - generic [ref=e330]: ▼
+      - generic [ref=e331]: 系统认证状态：在线
+    - generic [ref=e334]:
+      - banner [ref=e335]:
+        - generic [ref=e336]:
+          - generic [ref=e337]: 智造协同 / 工作空间
+          - generic [ref=e338]: 🏢 tenant_demo_a
+          - navigation "面包屑" [ref=e340]:
+            - generic [ref=e341]:
+              - link "首页" [ref=e342]
+              - text: /
+            - link "制造执行" [ref=e344]
+        - generic [ref=e345]:
+          - button "👤 李质检 mes.inspector" [ref=e347] [cursor=pointer]:
+            - generic [ref=e348]: 👤
+            - generic [ref=e349]:
+              - generic [ref=e350]: 李质检
+              - generic [ref=e351]: mes.inspector
+          - button "退出登录" [ref=e352] [cursor=pointer]:
+            - generic [aria-hidden] [ref=e354]: ➔
+      - main [ref=e355]:
+        - generic [ref=e356]:
+          - paragraph [ref=e357]: Domain Ready
+          - heading "制造执行" [level=2] [ref=e358]
+          - paragraph [ref=e359]: 生产工单关联来源销售行，以领退料、派工、OperationExecution、报工、质检和成品入库记录执行事实。
+        - generic [ref=e360]:
+          - article [ref=e361]:
+            - heading "Spec 目录" [level=3] [ref=e362]
+            - paragraph [ref=e363]: docs/specs/20-mes
+          - article [ref=e364]:
+            - heading "原型基线" [level=3] [ref=e365]
+            - paragraph [ref=e366]: docs/prototype/pages/work-order.html
+        - article [ref=e368]:
+          - heading "开发提示" [level=3] [ref=e369]
+          - paragraph [ref=e370]: 先接列表查询和详情查询，再补写接口；所有写接口默认要幂等、租户过滤和权限校验。
+  - alert [ref=e371]:
+    - paragraph [ref=e375]: 登录成功！当前身份：李质检，正在进入系统...

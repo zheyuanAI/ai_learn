@@ -122,7 +122,7 @@
 
           <!-- 提交审核 (Draft / Rejected) -->
           <el-button
-            v-if="row.status === 'Draft' || row.status === 'Rejected'"
+            v-if="(row.status === 'Draft' || row.status === 'Rejected') && hasPermission('mes:workorder:submit')"
             type="primary"
             link
             size="small"
@@ -134,7 +134,7 @@
           </el-button>
 
           <!-- 审核批准与驳回 (PendingApproval) -->
-          <template v-if="row.status === 'PendingApproval'">
+          <template v-if="row.status === 'PendingApproval' && hasPermission('mes:workorder:approve')">
             <el-button
               type="success"
               link
@@ -159,7 +159,7 @@
 
           <!-- 完工 (InProgress) -->
           <el-button
-            v-if="row.status === 'InProgress'"
+            v-if="row.status === 'InProgress' && hasPermission('mes:workorder:complete')"
             type="success"
             link
             size="small"
@@ -172,7 +172,7 @@
 
           <!-- 强制结案 (Released / InProgress) -->
           <el-button
-            v-if="row.status === 'Released' || row.status === 'InProgress'"
+            v-if="(row.status === 'Released' || row.status === 'InProgress') && hasPermission('mes:workorder:complete')"
             type="info"
             link
             size="small"

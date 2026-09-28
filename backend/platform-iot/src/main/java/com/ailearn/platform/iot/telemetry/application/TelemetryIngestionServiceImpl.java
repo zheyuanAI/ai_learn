@@ -27,13 +27,18 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.locks.ReentrantLock;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 遥测摄取应用服务。
  * 用途：统一承接 MQTT 和模拟消息，依赖端口完成租户隔离、整条校验、QoS 1 去重、遥测追加和状态单调推进。
- * 说明：方法同步只保证单个内存服务实例的并发安全，生产适配器仍需依赖数据库唯一键/事务。
+ * 说明：单实例按租户和设备串行到事务完成；不同设备可并行，跨实例仍依赖数据库唯一键/事务。
  */
 @Service
 public class TelemetryIngestionServiceImpl implements TelemetryIngestionService {
@@ -44,6 +49,7 @@ public class TelemetryIngestionServiceImpl implements TelemetryIngestionService 
     private final TelemetryFactPort factPort;
     private final DeviceStatusPort statusPort;
     private final TelemetryAlarmPort alarmPort;
+    private final ConcurrentMap<DeviceScope, DeviceLock> deviceLocks = new ConcurrentHashMap<>();
 
     /**
      * 用途：组装摄取服务的设备、模型、事实、状态和告警边界；入参均为端口，便于替换真实适配器。
@@ -65,7 +71,37 @@ public class TelemetryIngestionServiceImpl implements TelemetryIngestionService 
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public synchronized TelemetryIngestionResult ingest(TelemetryIngestionCommand command) {
+    public TelemetryIngestionResult ingest(TelemetryIngestionCommand command) {
+        // 修改用途：按可信租户和设备隔离锁，避免某台设备的数据库等待阻塞其他设备。
+        DeviceScope scope = deviceScope(command);
+        DeviceLock held = acquireDeviceLock(scope);
+        boolean releaseAfterTransaction = false;
+        try {
+            if (TransactionSynchronizationManager.isActualTransactionActive()
+                    && TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    /** 提交或回滚完成后释放设备锁，不能在方法返回、数据库提交之前提前放行下一条消息。 */
+                    @Override
+                    public void afterCompletion(int status) {
+                        releaseDeviceLock(scope, held);
+                    }
+                });
+                releaseAfterTransaction = true;
+            }
+            return ingestLocked(command);
+        } finally {
+            // 修改用途：无事务的 focused 测试或同步调用仍须在成功/异常两条路径释放占用。
+            if (!releaseAfterTransaction) {
+                releaseDeviceLock(scope, held);
+            }
+        }
+    }
+
+    /**
+     * 用途：在当前设备锁内执行既有摄取流程；入参为设备消息，出参为摄取结果。
+     * 流程：整条校验、数据库去重、遥测追加、状态单调推进和本地告警任务保存，事务边界仍由 ingest 提供。
+     */
+    private TelemetryIngestionResult ingestLocked(TelemetryIngestionCommand command) {
         ValidatedMessage validated = validate(command);
         TelemetryDeduplicationClaim claim = deduplicationPort.claim(validated.key(), validated.payloadHash(),
                 command.receivedAt());
@@ -101,15 +137,8 @@ public class TelemetryIngestionServiceImpl implements TelemetryIngestionService 
      * 用途：在任何去重或保存动作前完成整条消息校验；出参为规范化消息；非法时不产生任何事实。
      */
     private ValidatedMessage validate(TelemetryIngestionCommand command) {
-        if (command == null || command.credentialContext() == null) {
-            throw invalid("缺少可信设备凭证上下文");
-        }
+        // 修改用途：可信设备身份已在取锁前由 deviceScope 校验，此处继续校验整条消息和数据库事实。
         TelemetryCredentialContext credential = command.credentialContext();
-        if (credential.tenantId() == null || credential.deviceId() == null
-                || credential.credentialReference() == null || credential.credentialReference().isBlank()
-                || command.deviceId() == null || !credential.deviceId().equals(command.deviceId())) {
-            throw new IotException(IotErrorCode.CREDENTIAL_INVALID, "凭证上下文与设备身份不匹配");
-        }
         if (command.timestamp() == null || command.receivedAt() == null) {
             throw invalid("ts 和 received_at 不能为空");
         }
@@ -135,6 +164,51 @@ public class TelemetryIngestionServiceImpl implements TelemetryIngestionService 
         }
         List<NormalizedMetric> metrics = normalizeMetrics(command.metrics(), profile);
         return new ValidatedMessage(credential.tenantId(), command.deviceId(), key, payloadHash, metrics);
+    }
+
+    /**
+     * 用途：取锁前解析可信设备范围；入参为设备消息，出参为租户与设备联合键。
+     * 流程：拒绝缺失凭证、租户或不一致设备 ID，避免非法消息占用其他设备的锁。
+     */
+    private DeviceScope deviceScope(TelemetryIngestionCommand command) {
+        if (command == null || command.credentialContext() == null) {
+            throw invalid("缺少可信设备凭证上下文");
+        }
+        TelemetryCredentialContext credential = command.credentialContext();
+        if (credential.tenantId() == null || credential.deviceId() == null
+                || credential.credentialReference() == null || credential.credentialReference().isBlank()
+                || command.deviceId() == null || !credential.deviceId().equals(command.deviceId())) {
+            throw new IotException(IotErrorCode.CREDENTIAL_INVALID, "凭证上下文与设备身份不匹配");
+        }
+        return new DeviceScope(credential.tenantId(), command.deviceId());
+    }
+
+    /**
+     * 用途：获取设备锁并计入当前持有者或等待者；入参为设备范围，出参为锁句柄。
+     * 流程：Map 原子计数后再等待锁，保证等待者仍引用旧锁时不会创建同设备的新锁。
+     */
+    private DeviceLock acquireDeviceLock(DeviceScope scope) {
+        DeviceLock held = deviceLocks.compute(scope, (ignored, current) -> {
+            DeviceLock entry = current == null ? new DeviceLock() : current;
+            entry.users++;
+            return entry;
+        });
+        held.lock.lock();
+        return held;
+    }
+
+    /**
+     * 用途：释放一次设备占用并回收闲置锁；入参为设备范围和当前句柄，无出参。
+     * 流程：先解锁，再在 Map 原子操作内减引用；最后一个持有者/等待者离开时移除，锁表只保留在途设备。
+     */
+    private void releaseDeviceLock(DeviceScope scope, DeviceLock held) {
+        held.lock.unlock();
+        deviceLocks.computeIfPresent(scope, (ignored, current) -> {
+            if (current != held) {
+                return current;
+            }
+            return --current.users == 0 ? null : current;
+        });
     }
 
     /**
@@ -273,5 +347,14 @@ public class TelemetryIngestionServiceImpl implements TelemetryIngestionService 
     }
 
     private record NormalizedMetric(String metricCode, String metricValue, String metricUnit) {
+    }
+
+    private record DeviceScope(UUID tenantId, UUID deviceId) {
+    }
+
+    /** 计数仅在 Map.compute 内访问，覆盖持有者和等待者，避免释放与新请求建立锁的竞争。 */
+    private static final class DeviceLock {
+        private final ReentrantLock lock = new ReentrantLock();
+        private int users;
     }
 }

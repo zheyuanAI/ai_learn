@@ -98,12 +98,13 @@ public class TraceabilityApplicationService {
             }
             queryCount++;
             List<com.ailearn.platform.core.traceability.ports.TraceNode> discovered = new ArrayList<>();
-            discovered.addAll(collect(collector, "inventory", () -> inventoryFacts.trace(current)));
-            discovered.addAll(collect(collector, "purchasing", () -> purchasingFacts.trace(current)));
-            discovered.addAll(collect(collector, "sales", () -> salesFacts.trace(current)));
-            discovered.addAll(collect(collector, "manufacturing", () -> manufacturingFacts.trace(current)));
-            discovered.addAll(collect(collector, "quality", () -> qualityFacts.trace(current)));
-            discovered.addAll(collect(collector, "iot", () -> iotFacts.trace(current)));
+            // 修改用途：携带当前实际查询的实体，合并时区分直接事实与其他实体携带的上下文引用。
+            discovered.addAll(collect(collector, "inventory", current, () -> inventoryFacts.trace(current)));
+            discovered.addAll(collect(collector, "purchasing", current, () -> purchasingFacts.trace(current)));
+            discovered.addAll(collect(collector, "sales", current, () -> salesFacts.trace(current)));
+            discovered.addAll(collect(collector, "manufacturing", current, () -> manufacturingFacts.trace(current)));
+            discovered.addAll(collect(collector, "quality", current, () -> qualityFacts.trace(current)));
+            discovered.addAll(collect(collector, "iot", current, () -> iotFacts.trace(current)));
             for (com.ailearn.platform.core.traceability.ports.TraceNode node : discovered) {
                 if (!collector.limitReached()) {
                     queue.addLast(new com.ailearn.platform.core.traceability.ports.TraceQuery(
@@ -150,10 +151,12 @@ public class TraceabilityApplicationService {
 
     /**
      * 调用单个事实源并把异常分类：源不可用记录为缺口，租户/权限/参数错误继续向上抛出，避免把拒绝访问伪装成部分成功。
+     * 修改用途：query 表示本轮查询实体，传入收集器用于选择真实节点；返回值仍仅包含首次发现的可见节点。
      */
-    private static List<TraceNode> collect(TraceQueryCollector collector, String source, TraceLoader loader) {
+    private static List<TraceNode> collect(TraceQueryCollector collector, String source,
+                                          com.ailearn.platform.core.traceability.ports.TraceQuery query, TraceLoader loader) {
         try {
-            return collector.add(loader.load());
+            return collector.add(loader.load(), query);
         } catch (FactQueryUnavailableException exception) {
             collector.missingSources.add(source);
             return List.of();
@@ -215,6 +218,7 @@ public class TraceabilityApplicationService {
         private final List<TraceLink> links = new ArrayList<>();
         private final Set<String> missingSources = new LinkedHashSet<>();
         private final Set<String> hiddenNodeKeys = new HashSet<>();
+        private final Set<String> directlyResolvedNodeKeys = new HashSet<>();
         private Instant sourceUpdatedAt;
         private int hiddenNodeCount;
         private boolean truncated;
@@ -228,8 +232,9 @@ public class TraceabilityApplicationService {
         /**
          * 合并事实源节点和关系，同时执行租户/节点权限裁剪及节点、关系数量上限控制。
          * 被隐藏的节点只累计计数，不进入下一轮 BFS，避免通过关系间接扩散不可见数据。
+         * 入参为事实及本轮查询实体；出参为首次发现的节点，已存在节点补全不会再次入队。
          */
-        private List<TraceNode> add(TraceFacts facts) {
+        private List<TraceNode> add(TraceFacts facts, com.ailearn.platform.core.traceability.ports.TraceQuery query) {
             if (facts == null) {
                 return List.of();
             }
@@ -247,13 +252,26 @@ public class TraceabilityApplicationService {
                     }
                     return;
                 }
-                if (!nodes.containsKey(nodeKey(node.entityType(), node.entityId()))) {
+                String key = nodeKey(node.entityType(), node.entityId());
+                TraceNode existing = nodes.get(key);
+                boolean direct = node.entityId().equals(query.entityId())
+                        && node.entityType().equalsIgnoreCase(query.entityType().trim());
+                if (existing == null) {
                     if (nodes.size() >= MAX_NODES) {
                         truncated = true;
                         return;
                     }
-                    nodes.put(nodeKey(node.entityType(), node.entityId()), node);
+                    nodes.put(key, node);
                     discovered.add(node);
+                } else if (node.complete() && (!existing.complete()
+                        || (direct && (!directlyResolvedNodeKeys.contains(key)
+                        || (existing.sourceUpdatedAt() == null && node.sourceUpdatedAt() != null))))) {
+                    // 修改用途：完整事实补全引用；实体自身查询优先于其他实体携带的通用名称/状态。
+                    // 库存来源占位没有实体更新时间，后续实际领域事实可替换它；不降级、不重新入队。
+                    nodes.put(key, node);
+                }
+                if (direct && node.complete()) {
+                    directlyResolvedNodeKeys.add(key);
                 }
             });
             if (links.size() >= MAX_LINKS) {

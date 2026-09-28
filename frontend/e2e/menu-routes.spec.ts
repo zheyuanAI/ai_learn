@@ -13,7 +13,9 @@ const tenantCode = process.env.STAGE_UI_TENANT_CODE || "tenant_demo_a";
 async function login(page: Page): Promise<void> {
   test.skip(!username || !password, "需要 STAGE_UI_USERNAME 与 STAGE_UI_PASSWORD 才能执行真实环境路由回归");
   await page.goto(`${baseURL}/login`);
-  await page.locator("#loginTenant, select[name='tenantCode']").first().selectOption(tenantCode);
+  // 修改用途：按 Element Plus 下拉选项设置真实租户，避免原生 selectOption 在登录前抛错。
+  await page.locator(".tech-select .el-select__wrapper").click();
+  await page.locator(".el-select-dropdown__item").filter({ hasText: tenantCode }).click();
   await page.locator("#loginUsername, input[name='username']").first().fill(username!);
   await page.locator("#loginPassword, input[name='password']").first().fill(password!);
   await page.locator("form.login-form button[type='submit'], button.login-submit-btn").first().click();

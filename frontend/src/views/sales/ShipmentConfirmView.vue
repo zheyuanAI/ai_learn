@@ -154,9 +154,17 @@ const carrierName = ref("顺丰冷链物流");
 const trackingNo = ref("");
 const editableShipLines = ref<EditableShipLine[]>([]);
 
+/** 用途：向父页提供当前发货草稿快照；无入参，返回时间、物流及行项 JSON，避免重试成功关闭后来编辑的新稿。 */
+function getDraftSnapshot(): string {
+  return JSON.stringify({ shipTime: shipTime.value, carrierName: carrierName.value, trackingNo: trackingNo.value, lines: editableShipLines.value });
+}
+defineExpose({ getDraftSnapshot });
+
 watch(
-  () => props.order,
-  (val) => {
+  () => [props.order, props.visible] as const,
+  ([val, visible], previous) => {
+    // 修改用途：打开或切单时初始化，同订单成功复读不覆盖弹窗中的新发货草稿。
+    if (!visible || (previous?.[1] && previous[0]?.id === val?.id)) return;
     if (val && val.lines) {
       shipTime.value = currentLocalDateTimeValue();
       editableShipLines.value = val.lines.map((l) => ({

@@ -1,0 +1,68 @@
+- generic [active] [ref=f2e1]:
+  - generic [ref=f2e338]:
+    - complementary [ref=f2e339]:
+      - generic [ref=f2e340]:
+        - heading "制造与仓储协同执行平台" [level=1] [ref=f2e341]
+        - paragraph [ref=f2e342]: 一期壳层按黄金业务闭环组织；动态挂载当前角色授权菜单。
+      - navigation [ref=f2e343]:
+        - link "📊 控制台看板" [ref=f2e344] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=f2e345]:
+            - generic [ref=f2e346]: 📊
+            - strong [ref=f2e348]: 控制台看板
+        - button "📦 主数据管理 ▼" [ref=f2e350] [cursor=pointer]:
+          - generic [ref=f2e351]:
+            - generic [ref=f2e352]: 📦
+            - strong [ref=f2e354]: 主数据管理
+          - generic [ref=f2e355]: ▼
+        - button "🛒 采购入库 ▼" [ref=f2e357] [cursor=pointer]:
+          - generic [ref=f2e358]:
+            - generic [ref=f2e359]: 🛒
+            - strong [ref=f2e361]: 采购入库
+          - generic [ref=f2e362]: ▼
+        - link "🗺️ 厂区二维地图" [ref=f2e363] [cursor=pointer]:
+          - /url: /gis/site-maps
+          - generic [ref=f2e364]:
+            - generic [ref=f2e365]: 🗺️
+            - strong [ref=f2e367]: 厂区二维地图
+        - button "🤖 智能助手与追溯 ▼" [ref=f2e369] [cursor=pointer]:
+          - generic [ref=f2e370]:
+            - generic [ref=f2e371]: 🤖
+            - strong [ref=f2e373]: 智能助手与追溯
+          - generic [ref=f2e374]: ▼
+      - generic [ref=f2e375]: 系统认证状态：在线
+    - generic [ref=f2e378]:
+      - banner [ref=f2e379]:
+        - generic [ref=f2e380]:
+          - generic [ref=f2e381]: 智造协同 / 工作空间
+          - generic [ref=f2e382]: 🏢 tenant_demo_a
+          - navigation "面包屑" [ref=f2e384]:
+            - generic [ref=f2e385]:
+              - link "首页" [ref=f2e386]
+              - text: /
+            - link "供需与仓储" [ref=f2e388]
+        - generic [ref=f2e389]:
+          - button "👤 陈采购 purchase.agent" [ref=f2e391] [cursor=pointer]:
+            - generic [ref=f2e392]: 👤
+            - generic [ref=f2e393]:
+              - generic [ref=f2e394]: 陈采购
+              - generic [ref=f2e395]: purchase.agent
+          - button "退出登录" [ref=f2e396] [cursor=pointer]:
+            - generic [aria-hidden] [ref=f2e398]: ➔
+      - main [ref=f2e399]:
+        - generic [ref=f2e400]:
+          - paragraph [ref=f2e401]: Domain Ready
+          - heading "供需与仓储" [level=2] [ref=f2e402]
+          - paragraph [ref=f2e403]: 销售需求、生产工单与采购来源人工关联；收货进入暂存位，上架与拣货只移位，销售预留后由发货扣减实物库存。
+        - generic [ref=f2e404]:
+          - article [ref=f2e405]:
+            - heading "Spec 目录" [level=3] [ref=f2e406]
+            - paragraph [ref=f2e407]: docs/specs/10-erp-wms
+          - article [ref=f2e408]:
+            - heading "原型基线" [level=3] [ref=f2e409]
+            - paragraph [ref=f2e410]: docs/prototype/pages/purchase-inbound.html / sales-outbound.html
+        - article [ref=f2e412]:
+          - heading "开发提示" [level=3] [ref=f2e413]
+          - paragraph [ref=f2e414]: 先接列表查询和详情查询，再补写接口；所有写接口默认要幂等、租户过滤和权限校验。
+  - alert [ref=f2e415]:
+    - paragraph [ref=f2e419]: 登录成功！当前身份：陈采购，正在进入系统...

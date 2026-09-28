@@ -292,6 +292,8 @@ cd ../platform-iot && mvn spring-boot:run
 cd ../platform-gateway && mvn spring-boot:run
 ```
 
+使用仓库内 IDEA 共享运行配置启动时，请先按 [`runtime/README.md`](./runtime/README.md) 创建被 Git 忽略的 `deploy/local/runtime.env`。该文件只承载 Core / IoT 的本地 Facts 联调配置，不依赖 Open WebUI；未启动 AI 服务不会影响普通业务和综合看板。
+
 ### 3. 启动前端管理端
 ```bash
 cd ai_learn_developProject/frontend

@@ -209,11 +209,19 @@ const receiptNo = ref("");
 const qualityHoldLocationId = ref("");
 const qualityHoldLocations = ref<Location[]>([]);
 
+/** 用途：向父页提供当前可编辑收货草稿快照；无入参，返回表头与行项 JSON，用于判定重试能否关闭原稿。 */
+function getDraftSnapshot(): string {
+  return JSON.stringify({ receiptTime: receiptTime.value, receiptNo: receiptNo.value, qualityHoldLocationId: qualityHoldLocationId.value, lines: receiptLines.value });
+}
+defineExpose({ getDraftSnapshot });
+
 const receiptId = computed(() => props.receiptId?.trim() || "");
 
 watch(
-  () => props.order,
-  (val) => {
+  () => [props.order, props.visible] as const,
+  ([val, visible], previous) => {
+    // 修改用途：打开时或切单时初始化；同订单事实复读不得重置仍打开的可编辑收货草稿。
+    if (!visible || (previous?.[1] && previous[0]?.id === val?.id)) return;
     if (val && val.lines) {
       // 修改用途：收货事实 ID/编号必须来自真实接口；此处只初始化可编辑输入，不伪造业务事实。
       receiptNo.value = "";

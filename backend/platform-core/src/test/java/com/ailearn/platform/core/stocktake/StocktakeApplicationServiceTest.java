@@ -197,6 +197,12 @@ class StocktakeApplicationServiceTest {
         assertEquals("ADJUSTMENT", captor.getValue().metadata().transactionType());
         assertEquals("STOCKTAKE", captor.getValue().metadata().sourceType());
         assertEquals(7L, captor.getValue().expectedBalanceVersion());
+        // 修改用途：快照全集合必须先锁定，再逐行校验版本与调整；零差异行也属于锁集合。
+        var commandOrder = org.mockito.Mockito.inOrder(inventoryCommandService);
+        commandOrder.verify(inventoryCommandService).lockBalances(eq(order.lines().stream()
+                .map(StocktakeLine::dimension).toList()));
+        commandOrder.verify(inventoryCommandService).assertBalanceVersion(eq(order.lines().getFirst().dimension()), eq(7L));
+        commandOrder.verify(inventoryCommandService).increase(any());
         verify(repository).confirm(eq(TENANT_A), eq(ORDER_ID), eq(1L), any(List.class), eq(USER_ID), any(OffsetDateTime.class));
     }
 
@@ -215,6 +221,11 @@ class StocktakeApplicationServiceTest {
 
         assertEquals("ConfirmedAdjusted", result.getStatus());
         assertEquals(List.of(), result.getTransactionIds());
+        // 修改用途：无差异确认仍持有完整余额锁并验证快照，避免仅调整路径接入预锁。
+        var commandOrder = org.mockito.Mockito.inOrder(inventoryCommandService);
+        commandOrder.verify(inventoryCommandService).lockBalances(eq(order.lines().stream()
+                .map(StocktakeLine::dimension).toList()));
+        commandOrder.verify(inventoryCommandService).assertBalanceVersion(eq(order.lines().getFirst().dimension()), eq(7L));
         verify(inventoryCommandService, never()).increase(any(InventoryIncreaseCommand.class));
         verify(inventoryCommandService, never()).decrease(any(InventoryDecreaseCommand.class));
     }

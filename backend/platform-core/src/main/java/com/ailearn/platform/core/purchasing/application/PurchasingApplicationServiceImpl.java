@@ -7,6 +7,8 @@ import com.ailearn.platform.core.inventory.application.InventoryMutationResult;
 import com.ailearn.platform.core.inventory.domain.InventoryDimension;
 import com.ailearn.platform.core.inventory.domain.InventoryTransaction;
 import com.ailearn.platform.core.masterdata.dto.AllowedActionVo;
+import com.ailearn.platform.core.operationaudit.application.OperationAuditCommand;
+import com.ailearn.platform.core.operationaudit.application.OperationAuditRecorder;
 import com.ailearn.platform.core.manufacturing.foundation.domain.port.WorkOrderSourcePort;
 import com.ailearn.platform.core.purchasing.domain.PurchaseOrder;
 import com.ailearn.platform.core.purchasing.domain.PurchaseOrderLine;
@@ -63,6 +65,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
 /**
  * 采购订单与到货验收应用服务。
@@ -83,6 +86,7 @@ public class PurchasingApplicationServiceImpl implements PurchaseOrderApplicatio
     private final InventoryCommandService inventoryCommandService;
     private final PurchasingIdempotencyExecutor idempotencyExecutor;
     private final ObjectMapper objectMapper;
+    private final OperationAuditRecorder operationAuditRecorder;
 
     /**
      * 提供纯单元测试使用的默认幂等构造器。
@@ -106,18 +110,34 @@ public class PurchasingApplicationServiceImpl implements PurchaseOrderApplicatio
      * @param storage Core 共享幂等存储
      * @param objectMapper 幂等载荷和结果序列化器
      */
-    @Autowired
     public PurchasingApplicationServiceImpl(PurchaseOrderRepository repository,
                                             PurchasingReferencePort referencePort,
                                             WorkOrderSourcePort workOrderSourcePort,
                                             InventoryCommandService inventoryCommandService,
                                             IdempotencyStorage storage,
                                             ObjectMapper objectMapper) {
+        this(repository, referencePort, workOrderSourcePort, inventoryCommandService,
+                storage, objectMapper, OperationAuditRecorder.NO_OP);
+    }
+
+    /**
+     * 用途：为生产实例注入同事务采购操作记录；入参为既有业务端口、幂等存储和记录端口；出参为服务实例。
+     * 流程：沿用原采购依赖，仅在首次成功业务动作中追加本地记录，重放不再写入。
+     */
+    @Autowired
+    public PurchasingApplicationServiceImpl(PurchaseOrderRepository repository,
+                                            PurchasingReferencePort referencePort,
+                                            WorkOrderSourcePort workOrderSourcePort,
+                                            InventoryCommandService inventoryCommandService,
+                                            IdempotencyStorage storage,
+                                            ObjectMapper objectMapper,
+                                            OperationAuditRecorder operationAuditRecorder) {
         this.repository = repository;
         this.referencePort = referencePort;
         this.workOrderSourcePort = workOrderSourcePort;
         this.inventoryCommandService = inventoryCommandService;
         this.objectMapper = objectMapper;
+        this.operationAuditRecorder = operationAuditRecorder;
         this.idempotencyExecutor = new PurchasingIdempotencyExecutor(storage, objectMapper);
     }
 
@@ -139,9 +159,14 @@ public class PurchasingApplicationServiceImpl implements PurchaseOrderApplicatio
      * 查询当前租户订单详情，跨租户标识按不存在处理。
      */
     @Override
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     @PreAuthorize("hasAuthority('pur:order:view')")
     public PurchaseOrderView detail(UUID id) {
-        return toView(findOrder(TenantContextHolder.requireTenantId(), id, false));
+        UUID tenantId = TenantContextHolder.requireTenantId();
+        // 修改用途：同一只读快照内读取订单和事实，避免并发收货时订单数量与履约累计来自不同提交点。
+        PurchaseOrder order = findOrder(tenantId, id, false);
+        // 修改用途：订单存在且属当前租户后才读取五类真实履约事实，避免跨租户或已删订单泄露累计。
+        return new PurchaseOrderView(order, actions(order), repository.findLineCumulatives(tenantId, id));
     }
 
     /**
@@ -157,7 +182,13 @@ public class PurchasingApplicationServiceImpl implements PurchaseOrderApplicatio
         validateSaveRequest(request, true);
         return idempotencyExecutor.execute("purchasing:order:create", actor.tenantId(), idempotencyKey,
                 digest("create", request), PurchaseOrderView.class,
-                () -> toView(repository.insert(buildNewOrder(request, actor))));
+                () -> {
+                    PurchaseOrderView view = toView(repository.insert(buildNewOrder(request, actor)));
+                    // 修改：记录首次创建的账号与状态，和采购事实共同提交。
+                    recordSuccess(actor, "pur:order:create", view.getId(), view.getPoNo(), null,
+                            view.getStatus(), "创建采购订单", idempotencyKey);
+                    return view;
+                });
     }
 
     /**
@@ -175,7 +206,13 @@ public class PurchasingApplicationServiceImpl implements PurchaseOrderApplicatio
         }
         return idempotencyExecutor.execute("purchasing:order:update", actor.tenantId(), idempotencyKey,
                 digest("update", List.of(id, request)), PurchaseOrderView.class,
-                () -> updateDraft(id, request, actor));
+                () -> {
+                    PurchaseOrderView view = updateDraft(id, request, actor);
+                    // 修改：仅记录成功修改，幂等重放直接返回原结果。
+                    recordSuccess(actor, "pur:order:update", view.getId(), view.getPoNo(), "Draft",
+                            view.getStatus(), "修改采购订单草稿", idempotencyKey);
+                    return view;
+                });
     }
 
     /**
@@ -223,7 +260,11 @@ public class PurchasingApplicationServiceImpl implements PurchaseOrderApplicatio
                 () -> {
                     PurchaseOrder order = findOrder(actor.tenantId(), id, true);
                     PurchaseOrder completed = order.manuallyComplete(reason, actor.userId(), actor.sessionId(), now());
-                    return toView(repository.updateState(completed, order.version()));
+                    PurchaseOrderView view = toView(repository.updateState(completed, order.version()));
+                    // 修改：完成原因仍由业务表保存，操作记录只保留动作摘要。
+                    recordSuccess(actor, "pur:order:complete", view.getId(), view.getPoNo(),
+                            order.status().name(), view.getStatus(), "人工完成采购订单", idempotencyKey);
+                    return view;
                 });
     }
 
@@ -254,7 +295,14 @@ public class PurchasingApplicationServiceImpl implements PurchaseOrderApplicatio
         validateReceiptRequest(receiptId, request);
         return idempotencyExecutor.execute("purchasing:receipt:confirm", actor.tenantId(), idempotencyKey,
                 digest("receipt-confirm", List.of(receiptId, request)), PurchaseReceiptView.class,
-                () -> confirmReceiptInternal(receiptId, request, actor));
+                () -> {
+                    PurchaseReceiptView view = confirmReceiptInternal(receiptId, request, actor);
+                    // 修改：在所属采购订单时间线记录收货，不额外保存原始表单。
+                    PurchaseOrder order = findOrder(actor.tenantId(), request.getPurchaseOrderId(), false);
+                    recordSuccess(actor, "pur:receipt:confirm", order.id(), order.poNo(), null,
+                            order.status().name(), "确认采购到货验收 " + view.getReceiptNo(), idempotencyKey);
+                    return view;
+                });
     }
 
     private PurchaseOrderView updateDraft(UUID id, PurchaseOrderSaveRequest request, Actor actor) {
@@ -273,7 +321,13 @@ public class PurchasingApplicationServiceImpl implements PurchaseOrderApplicatio
                 PurchaseOrderView.class, () -> {
                     PurchaseOrder order = findOrder(actor.tenantId(), id, true);
                     PurchaseOrder next = transition.apply(order, actor, now());
-                    return toView(repository.updateState(next, order.version()));
+                    PurchaseOrderView view = toView(repository.updateState(next, order.version()));
+                    // 修改：状态迁移成功后记录真实操作者，记录失败随业务事务回滚。
+                    String action = operation.equals("purchasing:order:submit")
+                            ? "pur:order:submit" : "pur:order:approve";
+                    recordSuccess(actor, action, view.getId(), view.getPoNo(), order.status().name(),
+                            view.getStatus(), action.endsWith("submit") ? "提交采购订单" : "审核采购订单", key);
+                    return view;
                 });
     }
 
@@ -386,6 +440,15 @@ public class PurchasingApplicationServiceImpl implements PurchaseOrderApplicatio
                 actor.userId(), actor.sessionId(), at, 0L, actor.userId(), at, actor.userId(), at, receiptLines);
         PurchaseReceipt savedReceipt = repository.insertReceipt(receipt);
 
+        // 修改：收齐整次实收维度后一次预锁，避免不同采购单以反向明细顺序逐行占锁。
+        List<InventoryDimension> dimensions = receiptLines.stream()
+                .filter(line -> line.receivedQty().signum() > 0)
+                .map(line -> new InventoryDimension(line.productId(), holdLocation.warehouseId(),
+                        savedReceipt.qualityHoldLocationId(), line.lotNo()))
+                .toList();
+        if (!dimensions.isEmpty()) {
+            inventoryCommandService.lockBalances(dimensions);
+        }
         List<InventoryTransaction> transactions = new ArrayList<>();
         for (PurchaseReceiptLine line : receiptLines) {
             if (line.receivedQty().signum() == 0) {
@@ -526,6 +589,18 @@ public class PurchasingApplicationServiceImpl implements PurchaseOrderApplicatio
             throw new ForbiddenException("缺失可信会话或请求上下文");
         }
         return new Actor(tenantId, userId, sessionId, requestId);
+    }
+
+    /**
+     * 用途：追加采购订单成功操作记录；入参为可信账号上下文、订单身份、状态与幂等键；出参为无。
+     * 流程：复用本地记录端口，账号从服务端上下文取得，仅保存固定业务摘要。
+     */
+    private void recordSuccess(Actor actor, String actionCode, UUID orderId, String orderNo,
+                               String beforeStatus, String afterStatus, String summary, String key) {
+        operationAuditRecorder.recordSuccess(new OperationAuditCommand(actor.tenantId(), "USER",
+                actor.userId(), UserContextHolder.getUsername(), actor.sessionId(), actor.requestId(),
+                actionCode, "PURCHASE_ORDER", orderId, orderNo, beforeStatus, afterStatus,
+                summary, "status,lines", key, now()));
     }
 
     private void validateKey(String key) {

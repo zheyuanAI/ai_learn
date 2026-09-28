@@ -1,5 +1,6 @@
 package com.ailearn.platform.core.purchasing.domain;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,6 +23,12 @@ public interface PurchaseOrderRepository {
      * 在当前事务内以 FOR UPDATE 读取订单和明细。
      */
     Optional<PurchaseOrder> findByIdForUpdate(UUID tenantId, UUID id);
+
+    /**
+     * 按真实采购订单行 ID 读取已发生事实累计，不按产品或批次猜测归属。
+     * 入参：可信租户与当前订单 ID；出参：有效订单行到五项累计的映射，零事实行允许缺席。
+     */
+    Map<UUID, PurchaseOrderLineCumulative> findLineCumulatives(UUID tenantId, UUID orderId);
 
     /**
      * 以版本条件更新 Draft 字段。

@@ -1,5 +1,6 @@
 package com.ailearn.platform.core.inventory.application;
 
+import com.ailearn.platform.core.config.CoreIdempotencyExecutor;
 import com.ailearn.platform.core.inventory.domain.InventoryBalance;
 import com.ailearn.platform.core.inventory.domain.InventoryDimension;
 import com.ailearn.platform.core.inventory.domain.InventoryInvariant;
@@ -16,7 +17,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.ailearn.platform.shared.idempotency.IdempotencyStorage;
-import com.ailearn.platform.shared.idempotency.IdempotentRecord;
 import com.ailearn.platform.shared.idempotency.InMemoryIdempotencyStorage;
 import com.ailearn.platform.shared.context.TenantContextHolder;
 import com.ailearn.platform.shared.context.UserContextHolder;
@@ -27,7 +27,6 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -41,15 +40,14 @@ import java.util.function.Function;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.annotation.Propagation;
 
 /**
  * 库存唯一写应用服务，同时提供库存事实查询端口实现。
  * <p>
  * 该服务是采购、销售、MES 等领域写库存的唯一入口：先校验可信上下文和库位主数据，再在一个事务中
  * 按稳定顺序锁定余额、校验可用量、更新余额、维护预留分配并追加流水。幂等执行通过共享存储抽象
- * 保护，成功结果只在事务提交后缓存，回滚会释放幂等占用。
+ * 保护，成功结果在事务提交前按所有权凭证缓存，回滚只释放当前执行者的幂等占用。
  * </p>
  */
 @Service
@@ -60,11 +58,10 @@ public class InventoryApplicationService implements InventoryCommandService, Inv
     private static final Set<String> MOVE_ACTIONS = Set.of("MOVE", "RESERVE");
     private static final Set<String> RESERVE_ACTIONS = Set.of("RELEASE", "MOVE_RESERVATION_ALLOCATION");
     private static final Set<String> RELEASE_ACTIONS = Set.of("RESERVE");
-    private static final Duration IDEMPOTENCY_TTL = Duration.ofHours(24);
 
     private final InventoryRepository repository;
     private final InventoryLocationPort locationPort;
-    private final IdempotencyStorage idempotencyStorage;
+    private final CoreIdempotencyExecutor idempotencyExecutor;
     private final ObjectMapper objectMapper;
 
     /**
@@ -95,8 +92,32 @@ public class InventoryApplicationService implements InventoryCommandService, Inv
                                        ObjectMapper objectMapper) {
         this.repository = repository;
         this.locationPort = locationPort;
-        this.idempotencyStorage = idempotencyStorage;
+        // 复用带 claim token 的协调器，避免旧执行者在过期重入后完成或清理其他请求的记录。
+        this.idempotencyExecutor = new CoreIdempotencyExecutor(idempotencyStorage, objectMapper);
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * 在既有业务事务中预锁完整余额集合，锁持续到外层业务提交或回滚。
+     * 入参：后续库存命令涉及的全部维度；无出参；流程：验证集合与可信身份，校验所有库位后统一稳定排序加锁。
+     * MANDATORY 防止单独新建短事务后立即释放锁，业务数量和状态仍由后续命令校验。
+     *
+     * @param dimensions 本次业务事务涉及的完整库存维度
+     */
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY, rollbackFor = Exception.class)
+    public void lockBalances(Collection<InventoryDimension> dimensions) {
+        if (dimensions == null || dimensions.stream().anyMatch(java.util.Objects::isNull)) {
+            throw new ValidationException("预锁库存维度不能为空或包含空元素");
+        }
+        UUID tenantId = TenantContextHolder.requireTenantId();
+        UUID userId = UserContextHolder.requireUserId();
+        List<InventoryDimension> distinct = dimensions.stream().distinct().toList();
+        // 修改用途：全部库位通过校验后才开始加余额锁，非法维度不能留下部分预锁或新建余额。
+        distinct.forEach(dimension -> activeLocation(tenantId, dimension));
+        if (!distinct.isEmpty()) {
+            repository.lockBalancesInStableOrder(tenantId, distinct, userId);
+        }
     }
 
     /**
@@ -430,36 +451,15 @@ public class InventoryApplicationService implements InventoryCommandService, Inv
     /**
      * 执行带事务协调的幂等命令。
      * 入参：库存命令及已通过可信上下文的业务函数；出参：首次成功结果或同载荷重放结果；流程：读取并
-     * 校验服务端摘要，原子登记操作域 key/digest，处理中重复请求拒绝，成功结果在事务提交前缓存，失败释放占用。
+     * 校验服务端摘要，再复用 Core 协调器按 claim token 完成或释放；过期失去所有权时拒绝提交成功结果。
      */
     private <C extends InventoryCommand> InventoryMutationResult execute(
             C command, Function<InventoryCommandSupport.TrustedCommandContext, InventoryMutationResult> action) {
         InventoryCommandSupport.TrustedCommandContext context = InventoryCommandSupport.validate(command);
         String operation = operation(command);
-        String key = command.metadata().idempotencyKey();
-        String digest = canonicalDigest(command, operation);
-        IdempotentRecord existing = idempotencyStorage.getRecord(operation, key, context.tenantId()).orElse(null);
-        if (existing != null) {
-            return replayOrReject(existing, key, digest);
-        }
-        if (!idempotencyStorage.tryAcquire(operation, key, context.tenantId(), IDEMPOTENCY_TTL, digest)) {
-            IdempotentRecord raced = idempotencyStorage.getRecord(operation, key, context.tenantId()).orElse(null);
-            if (raced == null) {
-                throw new InventoryException(InventoryErrorCode.INV_002, "幂等命令正在处理中");
-            }
-            return replayOrReject(raced, key, digest);
-        }
-        registerRollbackCleanup(operation, key, context.tenantId());
-        try {
-            InventoryMutationResult result = action.apply(context);
-            completeBeforeCommit(operation, key, context.tenantId(), result);
-            return result;
-        } catch (RuntimeException exception) {
-            if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-                idempotencyStorage.fail(operation, key, context.tenantId(), exception.getMessage());
-            }
-            throw exception;
-        }
+        // 保留库存操作域、服务端摘要及原结果类型，只将所有权和事务回调统一交给既有执行器。
+        return idempotencyExecutor.execute(operation, context.tenantId(), command.metadata().idempotencyKey(),
+                canonicalDigest(command, operation), InventoryMutationResult.class, () -> action.apply(context));
     }
 
     /**
@@ -541,89 +541,6 @@ public class InventoryApplicationService implements InventoryCommandService, Inv
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         } catch (JsonProcessingException | NoSuchAlgorithmException exception) {
             throw new ServiceUnavailableException("库存幂等载荷摘要生成失败", exception);
-        }
-    }
-
-    /**
-     * 处理已存在的幂等记录。
-     * 入参：历史记录、当前幂等键和载荷摘要；出参：同载荷成功结果或抛出受控冲突；流程：先比对摘要，
-     * 再按 PENDING/SUCCESS 状态拒绝并发或反序列化首次成功结果。
-     *
-     * @param record 历史幂等记录
-     * @param key 当前幂等键
-     * @param digest 当前载荷摘要
-     * @return 首次成功结果
-     */
-    private InventoryMutationResult replayOrReject(IdempotentRecord record, String key, String digest) {
-        if (!digest.equals(record.getRequestHash())) {
-            throw new InventoryException(InventoryErrorCode.INV_002,
-                    "同一幂等键的 payloadDigest 不一致");
-        }
-        if (record.getStatus() != IdempotentRecord.Status.SUCCESS
-                || record.getResponseBody() == null || record.getResponseBody().isBlank()) {
-            throw new InventoryException(InventoryErrorCode.INV_002, "幂等命令正在处理中");
-        }
-        try {
-            return objectMapper.readValue(record.getResponseBody(), InventoryMutationResult.class);
-        } catch (JsonProcessingException exception) {
-            throw new ServiceUnavailableException("幂等结果缓存不可解析", exception);
-        }
-    }
-
-    /**
-     * 在当前事务回滚时释放幂等占用，避免失败命令永久阻塞重试。
-     *
-     * @param key 幂等键
-     * @param tenantId 可信租户
-     */
-    private void registerRollbackCleanup(String operation, String key, UUID tenantId) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status != STATUS_COMMITTED) {
-                    idempotencyStorage.fail(operation, key, tenantId, "库存事务未提交");
-                }
-            }
-        });
-    }
-
-    /**
-     * 在事务提交前缓存首次成功响应；无事务的纯调用立即完成记录。
-     *
-     * @param key 幂等键
-     * @param tenantId 可信租户
-     * @param result 首次库存变更结果
-     */
-    private void completeBeforeCommit(String operation, String key, UUID tenantId, InventoryMutationResult result) {
-        String responseBody = serialize(result);
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            idempotencyStorage.complete(operation, key, tenantId, responseBody, IDEMPOTENCY_TTL);
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void beforeCommit(boolean readOnly) {
-                if (!readOnly) {
-                    idempotencyStorage.complete(operation, key, tenantId, responseBody, IDEMPOTENCY_TTL);
-                }
-            }
-        });
-    }
-
-    /**
-     * 序列化幂等重放所需的结果。
-     *
-     * @param result 库存变更结果
-     * @return JSON 响应体
-     */
-    private String serialize(InventoryMutationResult result) {
-        try {
-            return objectMapper.writeValueAsString(result);
-        } catch (JsonProcessingException exception) {
-            throw new ServiceUnavailableException("库存幂等结果无法缓存", exception);
         }
     }
 

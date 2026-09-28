@@ -87,7 +87,7 @@
       <!-- 操作列 -->
       <template #actions="{ row }">
         <el-button
-          v-if="row.status === 'Pending'"
+          v-if="row.status === 'Pending' && hasPermission('pur:putaway:confirm')"
           type="primary"
           link
           size="small"
@@ -95,7 +95,7 @@
         >
           确认上架
         </el-button>
-        <el-tag v-else type="info" size="small">已入库</el-tag>
+        <el-tag v-else-if="row.status === 'Confirmed'" type="info" size="small">已入库</el-tag>
       </template>
     </DataTable>
 
@@ -162,6 +162,9 @@ import type { PurchaseQualityReceiptCandidate, PutawayTask } from "@/types/purch
 import type { Location, Product } from "@/types/inventory";
 import { getLocationById, getLocations, getProducts } from "@/api/masterData";
 import { getPutawayTasks, confirmPutawayTask, getQualityReceiptCandidates } from "@/api/purchasing";
+import { usePermission } from "@/composables/usePermission";
+
+const { hasPermission } = usePermission();
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
@@ -328,15 +331,22 @@ async function submitPutaway() {
     ElMessage.warning("上架数量必须来自真实任务且大于 0。");
     return;
   }
+  // 修改用途：固定任务及数量/库位，同键重试不受任务切换或表单编辑影响。
+  const taskId = String(task.id);
+  const requestPayload = {
+    taskId,
+    toLocationId: targetLocationId.value,
+    putawayQty: putawayQtyInput.value,
+  };
   try {
-    await execute((key) => confirmPutawayTask(String(task.id), {
-      taskId: String(task.id),
-      toLocationId: targetLocationId.value,
-      putawayQty: putawayQtyInput.value,
-    }, key), { onConflict: fetchPutawayTasks });
-    isConfirmModalOpen.value = false;
-    ElMessage.success("上架确认成功！货物已上架到目标存储库位。");
-    await fetchPutawayTasks();
+    await execute(async (key) => {
+      await confirmPutawayTask(taskId, requestPayload, key);
+      // 修改用途：retry 成功也恢复列表，仅关闭仍对应首次任务和表单的弹窗。
+      if (String(selectedTask.value?.id) === taskId && targetLocationId.value === requestPayload.toLocationId
+        && putawayQtyInput.value === requestPayload.putawayQty) isConfirmModalOpen.value = false;
+      ElMessage.success("上架确认成功！货物已上架到目标存储库位。");
+      await fetchPutawayTasks();
+    }, { onConflict: fetchPutawayTasks });
   } catch (err: any) {
     ElMessage.error(err?.message || "上架确认失败");
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }

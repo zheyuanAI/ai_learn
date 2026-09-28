@@ -205,6 +205,15 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         if (order.status() != TransferStatus.Draft) {
             throw new ConflictException("调拨单当前状态不允许确认");
         }
+        // 修改用途：一次预锁所有明细的双侧维度，单次 move 排序不能覆盖多行反序持锁。
+        List<InventoryDimension> dimensions = new ArrayList<>();
+        for (TransferLine line : order.lines()) {
+            dimensions.add(new InventoryDimension(line.productId(), order.fromWarehouseId(),
+                    order.fromLocationId(), line.lotNo()));
+            dimensions.add(new InventoryDimension(line.productId(), order.toWarehouseId(),
+                    order.toLocationId(), line.lotNo()));
+        }
+        inventoryCommandService.lockBalances(dimensions);
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         List<UUID> transactionIds = new ArrayList<>();
         for (TransferLine line : order.lines()) {

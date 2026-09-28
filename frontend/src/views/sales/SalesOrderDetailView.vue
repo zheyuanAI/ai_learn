@@ -366,6 +366,7 @@
 
     <!-- 弹窗 3：确认发货 -->
     <ShipmentConfirmView
+      ref="shipmentConfirmView"
       v-model:visible="isShipmentOpen"
       :order="order"
       :submitting="actionLoading"
@@ -375,6 +376,7 @@
 
     <!-- 弹窗 4：预留明细与异常释放 -->
     <ReservationDetailView
+      ref="reservationDetailView"
       v-model:visible="isReservationDetailOpen"
       :order="order"
       :can-release="isActionEnabled('releaseReservation')"
@@ -476,6 +478,7 @@ const emit = defineEmits<{
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 const order = ref<SalesOrder | null>(null);
+let detailRequestSequence = 0;
 const { execute, retry, isExecuting, canRetry, lastError } = useCommand();
 const actionLoading = ref(false);
 const sourceLocations = ref<Location[]>([]);
@@ -486,6 +489,7 @@ type PickLocationOption = Location & { availableQty: string; selectable: boolean
 const pickBalances = ref<InventoryBalance[]>([]);
 const pickSourcesLoading = ref(false);
 const pickSourceError = ref("");
+let pickBalanceRequestSequence = 0;
 
 function handleGoTrace() {
   if (!order.value) return;
@@ -500,6 +504,9 @@ function handleGoTrace() {
 
 // 弹窗状态
 const isPickModalOpen = ref(false);
+// 修改用途：从实际子弹窗读取当前草稿，旧命令成功不能关闭后续编辑的新稿。
+const shipmentConfirmView = ref<{ getDraftSnapshot: () => string } | null>(null);
+const reservationDetailView = ref<{ getDraftSnapshot: () => string } | null>(null);
 const selectedLineForPick = ref<SalesOrderLine | null>(null);
 const pickSourceLocationId = ref("");
 const pickQtyInput = ref("");
@@ -564,6 +571,9 @@ watch(
     // 修改：合并 props 监听并立即执行，确保直达/刷新路由主动加载详情，列表抽屉仍可复用同一组件。
     if (orderId && visible) {
       void fetchDetail();
+    } else {
+      // 修改用途：关闭抽屉或清空订单时使在途详情及库位查询失效。
+      detailRequestSequence += 1;
     }
   },
   { immediate: true }
@@ -580,23 +590,31 @@ function detailLoadErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "网络请求异常";
 }
 
+/** 用途：查询当前可见订单；无入参、无返回值，仅最新请求可更新详情、库位和错误状态。 */
 async function fetchDetail() {
-  if (!props.orderId) return;
+  const orderId = props.orderId;
+  if (!orderId || !props.visible) return;
+  // 修改用途：捕获订单和请求世代，防止切单及同单刷新时的慢响应覆盖最新事实。
+  const requestSequence = ++detailRequestSequence;
+  const isCurrentRequest = () => requestSequence === detailRequestSequence
+    && props.orderId === orderId && props.visible;
   viewState.value = "loading";
   errorMessage.value = "";
   try {
-    const res = await getSalesOrderById(props.orderId);
+    const res = await getSalesOrderById(orderId);
+    if (!isCurrentRequest()) return;
     order.value = res.data;
     // 修改：仅在当前角色确实拥有拣货/退回动作时加载库位，销售只查看订单时不再因库位 403 阻断详情。
     if (isActionEnabled("directPick") || isActionEnabled("returnPick")) {
-      await loadLocations();
+      await loadLocations(isCurrentRequest);
     } else {
       sourceLocations.value = [];
       shippingLocations.value = [];
       shippingLocationId.value = "";
     }
-    viewState.value = "ready";
+    if (isCurrentRequest()) viewState.value = "ready";
   } catch (err: any) {
+    if (!isCurrentRequest()) return;
     console.error("[SalesOrderDetailView] 获取失败:", err);
     errorMessage.value = detailLoadErrorMessage(err);
     viewState.value = "error";
@@ -656,12 +674,17 @@ function handleClose() {
 
 async function handleSubmit() {
   if (!order.value) return;
+  // 修改用途：重试固定首次命令的订单，避免切换详情后同键提交另一订单。
+  const orderId = order.value.id;
   actionLoading.value = true;
   try {
-    await execute((key) => submitSalesOrder(order.value!.id, key), { onConflict: fetchDetail });
-    await fetchDetail();
-    ElMessage.success("销售订单提交成功！");
-    emit("refresh");
+    await execute(async (key) => {
+      await submitSalesOrder(orderId, key);
+      // 修改用途：retry 成功同样复读原订单，切单后不更新另一详情。
+      if (props.orderId === orderId) await fetchDetail();
+      ElMessage.success("销售订单提交成功！");
+      emit("refresh");
+    }, { onConflict: fetchDetail });
   } catch (err: any) {
     ElMessage.error(err?.message || "提交失败");
   } finally {
@@ -671,12 +694,17 @@ async function handleSubmit() {
 
 async function handleApprove() {
   if (!order.value) return;
+  // 修改用途：同键重试始终审核首次选择的订单。
+  const orderId = order.value.id;
   actionLoading.value = true;
   try {
-    await execute((key) => approveSalesOrder(order.value!.id, key), { onConflict: fetchDetail });
-    await fetchDetail();
-    ElMessage.success("销售订单审核通过！");
-    emit("refresh");
+    await execute(async (key) => {
+      await approveSalesOrder(orderId, key);
+      // 修改用途：retry 成功同样复读原订单，切单后不更新另一详情。
+      if (props.orderId === orderId) await fetchDetail();
+      ElMessage.success("销售订单审核通过！");
+      emit("refresh");
+    }, { onConflict: fetchDetail });
   } catch (err: any) {
     ElMessage.error(err?.message || "审核失败");
   } finally {
@@ -722,24 +750,30 @@ async function submitPick() {
     return;
   }
   shippingLocationId.value = String(shipping.id);
+  // 修改用途：冻结首次拣货的完整载荷，同键重试不再读取可编辑的数量和库位。
+  const requestPayload = {
+    salesOrderId: String(currentOrder.id),
+    lines: [{
+      salesOrderLineId: String(line.id),
+      pickedQty: pickQtyInput.value,
+      sourceLocationId: String(source.id),
+      shippingLocationId: shippingLocationId.value,
+    }],
+  };
   actionLoading.value = true;
   try {
     await execute(async (key) => {
-      const response = await confirmDirectPick({
-      salesOrderId: String(currentOrder.id),
-      lines: [{
-        salesOrderLineId: String(line.id),
-        pickedQty: pickQtyInput.value,
-        sourceLocationId: String(source.id),
-        shippingLocationId: shippingLocationId.value,
-      }],
-      }, key);
+      const response = await confirmDirectPick(requestPayload, key);
       if (!response?.data?.operationId) {
         throw new Error("直接拣货响应未返回服务端 operationId，已停止后续页面跳转。");
       }
-      isPickModalOpen.value = false;
+      // 修改用途：原命令成功不能关闭后来切换的订单、订单行或编辑后的新拣货草稿。
+      if (String(order.value?.id) === requestPayload.salesOrderId
+        && String(selectedLineForPick.value?.id) === requestPayload.lines[0].salesOrderLineId
+        && pickQtyInput.value === requestPayload.lines[0].pickedQty
+        && pickSourceLocationId.value === requestPayload.lines[0].sourceLocationId) isPickModalOpen.value = false;
       ElMessage.success("直接拣货执行成功！");
-      await fetchDetail();
+      if (String(props.orderId) === requestPayload.salesOrderId) await fetchDetail();
       emit("refresh");
       emit("pick-success");
     }, { onConflict: fetchDetail });
@@ -765,23 +799,29 @@ async function submitReturnPick() {
   if (!order.value || !selectedLineForReturn.value || !returnToLocationId.value) return;
   const currentOrder = order.value;
   const line = selectedLineForReturn.value;
+  // 修改用途：冻结首次退回的完整载荷，编辑表单不改变同键重试含义。
+  const requestPayload = {
+    salesOrderId: String(currentOrder.id),
+    lines: [{
+      salesOrderLineId: String(line.id),
+      returnQty: returnQtyInput.value,
+      toLocationId: returnToLocationId.value,
+    }],
+  };
   actionLoading.value = true;
   try {
     await execute(async (key) => {
-      const response = await returnPick({
-      salesOrderId: String(currentOrder.id),
-      lines: [{
-        salesOrderLineId: String(line.id),
-        returnQty: returnQtyInput.value,
-        toLocationId: returnToLocationId.value,
-      }],
-      }, key);
+      const response = await returnPick(requestPayload, key);
       if (!response?.data?.operationId) {
         throw new Error("拣货退回响应未返回服务端 operationId，已停止后续页面跳转。");
       }
-      isReturnModalOpen.value = false;
+      // 修改用途：原退回命令成功不能关闭后来选择的行或新退回草稿。
+      if (String(order.value?.id) === requestPayload.salesOrderId
+        && String(selectedLineForReturn.value?.id) === requestPayload.lines[0].salesOrderLineId
+        && returnQtyInput.value === requestPayload.lines[0].returnQty
+        && returnToLocationId.value === requestPayload.lines[0].toLocationId) isReturnModalOpen.value = false;
       ElMessage.success("拣货已成功退回！");
-      await fetchDetail();
+      if (String(props.orderId) === requestPayload.salesOrderId) await fetchDetail();
       emit("refresh");
     }, { onConflict: fetchDetail });
   } catch (err: any) {
@@ -792,16 +832,23 @@ async function submitReturnPick() {
 }
 
 async function handleConfirmShipment(payload: any) {
+  // 修改用途：深复制发货明细，避免弹窗状态修改同键重试的原始载荷。
+  const requestPayload = JSON.parse(JSON.stringify(payload));
+  const originalOrderId = props.orderId;
+  const originalPayload = JSON.stringify(payload);
+  const originalDraft = shipmentConfirmView.value?.getDraftSnapshot();
   actionLoading.value = true;
   try {
     await execute(async (key) => {
-      const response = await confirmShipment(payload, key);
+      const response = await confirmShipment(requestPayload, key);
       if (!response?.data?.operationId) {
         throw new Error("发货响应未返回服务端 operationId，已停止后续页面刷新。");
       }
-      isShipmentOpen.value = false;
+      // 修改用途：只关闭首次发货上下文，保留切换后的新订单或新发货草稿。
+      if (props.orderId === originalOrderId && JSON.stringify(payload) === originalPayload
+        && shipmentConfirmView.value?.getDraftSnapshot() === originalDraft) isShipmentOpen.value = false;
       ElMessage.success("销售发货出库成功！");
-      await fetchDetail();
+      if (props.orderId === originalOrderId) await fetchDetail();
       emit("refresh");
     }, { onConflict: fetchDetail });
   } catch (err: any) {
@@ -816,23 +863,38 @@ async function handleConfirmShipment(payload: any) {
  * 入参：当前销售订单行；出参：当前租户该物料的库存余额集合；流程：仅查询，不修改库存事实。
  */
 async function loadPickBalances(line: SalesOrderLine) {
+  // 修改用途：按订单、选中行和请求世代限定余额归属，旧请求不得更新另一物料的表单。
+  const requestSequence = ++pickBalanceRequestSequence;
+  const detailSequence = detailRequestSequence;
+  const orderId = props.orderId;
+  const lineId = line.id;
+  const productId = String(line.productId);
+  const preferredLocationId = line.sourceLocationId ? String(line.sourceLocationId) : "";
+  const isCurrentRequest = () => requestSequence === pickBalanceRequestSequence
+    && detailSequence === detailRequestSequence && props.orderId === orderId && props.visible
+    && isPickModalOpen.value && selectedLineForPick.value?.id === lineId
+    && String(selectedLineForPick.value?.productId) === productId;
+  if (!isCurrentRequest()) return;
   pickSourcesLoading.value = true;
+  pickSourceError.value = "";
   try {
     const response = await getInventoryBalances({
-      productId: String(line.productId),
+      productId,
       page: 1,
       size: 1000,
     });
+    if (!isCurrentRequest()) return;
     pickBalances.value = response.data.records || [];
-    const preferredLocationId = line.sourceLocationId ? String(line.sourceLocationId) : "";
     if (preferredLocationId && pickSelectableSourceOptions.value.some((location) => String(location.id) === preferredLocationId)) {
       pickSourceLocationId.value = preferredLocationId;
     }
   } catch (err: any) {
+    if (!isCurrentRequest()) return;
     pickBalances.value = [];
     pickSourceError.value = err?.message || "查询物料可用库存失败，请检查库存查询权限";
   } finally {
-    pickSourcesLoading.value = false;
+    // 修改用途：只有当前请求负责结束加载，避免旧 finally 提前关闭新请求的加载标记。
+    if (isCurrentRequest()) pickSourcesLoading.value = false;
   }
 }
 
@@ -875,19 +937,29 @@ function displayLineName(line: SalesOrderLine): string {
   return line.productName || displayLineSku(line);
 }
 
-/** 加载当前租户启用的真实库位，供拣货与退回命令引用。 */
-async function loadLocations() {
+/**
+ * 用途：加载当前租户的启用库位，供拣货与退回引用。
+ * 入参：可选的请求有效性检查；出参：无，仅有效请求写入库位。
+ * 流程：捕获仓库并并发读取三类库位，响应返回后检查详情是否仍为当前请求。
+ */
+async function loadLocations(isCurrentRequest: () => boolean = () => true) {
+  if (!isCurrentRequest()) return;
   if (!order.value) {
     sourceLocations.value = [];
     shippingLocations.value = [];
     return;
   }
   const warehouseId = order.value.warehouseId;
+  const orderId = order.value.id;
+  const requestSequence = detailRequestSequence;
   const [storageResponse, pickingResponse, shippingResponse] = await Promise.all([
     getLocations({ warehouseId, type: "Storage", status: "ACTIVE", page: 1, size: 1000 }),
     getLocations({ warehouseId, type: "Picking", status: "ACTIVE", page: 1, size: 1000 }),
     getLocations({ warehouseId, type: "ShippingStaging", status: "ACTIVE", page: 1, size: 1000 }),
   ]);
+  // 修改用途：详情切单或刷新后，旧仓库查询不得覆盖新订单库位。
+  if (!isCurrentRequest() || requestSequence !== detailRequestSequence
+    || order.value?.id !== orderId || !props.visible) return;
   const sourceRecords = [...(storageResponse.data.records || []), ...(pickingResponse.data.records || [])];
   sourceLocations.value = Array.from(new Map(sourceRecords.map((location) => [String(location.id), location])).values())
     .filter((location) =>
@@ -900,17 +972,27 @@ async function loadLocations() {
     && location.type === "ShippingStaging"
     && location.status === "ACTIVE",
   );
-  shippingLocationId.value = String(shippingLocations.value[0]?.id || "");
+  // 修改用途：成功复读库位时保留仍合法的用户选择，避免覆盖尚在编辑的新草稿。
+  if (!shippingLocations.value.some((location) => String(location.id) === shippingLocationId.value)) {
+    shippingLocationId.value = String(shippingLocations.value[0]?.id || "");
+  }
 }
 
 async function handleReleaseReservation(payload: any) {
+  // 修改用途：冻结释放对象和明细，保证同键重试复用原始请求。
+  const requestPayload = JSON.parse(JSON.stringify(payload));
+  const originalOrderId = props.orderId;
+  const originalPayload = JSON.stringify(payload);
+  const originalDraft = reservationDetailView.value?.getDraftSnapshot();
   actionLoading.value = true;
   try {
     await execute(async (key) => {
-      await releaseReservation(payload.salesOrderId, payload, key);
-      isReservationDetailOpen.value = false;
+      await releaseReservation(requestPayload.salesOrderId, requestPayload, key);
+      // 修改用途：只关闭首次预留释放上下文，用户切单或编辑新稿时保留当前界面。
+      if (props.orderId === originalOrderId && JSON.stringify(payload) === originalPayload
+        && reservationDetailView.value?.getDraftSnapshot() === originalDraft) isReservationDetailOpen.value = false;
       ElMessage.success("预留释放成功！");
-      await fetchDetail();
+      if (props.orderId === originalOrderId) await fetchDetail();
       emit("refresh");
     }, { onConflict: fetchDetail });
   } catch (err: any) {
@@ -939,14 +1021,15 @@ async function executeManualComplete() {
   }
   actionLoading.value = true;
   try {
-    const currentOrder = order.value;
+    const orderId = order.value.id;
+    // 修改用途：失败后修改完成原因不改变原命令的同键重试载荷。
+    const requestPayload = { completionReason: manualCompleteReason.value };
     await execute(async (key) => {
-      await completeSalesOrder(currentOrder.id, {
-        completionReason: manualCompleteReason.value,
-      }, key);
-      isManualCompleteOpen.value = false;
+      await completeSalesOrder(orderId, requestPayload, key);
+      // 修改用途：原结案成功不关闭另一订单或编辑后的新原因表单。
+      if (order.value?.id === orderId && manualCompleteReason.value === requestPayload.completionReason) isManualCompleteOpen.value = false;
       ElMessage.success("销售订单已人工完成！");
-      await fetchDetail();
+      if (props.orderId === orderId) await fetchDetail();
       emit("refresh");
     }, { onConflict: fetchDetail });
   } catch (err: any) {

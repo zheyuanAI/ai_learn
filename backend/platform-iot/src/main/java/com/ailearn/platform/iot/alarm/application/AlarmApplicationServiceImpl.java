@@ -9,7 +9,6 @@ import com.ailearn.platform.iot.alarm.dto.AlarmView;
 import com.ailearn.platform.iot.alarm.exception.AlarmErrorCode;
 import com.ailearn.platform.iot.alarm.exception.AlarmException;
 import com.ailearn.platform.iot.contextlink.application.AlarmContextLinkApplicationService;
-import com.ailearn.platform.iot.contextlink.domain.ContextLinkResult;
 import com.ailearn.platform.iot.device.application.IotIdempotencyExecutor;
 import com.ailearn.platform.iot.device.exception.IotErrorCode;
 import com.ailearn.platform.iot.device.exception.IotException;
@@ -34,8 +33,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * IoT 告警生命周期服务。
@@ -46,7 +43,6 @@ import org.slf4j.LoggerFactory;
 @Validated
 public class AlarmApplicationServiceImpl implements AlarmApplicationService, TelemetryAlarmPort {
     private static final String ACK_OPERATION = "iot:alarm:ack";
-    private static final Logger log = LoggerFactory.getLogger(AlarmApplicationServiceImpl.class);
     private final AlarmRepository alarmRepository;
     private final AlarmRuleFactsPort ruleFactsPort;
     private final IotIdempotencyExecutor idempotency;
@@ -65,7 +61,7 @@ public class AlarmApplicationServiceImpl implements AlarmApplicationService, Tel
         this(alarmRepository, ruleFactsPort, idempotency, statusPort, null);
     }
 
-    /** 生产装配构造器：告警保存成功后立即进入 Core 生产上下文自动补链。 */
+    /** 生产装配构造器：告警保存时同步入本地队列，Core 生产上下文由后台调度器补链。 */
     @org.springframework.beans.factory.annotation.Autowired
     public AlarmApplicationServiceImpl(AlarmRepository alarmRepository, AlarmRuleFactsPort ruleFactsPort,
                                        IotIdempotencyExecutor idempotency, DeviceStatusPort statusPort,
@@ -102,7 +98,7 @@ public class AlarmApplicationServiceImpl implements AlarmApplicationService, Tel
 
     /**
      * 按单条告警规则推进状态：已有活动告警只尝试恢复，没有活动告警且达到触发阈值时原子创建新告警。
-     * 状态迁移由仓储条件更新保证并发安全，创建后的 Core 上下文补链不参与本地告警事实事务。
+     * 状态迁移由仓储条件更新保证并发安全，创建告警时只保存本地补链任务，不同步调用 Core。
      */
     private void processRule(TelemetryIngestionCommand command, AlarmRule rule, BigDecimal value) {
         UUID tenantId = command.credentialContext().tenantId();
@@ -124,25 +120,21 @@ public class AlarmApplicationServiceImpl implements AlarmApplicationService, Tel
                     command.deviceId(), rule.id(), rule.ruleCode(), rule.alarmLevel(), AlarmStatus.Triggered,
                     command.timestamp(), null, null, null, null, null, null, "Pending", command.receivedAt());
             AlarmFact saved = alarmRepository.createIfAbsent(fact);
-            linkContextAfterAlarmSaved(saved);
+            // 修改用途：事实与任务在同一 IoT 事务中保存，避免 Core 慢请求阻塞遥测全局锁。
+            enqueueContextAfterAlarmSaved(saved);
         }
     }
 
-    /** 告警事实提交后自动补链；Core 不可用只记录日志并由任务重试，不回滚本地告警保存。 */
-    private void linkContextAfterAlarmSaved(AlarmFact alarm) {
+    /**
+     * 用途：为已保存告警登记本地补链任务；入参为告警事实，无出参。
+     * 流程：未装配补链服务时跳过测试边界，否则只入队；本地失败向上传播，防止吞掉事务回滚标记。
+     */
+    private void enqueueContextAfterAlarmSaved(AlarmFact alarm) {
         if (contextLinkService == null || alarm == null) {
             return;
         }
-        try {
-            ContextLinkResult result = contextLinkService.link(alarm.tenantId(), alarm.id());
-            if (result.status() == ContextLinkResult.Status.RETRY_SCHEDULED
-                    || result.status() == ContextLinkResult.Status.NOT_DUE) {
-                log.debug("告警上下文补链已进入重试队列: alarmId={}, status={}", alarm.id(), result.status());
-            }
-        } catch (RuntimeException exception) {
-            // 生产告警是 IoT 本地事实；Core/任务库短暂不可用不能使遥测消费整体回滚。
-            log.warn("告警自动补链暂时失败，将由重试任务处理: alarmId={}", alarm.id(), exception);
-        }
+        // 修改用途：只隔离 Core 故障；本地事实与任务入库失败必须由同一事务回滚并触发消息重投。
+        contextLinkService.enqueue(alarm.tenantId(), alarm.id());
     }
 
     /** 从当前遥测消息中提取指定指标并转换为数值；缺失或不可解析时跳过该规则，不伪造指标值。 */

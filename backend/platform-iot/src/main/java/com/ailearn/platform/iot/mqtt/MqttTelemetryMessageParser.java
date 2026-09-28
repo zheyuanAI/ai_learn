@@ -63,16 +63,32 @@ public class MqttTelemetryMessageParser {
      * 流程：解析主题凭证 -> 校验凭证和设备归属 -> 解析载荷 -> 计算原始摘要 -> 委托既有摄取服务。
      */
     public TelemetryIngestionResult accept(String topic, byte[] payload) {
+        // MQTT 监听器需要先取得可信设备键，才能在并行消费时保持同设备消息顺序。
+        return consume(prepare(topic, payload));
+    }
+
+    /**
+     * 用途：解析并认证 Broker 消息；入参为主题和原始载荷；出参为包含可信租户与设备的摄取命令。
+     * 流程：校验主题凭证与身份断言，解析消息事实，不在此阶段启动遥测写事务。
+     */
+    TelemetryIngestionCommand prepare(String topic, byte[] payload) {
         String credentialReference = credentialReference(topic);
         Device device = credentialVerifier.verifyReference(credentialReference);
         JsonNode root = parsePayload(payload);
         validateOptionalIdentityClaims(root, credentialReference, device);
 
         OffsetDateTime receivedAt = OffsetDateTime.now(clock).withOffsetSameInstant(ZoneOffset.UTC);
-        TelemetryIngestionCommand command = new TelemetryIngestionCommand(
+        return new TelemetryIngestionCommand(
                 new TelemetryCredentialContext(device.tenantId(), device.id(), credentialReference),
                 device.id(), device.deviceCode(), timestamp(root), receivedAt,
                 text(root, "message_id"), sequence(root), metrics(root), sha256(payload));
+    }
+
+    /**
+     * 用途：消费已认证的遥测命令；入参为 prepare 返回的命令；出参为统一摄取结果。
+     * 流程：调用 Spring 代理的统一摄取入口，方法返回时写事务已经提交或抛出异常。
+     */
+    TelemetryIngestionResult consume(TelemetryIngestionCommand command) {
         return consumer.consume(command);
     }
 

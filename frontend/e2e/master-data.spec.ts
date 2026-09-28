@@ -12,7 +12,12 @@ const tenantCode = process.env.STAGE_UI_TENANT_CODE || "tenant_demo_a";
 async function login(page: Page): Promise<void> {
   test.skip(!username || !password, "需要 STAGE_UI_USERNAME 与 STAGE_UI_PASSWORD 执行主数据浏览器回归");
   await page.goto(`${baseURL}/login`);
-  await page.locator("#loginTenant, select[name='tenantCode']").first().selectOption(tenantCode);
+  // 登录页租户控件是 Element Plus 自定义下拉框；默认租户无需重复选择。
+  if (tenantCode !== "tenant_demo_a") {
+    // 修改用途：点击 Element Plus 外层可交互区域，输入框本身会被当前值遮挡。
+    await page.locator(".tech-select .el-select__wrapper").click();
+    await page.locator(".el-select-dropdown__item").filter({ hasText: tenantCode }).click();
+  }
   await page.locator("#loginUsername, input[name='username']").first().fill(username!);
   await page.locator("#loginPassword, input[name='password']").first().fill(password!);
   await page.locator("form.login-form button[type='submit'], button.login-submit-btn").first().click();
@@ -46,6 +51,8 @@ test.describe("主数据真实目录与 tab 状态", () => {
     await page.goto(`${baseURL}/master-data?tab=warehouses`);
     await expect(page).toHaveURL(/\/master-data\?tab=warehouses/);
     await expect(page.getByText("WH-REAL-01", { exact: true })).toBeVisible();
+    await expect(page.locator(".sub-nav-link.is-active")).toHaveCount(1);
+    await expect(page.locator(".sub-nav-link.is-active")).toContainText("仓库与库位");
 
     await page.getByRole("button", { name: /计量单位/ }).click();
     await expect(page).toHaveURL(/\/master-data\?tab=uoms/);

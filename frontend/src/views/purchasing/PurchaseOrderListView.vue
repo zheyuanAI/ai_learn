@@ -150,6 +150,7 @@
 
     <!-- 外观验收与接收弹窗 -->
     <ReceiptConfirmView
+      ref="receiptConfirmView"
       v-model:visible="isReceiptModalOpen"
       :order="selectedOrderForReceipt"
       :submitting="isReceiving"
@@ -339,6 +340,8 @@ const isDetailDrawerOpen = ref(false);
 const selectedOrderId = ref<string | number | null>(null);
 
 const isReceiptModalOpen = ref(false);
+// 修改用途：读取实际子弹窗草稿，提交事件的 payload 快照无法代表后续编辑。
+const receiptConfirmView = ref<{ getDraftSnapshot: () => string } | null>(null);
 const selectedOrderForReceipt = ref<PurchaseOrder | null>(null);
 const { execute, retry, isExecuting, canRetry, lastError } = useCommand();
 const isReceiving = isExecuting;
@@ -450,11 +453,16 @@ function openReceiptConfirm(row: PurchaseOrder) {
 
 async function handleConfirmReceipt(payload: any) {
   try {
-    const { receiptId: _ignoredClientId, ...requestPayload } = payload;
+    // 修改用途：深复制首次收货明细，同键重试不读取弹窗之后编辑的载荷。
+    const { receiptId: _ignoredClientId, ...requestPayload } = JSON.parse(JSON.stringify(payload));
+    const originalOrderId = selectedOrderForReceipt.value?.id;
+    const originalDraft = receiptConfirmView.value?.getDraftSnapshot();
     const receiptResponse = await execute(async (key) => {
       // 修改：收货事实 ID由服务端按幂等键分配，客户端不能用订单号、订单行 ID或随机 UUID代替。
       const response = await confirmPurchaseReceiptWithServerId(requestPayload, key);
-      isReceiptModalOpen.value = false;
+      // 修改用途：retry 成功仍恢复列表；用户已切换另一收货对象时保留新弹窗。
+      if (selectedOrderForReceipt.value?.id === originalOrderId
+        && receiptConfirmView.value?.getDraftSnapshot() === originalDraft) isReceiptModalOpen.value = false;
       await fetchOrders();
       return response;
     }, { onConflict: fetchOrders });
@@ -514,7 +522,8 @@ async function submitCreateOrder() {
     if (!warehouses.value.some((item) => String(item.id) === String(createForm.targetWarehouseId))) {
       throw new Error("仓库选项已失效，请重新搜索并选择真实仓库");
     }
-    await execute((key) => createPurchaseOrder({
+    // 修改用途：在首次执行前固定订单全部字段，编辑表单不会改变同键重试。
+    const requestPayload = {
       supplierId: createForm.supplierId,
       expectedArrivalDate: createForm.expectedArrivalDate,
       lines: [
@@ -526,10 +535,15 @@ async function submitCreateOrder() {
           sourceWorkOrderId: createForm.sourceWorkOrderId || undefined,
         },
       ],
-    }, key), { onConflict: fetchOrders });
-    isCreateModalOpen.value = false;
-    ElMessage.success("采购订单创建成功！");
-    await fetchOrders();
+    };
+    const originalForm = JSON.stringify(createForm);
+    await execute(async (key) => {
+      await createPurchaseOrder(requestPayload, key);
+      // 修改用途：成功处理纳入原命令，retry 同样刷新；编辑后的新草稿保持打开。
+      if (JSON.stringify(createForm) === originalForm) isCreateModalOpen.value = false;
+      ElMessage.success("采购订单创建成功！");
+      await fetchOrders();
+    }, { onConflict: fetchOrders });
   } catch (err: any) {
     ElMessage.error(err?.message || "创建采购单失败");
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }

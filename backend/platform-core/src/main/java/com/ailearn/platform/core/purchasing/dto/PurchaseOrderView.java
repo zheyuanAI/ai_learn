@@ -2,9 +2,11 @@ package com.ailearn.platform.core.purchasing.dto;
 
 import com.ailearn.platform.core.masterdata.dto.AllowedActionVo;
 import com.ailearn.platform.core.purchasing.domain.PurchaseOrder;
+import com.ailearn.platform.core.purchasing.domain.PurchaseOrderLineCumulative;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -47,6 +49,17 @@ public class PurchaseOrderView {
         this.version = order.version();
         this.lines = order.lines().stream().map(PurchaseOrderLineView::from).toList();
         this.allowedActions = allowedActions == null ? List.of() : List.copyOf(allowedActions);
+    }
+
+    /**
+     * 用真实事实累计构造订单详情；入参为订单、当前允许动作及按行 ID 聚合的数量；出参为详情视图。
+     * 流程：沿用现有生命周期字段，缺少履约事实的订单行显示真实零累计。
+     */
+    public PurchaseOrderView(PurchaseOrder order, List<AllowedActionVo> allowedActions,
+                             Map<UUID, PurchaseOrderLineCumulative> cumulatives) {
+        this(order, allowedActions);
+        this.lines = order.lines().stream().map(line -> PurchaseOrderLineView.from(line,
+                cumulatives.getOrDefault(line.id(), PurchaseOrderLineCumulative.ZERO))).toList();
     }
 
     public UUID getId() { return id; }

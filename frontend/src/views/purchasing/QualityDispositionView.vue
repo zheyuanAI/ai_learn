@@ -201,7 +201,12 @@
       </el-form>
       <template #footer>
         <el-button @click="isInspectOpen = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="submitInspect">
+        <el-button
+          v-if="hasPermission('pur:quality:inspect')"
+          type="primary"
+          :loading="submitting"
+          @click="submitInspect"
+        >
           确认提交检验事实
         </el-button>
       </template>
@@ -217,9 +222,21 @@
       <el-form label-width="120px" @submit.prevent="submitDecide">
         <el-form-item label="处置动作类型" required>
           <el-select v-model="decideForm.dispositionType" placeholder="请选择处置动作类型" style="width: 100%">
-            <el-option label="合格放行上架 (Release ➔ 移至收货暂存位)" value="Release" />
-            <el-option label="不合格报废处理 (Scrap ➔ 扣减实物库存)" value="Scrap" />
-            <el-option label="退回供应方 (Return ➔ 扣减实物库存)" value="Return" />
+            <el-option
+              v-if="hasPermission('pur:quality:release')"
+              label="合格放行上架 (Release ➔ 移至收货暂存位)"
+              value="Release"
+            />
+            <el-option
+              v-if="hasPermission('pur:quality:scrap')"
+              label="不合格报废处理 (Scrap ➔ 扣减实物库存)"
+              value="Scrap"
+            />
+            <el-option
+              v-if="hasPermission('pur:quality:return')"
+              label="退回供应方 (Return ➔ 扣减实物库存)"
+              value="Return"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="处置数量" required>
@@ -231,7 +248,12 @@
       </el-form>
       <template #footer>
         <el-button @click="isDecideOpen = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="submitDecide">
+        <el-button
+          v-if="hasDispositionPermission(decideForm.dispositionType)"
+          type="primary"
+          :loading="submitting"
+          @click="submitDecide"
+        >
           确认下达处置决定
         </el-button>
       </template>
@@ -456,6 +478,27 @@ const decideForm = reactive({
   reason: "",
 });
 
+/**
+ * 用途：把采购质检处置动作映射到后端权限码，避免同一弹窗提交无权动作。
+ * 入参：处置类型；出参：当前用户是否具有该处置决定权限。
+ */
+function hasDispositionPermission(type: "Release" | "Return" | "Scrap"): boolean {
+  const permissionByType = {
+    Release: "pur:quality:release",
+    Return: "pur:quality:return",
+    Scrap: "pur:quality:scrap",
+  } as const;
+  return hasPermission(permissionByType[type]);
+}
+
+/**
+ * 用途：为处置弹窗选择当前用户第一个可用动作，避免默认值指向无权的 Release。
+ * 入参：无；出参：可提交的处置类型，无权限时返回 undefined。
+ */
+function firstAllowedDispositionType(): "Release" | "Return" | "Scrap" | undefined {
+  return (["Release", "Return", "Scrap"] as const).find(hasDispositionPermission);
+}
+
 // 仓库执行弹窗
 const isExecuteOpen = ref(false);
 const selectedDisp = ref<PurchaseQualityDisposition | null>(null);
@@ -562,10 +605,14 @@ async function submitInspect() {
     return;
   }
   submitting.value = true;
+  // 修改用途：首次质检载荷按 JSON 请求语义固定，重试不读取可编辑表单。
+  const requestPayload = JSON.parse(JSON.stringify(inspectForm));
+  const originalForm = JSON.stringify(inspectForm);
   try {
     await execute(async (key) => {
-      await inspectQuality(inspectForm.purchaseReceiptId, { ...inspectForm }, key);
-      isInspectOpen.value = false;
+      await inspectQuality(requestPayload.purchaseReceiptId, requestPayload, key);
+      // 修改用途：重试成功只关闭原稿，不能清除后来编辑的检验草稿。
+      if (JSON.stringify(inspectForm) === originalForm) isInspectOpen.value = false;
       ElMessage.success("质检事实录入成功！");
       await loadData();
     }, { onConflict: loadData });
@@ -577,26 +624,43 @@ async function submitInspect() {
 }
 
 function openDecideModal(row: PurchaseQualityInspection) {
+  const firstAllowed = firstAllowedDispositionType();
+  if (!firstAllowed) {
+    ElMessage.warning("当前账号没有采购质量处置决定权限。");
+    return;
+  }
   selectedInspect.value = row;
   decideForm.dispositionQty = row.qualifiedQty;
-  decideForm.dispositionType = "Release";
+  decideForm.dispositionType = firstAllowed;
   isDecideOpen.value = true;
 }
 
 async function submitDecide() {
   if (!selectedInspect.value) return;
+  if (!hasDispositionPermission(decideForm.dispositionType)) {
+    ElMessage.warning("当前账号没有该采购质量处置决定权限。");
+    return;
+  }
   const inspection = selectedInspect.value;
+  // 修改用途：固定收货 ID 和处置决定字段，确保同键重试仍是原决定。
+  const receiptId = inspection.purchaseReceiptId;
+  const requestPayload = {
+    inspectionId: String(inspection.id),
+    dispositionType: decideForm.dispositionType,
+    dispositionQty: decideForm.dispositionQty,
+    reason: decideForm.reason,
+  };
+  const originalForm = JSON.stringify(decideForm);
   submitting.value = true;
   try {
-    await execute((key) => decideQualityDisposition(inspection.purchaseReceiptId, {
-      inspectionId: String(inspection.id),
-      dispositionType: decideForm.dispositionType,
-      dispositionQty: decideForm.dispositionQty,
-      reason: decideForm.reason,
-    }, key), { onConflict: loadData });
-    isDecideOpen.value = false;
-    ElMessage.success("处置决策下达成功！");
-    await loadData();
+    await execute(async (key) => {
+      await decideQualityDisposition(receiptId, requestPayload, key);
+      // 修改用途：retry 成功刷新事实，只关闭仍对应首次决定的弹窗。
+      if (String(selectedInspect.value?.id) === requestPayload.inspectionId
+        && JSON.stringify(decideForm) === originalForm) isDecideOpen.value = false;
+      ElMessage.success("处置决策下达成功！");
+      await loadData();
+    }, { onConflict: loadData });
   } catch (err: any) {
     ElMessage.error(err?.message || "下达处置失败");
   } finally {
@@ -653,16 +717,24 @@ async function executeDisposition() {
       return;
     }
   }
+  // 修改用途：固定本次处置 ID 和实际库位，失败后切换处置或库位不影响重试。
+  const dispositionId = String(disposition.id);
+  const requestPayload = {
+    dispositionId,
+    toLocationId: disposition.dispositionType === "Release" ? receivingStagingLocationId.value : undefined,
+    putawayTargetLocationId: putawayTargetLocationId.value || undefined,
+  };
   submitting.value = true;
   try {
-    await execute((key) => confirmQualityDisposition(String(disposition.id), {
-      dispositionId: String(disposition.id),
-      toLocationId: disposition.dispositionType === "Release" ? receivingStagingLocationId.value : undefined,
-      putawayTargetLocationId: putawayTargetLocationId.value || undefined,
-    }, key), { onConflict: loadData });
+    await execute(async (key) => {
+      await confirmQualityDisposition(dispositionId, requestPayload, key);
+      // 修改用途：retry 成功复读事实，用户已切换处置或库位时不关闭新弹窗。
+      if (String(selectedDisp.value?.id) === dispositionId
+        && (selectedDisp.value?.dispositionType !== "Release" || receivingStagingLocationId.value === requestPayload.toLocationId)
+        && (putawayTargetLocationId.value || undefined) === requestPayload.putawayTargetLocationId) isExecuteOpen.value = false;
+      await loadData();
+    }, { onConflict: loadData });
     const isRelease = disposition.dispositionType === "Release";
-    isExecuteOpen.value = false;
-    await loadData();
     if (isRelease) {
       try {
         await ElMessageBox.confirm(

@@ -239,6 +239,11 @@ public class UserAdminServiceImpl implements UserAdminService {
         UUID tenantId = TenantContextHolder.requireTenantId();
         String currentUsername = UserContextHolder.getUsername();
 
+        // 修改原因：更新角色可能撤销管理员身份，必须先串行化同租户管理员减少操作再检查数量。
+        if (request.getRoleIds() != null) {
+            lockTenantForAdminMutation(tenantId);
+        }
+
         User user = userMapper.findAnyStatusUserByIdAndTenantId(userId, tenantId);
         if (user == null || user.getIsdel() != 0) {
             throw new NotFoundException("用户不存在或不属于当前租户");
@@ -312,6 +317,11 @@ public class UserAdminServiceImpl implements UserAdminService {
         // 1. 防自停用/锁定保护
         if (currentUserId != null && currentUserId.equals(userId) && !"ACTIVE".equalsIgnoreCase(request.getStatus())) {
             throw new BizException(CommonErrorCode.BAD_REQUEST, "禁止停用或锁定当前登录自身账号");
+        }
+
+        // 修改原因：两个管理员不能同时读取旧计数后各自停用对方，租户行锁需覆盖计数与状态写入。
+        if (!"ACTIVE".equalsIgnoreCase(request.getStatus())) {
+            lockTenantForAdminMutation(tenantId);
         }
 
         User user = userMapper.findAnyStatusUserByIdAndTenantId(userId, tenantId);
@@ -400,6 +410,9 @@ public class UserAdminServiceImpl implements UserAdminService {
     public UserAdminVo assignRoles(UUID userId, UserRoleAssignRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
 
+        // 修改原因：全量替换角色可能撤销管理员身份，先锁租户再读取旧角色与活动管理员计数。
+        lockTenantForAdminMutation(tenantId);
+
         User user = userMapper.findAnyStatusUserByIdAndTenantId(userId, tenantId);
         if (user == null || user.getIsdel() != 0) {
             throw new NotFoundException("用户不存在或不属于当前租户");
@@ -448,6 +461,9 @@ public class UserAdminServiceImpl implements UserAdminService {
         if (currentUserId != null && currentUserId.equals(userId)) {
             throw new BizException(CommonErrorCode.BAD_REQUEST, "禁止删除当前登录自身账号");
         }
+
+        // 修改原因：两个管理员交叉删除必须在同租户内串行，避免两次 COUNT 都看到旧的 2 人。
+        lockTenantForAdminMutation(tenantId);
 
         User user = userMapper.findAnyStatusUserByIdAndTenantId(userId, tenantId);
         if (user == null || user.getIsdel() != 0) {
@@ -517,6 +533,16 @@ public class UserAdminServiceImpl implements UserAdminService {
         List<String> roleCodes = userMapper.findRoleCodesByUserIdAndTenantId(tenantId, userId);
         if (roleCodes == null) return false;
         return roleCodes.contains("tenant.admin") || roleCodes.contains("TENANT_ADMIN");
+    }
+
+    /**
+     * 在现有写事务内获取租户级管理员变更锁。
+     * 入参：可信租户 ID；出参：无；流程：锁定未删除租户行，若行不存在则拒绝继续修改用户。
+     */
+    private void lockTenantForAdminMutation(UUID tenantId) {
+        if (!tenantId.equals(userMapper.lockTenantForAdminMutation(tenantId))) {
+            throw new NotFoundException("租户不存在或已删除");
+        }
     }
 
     /**

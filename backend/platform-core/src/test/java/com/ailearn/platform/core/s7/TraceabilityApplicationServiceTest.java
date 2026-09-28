@@ -75,6 +75,70 @@ class TraceabilityApplicationServiceTest {
         assertEquals(1, result.nodes().size());
     }
 
+    /** 用途：复现告警先返回工单引用的真实路径；后续 Core 事实应补全状态和名称，晚到引用不能降级。 */
+    @Test
+    void shouldUpgradeContextReferenceWithoutDowngradingAuthoritativeFact() {
+        S7FactsFake facts = new S7FactsFake();
+        UUID alarmId = UUID.randomUUID();
+        UUID workOrderId = UUID.randomUUID();
+        UUID executionId = UUID.randomUUID();
+        TraceNode reference = new TraceNode(TENANT, "work_order", workOrderId,
+                "work-order-context", "CONTEXT_REFERENCE", "mes:workorder:view", null, false);
+        TraceNode actual = new TraceNode(TENANT, "work_order", workOrderId,
+                "SC-20260927-043", "Completed", "mes:workorder:view",
+                Instant.parse("2026-09-27T06:20:00Z"), true);
+        TraceNode execution = node(executionId, "operation_execution", "mes:execution:manage", true, TENANT);
+        facts.putTrace("iot", "alarm", alarmId, new TraceFacts(List.of(
+                node(alarmId, "alarm", "iot:alarm:view", true, TENANT),
+                node(executionId, "operation_execution", "mes:execution:manage", false, TENANT), reference),
+                List.of(new TraceLink("alarm", alarmId, "operation_execution", executionId, "business_context"),
+                        new TraceLink("alarm", alarmId, "work_order", workOrderId, "business_context")),
+                Instant.parse("2026-09-27T06:00:00Z"), "iot上下文引用"));
+        // 修改用途：与真实适配器一样，先展开工序并遇到 complete=true 的通用工单引用，再直接查询工单。
+        facts.putTrace("manufacturing", "operation_execution", executionId, new TraceFacts(List.of(execution,
+                new TraceNode(TENANT, "work_order", workOrderId, "work-order-" + workOrderId,
+                        "ACTIVE", "mes:workorder:view", execution.sourceUpdatedAt(), true)),
+                List.of(), execution.sourceUpdatedAt(), "工序关联工单"));
+        facts.putTrace("inventory", "work_order", workOrderId, new TraceFacts(List.of(
+                new TraceNode(TENANT, "work_order", workOrderId, "work_order-" + workOrderId,
+                        "RECORDED", "mes:workorder:view", null, true)), List.of(), null, "库存来源占位"));
+        facts.putTrace("manufacturing", "work_order", workOrderId,
+                new TraceFacts(List.of(actual), List.of(), actual.sourceUpdatedAt(), "真实工单"));
+        facts.putTrace("iot", "work_order", workOrderId,
+                new TraceFacts(List.of(reference), List.of(), null, "再次遇到引用"));
+        var context = S7TestSupport.context(TENANT, "perm-complete", "trace:chain:view",
+                "iot:alarm:view", "mes:workorder:view", "mes:execution:manage");
+
+        TraceabilityProjection result = traceService(facts).query(new TraceabilityQuery(context, "alarm", alarmId));
+
+        assertEquals(actual, result.nodes().stream().filter(value -> value.entityId().equals(workOrderId)).findFirst().orElseThrow());
+        assertEquals(3, result.nodes().size());
+        assertEquals(2, result.links().size());
+        assertEquals(0, result.hiddenNodeCount());
+        assertTrue(!result.truncated());
+    }
+
+    /** 用途：同标识的跨租户或无权限完整节点不得补全可见引用，避免升级时绕过原有裁剪。 */
+    @Test
+    void shouldNotUpgradeReferenceUsingUnauthorizedOrCrossTenantFact() {
+        S7FactsFake facts = new S7FactsFake();
+        UUID workOrderId = UUID.randomUUID();
+        TraceNode reference = node(workOrderId, "work_order", "mes:workorder:view", false, TENANT);
+        facts.putTrace("inventory", "work_order", workOrderId,
+                new TraceFacts(List.of(reference), List.of(), null, "可见引用"));
+        facts.putTrace("manufacturing", "work_order", workOrderId, new TraceFacts(List.of(
+                node(workOrderId, "work_order", "mes:workorder:view", true, OTHER_TENANT),
+                node(workOrderId, "work_order", "mes:execution:manage", true, TENANT)),
+                List.of(), null, "不可见完整事实"));
+        var context = S7TestSupport.context(TENANT, "perm-reference", "trace:chain:view", "mes:workorder:view");
+
+        TraceabilityProjection result = traceService(facts).query(new TraceabilityQuery(context, "work_order", workOrderId));
+
+        assertEquals(List.of(reference), result.nodes());
+        assertEquals(1, result.hiddenNodeCount());
+        assertTrue(result.links().isEmpty());
+    }
+
     private static TraceabilityApplicationService traceService(S7FactsFake facts) {
         return new TraceabilityApplicationService(facts, facts, facts, facts, facts, facts,
                 java.time.Clock.fixed(Instant.parse("2026-09-04T00:00:00Z"), ZoneId.of("UTC")));

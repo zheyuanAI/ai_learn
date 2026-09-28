@@ -98,6 +98,9 @@ import StatusBadge from "@/components/common/StatusBadge.vue";
 import QuantityText from "@/components/common/QuantityText.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import type { TransferOrder } from "@/types/inventory";
+import { usePermission } from "@/composables/usePermission";
+
+const { hasPermission } = usePermission();
 
 const props = withDefaults(
   defineProps<{
@@ -135,6 +138,7 @@ const displayToLocation = computed(() => props.transfer?.toLocationCode || props
 const canConfirm = computed(() => {
   if (!props.transfer) return false;
   if (props.transfer.status !== "Draft") return false;
+  if (!hasPermission("inv:transfer:confirm")) return false;
   // 依据 allowedActions 判定
   if (props.transfer.allowedActions) {
     const act = props.transfer.allowedActions.find((a) => a.action === "confirm");

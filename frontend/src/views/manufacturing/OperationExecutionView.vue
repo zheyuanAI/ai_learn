@@ -8,7 +8,12 @@
       description="工序执行记录现场真实的加工动作生命周期。只有在此处触发【开始】执行后，对应工单才正式推进为【生产中】。"
     >
       <template #actions>
-        <el-button type="primary" :icon="Plus" @click="openCreateModal">
+        <el-button
+          v-if="hasPermission('mes:execution:manage')"
+          type="primary"
+          :icon="Plus"
+          @click="openCreateModal"
+        >
           发起工序执行
         </el-button>
       </template>
@@ -111,7 +116,7 @@
         <div style="display: flex; gap: 6px; justify-content: center; flex-wrap: wrap">
           <!-- 开始 (NotStarted -> Running) -->
           <el-button
-            v-if="row.status === 'NotStarted'"
+            v-if="row.status === 'NotStarted' && hasPermission('mes:execution:manage')"
             type="success"
             link
             size="small"
@@ -124,7 +129,7 @@
 
           <!-- 暂停 (Running -> Paused) -->
           <el-button
-            v-if="row.status === 'Running'"
+            v-if="row.status === 'Running' && hasPermission('mes:execution:manage')"
             type="warning"
             link
             size="small"
@@ -137,7 +142,7 @@
 
           <!-- 恢复 (Paused -> Running) -->
           <el-button
-            v-if="row.status === 'Paused'"
+            v-if="row.status === 'Paused' && hasPermission('mes:execution:manage')"
             type="primary"
             link
             size="small"
@@ -150,7 +155,7 @@
 
           <!-- 完成 (Running -> Completed) -->
           <el-button
-            v-if="row.status === 'Running'"
+            v-if="row.status === 'Running' && hasPermission('mes:execution:manage')"
             type="success"
             link
             size="small"
@@ -163,7 +168,7 @@
 
           <!-- 报工 (仅 Completed，和后端 MES_FACT_001 规则一致) -->
           <el-button
-            v-if="row.status === 'Completed'"
+            v-if="row.status === 'Completed' && hasPermission('mes:report:manage')"
             type="primary"
             link
             size="small"
@@ -311,9 +316,6 @@ import CommandFeedback from "@/components/common/CommandFeedback.vue";
 import { useRoute, useRouter } from "vue-router";
 import { isActionAllowed as checkAction, getActionDisabledReason as getDisabledReason } from "../../utils/actionGuard";
 import type { AllowedAction } from "../../types/common";
-
-const route = useRoute();
-const router = useRouter();
 import {
   PageHeader,
   FilterBar,
@@ -346,8 +348,13 @@ import {
 import { getProducts } from "../../api/masterData";
 import { getDevices } from "../../api/iot";
 import { getOperatorDirectory } from "../../api/auth";
+import { usePermission } from "../../composables/usePermission";
 import { stringAdd } from "../../types/inventory";
 import { currentLocalDateTimeValue } from "../../utils/dateTime";
+
+const route = useRoute();
+const router = useRouter();
+const { hasPermission } = usePermission();
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
@@ -544,13 +551,17 @@ async function openCreateModal() {
 
 async function submitCreateExecution() {
   if (!createForm.dispatchOrderId) return;
+  // 修改用途：固定首次执行实例关联字段，同键重试不读取变化后的派工和设备。
+  const requestPayload = JSON.parse(JSON.stringify(createForm));
+  const originalForm = JSON.stringify(createForm);
   try {
     await execute(async (key) => {
-      const created = await createOperationExecution(createForm, key);
+      const created = await createOperationExecution(requestPayload, key);
       if (!created?.data?.id) {
         throw new Error("服务端未返回 operationExecutionId，已阻止继续报工");
       }
-      createModalVisible.value = false;
+      // 修改用途：成功及 retry 只关闭首次执行草稿，后来编辑的新稿保留。
+      if (JSON.stringify(createForm) === originalForm) createModalVisible.value = false;
       ElMessage.success("工序执行创建成功！");
       await fetchExecutionList();
     }, { onConflict: fetchExecutionList });
@@ -575,10 +586,15 @@ function openPauseModal(item: OperationExecutionItem) {
 
 async function submitPause() {
   if (!activeExec.value) return;
+  // 修改用途：固定首次暂停的执行 ID 和原因，切换对象后仍重试原命令。
+  const executionId = activeExec.value.id as string;
+  const reason = pauseReason.value;
+  const occurredAt = new Date().toISOString();
   try {
     await execute(async (key) => {
-      await pauseOperationExecution(activeExec.value!.id as string, pauseReason.value, key);
-      pauseModalVisible.value = false;
+      await pauseOperationExecution(executionId, reason, key, occurredAt);
+      // 修改用途：暂停重试成功不能关闭后来选择的执行对象或新原因表单。
+      if (activeExec.value?.id === executionId && pauseReason.value === reason) pauseModalVisible.value = false;
       ElMessage.success("工序已暂停！");
       await fetchExecutionList();
     }, { onConflict: fetchExecutionList });
@@ -605,18 +621,22 @@ function handleComplete(item: OperationExecutionItem) {
 
 async function executeConfirmAction() {
   if (!confirmState.targetItem) return;
+  // 修改用途：保留仅开始、恢复和完成可执行的边界，未知动作不能默认触发完成。
+  if (!["start", "resume", "complete"].includes(confirmState.type)) return;
+  // 修改用途：工序事件时间只在首次确认时生成，同键重试保持原始事件载荷。
+  const occurredAt = new Date().toISOString();
   confirmState.loading = true;
   try {
     const id = confirmState.targetItem.id as string;
-    if (confirmState.type === "start") {
-      await execute((key) => startOperationExecution(id, key), { onConflict: fetchExecutionList });
-    } else if (confirmState.type === "resume") {
-      await execute((key) => resumeOperationExecution(id, key), { onConflict: fetchExecutionList });
-    } else if (confirmState.type === "complete") {
-      await execute((key) => completeOperationExecution(id, key), { onConflict: fetchExecutionList });
-    }
-    confirmState.visible = false;
-    await fetchExecutionList();
+    const actionType = confirmState.type;
+    const operation = actionType === "start" ? startOperationExecution
+      : actionType === "resume" ? resumeOperationExecution : completeOperationExecution;
+    await execute(async (key) => {
+      await operation(id, key, occurredAt);
+      // 修改用途：成功恢复放进原命令，retry 仍刷新事实且不关闭另一个确认对象。
+      if (confirmState.targetItem?.id === id && confirmState.type === actionType) confirmState.visible = false;
+      await fetchExecutionList();
+    }, { onConflict: fetchExecutionList });
   } catch (err: any) {
     ElMessage.error(`操作失败：${err.message}`);
   } finally {
@@ -640,7 +660,8 @@ async function submitWorkReport() {
   // 修改用途：报工单号是服务端事实的必填标识，由页面一次生成并在幂等执行期间复用。
   const reportNo = `RPT-${crypto.randomUUID()}`;
   try {
-    const created = await execute((key) => createWorkReport({
+    // 修改用途：一次固定报工标识、数量、时间和备注，编辑表单不改变同键重试。
+    const requestPayload = {
       reportNo,
       operationExecutionId: execution.id as string,
       workOrderId: woId,
@@ -649,12 +670,17 @@ async function submitWorkReport() {
       defectQty: reportForm.defectQty,
       reportTime: new Date(reportForm.reportTime).toISOString(),
       remark: reportForm.remark,
-    }, key), { onConflict: fetchExecutionList });
-    if (!created?.data?.id) {
-      throw new Error("服务端未返回 workReportId，已阻止继续发起质检");
-    }
-    reportModalVisible.value = false;
-    await fetchExecutionList();
+    };
+    const originalForm = JSON.stringify(reportForm);
+    await execute(async (key) => {
+      const created = await createWorkReport(requestPayload, key);
+      if (!created?.data?.id) throw new Error("服务端未返回 workReportId，已阻止继续发起质检");
+      // 修改用途：retry 成功也刷新报工事实，保留后来选择的执行对象或编辑的新报工草稿。
+      if (activeExec.value?.id === requestPayload.operationExecutionId
+        && JSON.stringify(reportForm) === originalForm) reportModalVisible.value = false;
+      await fetchExecutionList();
+      return created;
+    }, { onConflict: fetchExecutionList });
     try {
       await ElMessageBox.confirm("工序报工已提交成功！是否前往生产工单详情办理【生产质检】与成品入库？", "报工成功", {
         confirmButtonText: "前往办理",

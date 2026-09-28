@@ -93,3 +93,9 @@
 - `e2e/detail-navigation.spec.ts`：`1 passed、1 expected skip`；采购、销售、调拨详情完成深链、刷新、后退和前进验证。
 - `e2e/dashboard-states.spec.ts` + `e2e/insights.spec.ts`：`5/5`；覆盖空/缺失指标、503、stale/no-cache、模拟链路标识、告警确认与追溯断链。超时/网络结果不确定由 `src/composables/__tests__/useCommand.test.ts` 覆盖。
 - 完整 `npx playwright test --project=chromium`：`23 passed、11 skipped、0 failed`；11 条均为已声明的事实/角色门禁，不是隐藏失败。
+
+### 并发请求与命令重试修复（2026-09-27）
+
+采购、销售详情只接受最新有效查询响应；销售库位和拣货余额查询同步校验当前请求。两个详情页面的同键重试保留首次订单与载荷，新增实际 SFC 脚本行为回归。验证范围和后续工作见 [项目检查与并发修复记录](../docs/verification/2026-09-27-project-health-and-concurrency.md)。
+
+后续已补齐采购与制造现有命令的首次载荷/业务时间快照，以及重试成功后的刷新和关窗；切换对象或编辑新稿后保留当前表单。同单刷新不覆盖收货、发货在编草稿，正常退出不误报 401。采购详情不把缺失累计量当作零，MES 详情显示真实领退料和工序事实；最终完整单测 181 项与构建通过，实际角色页面及业务链路证据见 [非 AI 并发与六岗位验收](../docs/verification/2026-09-27-non-ai-concurrency-and-role-flow.md)。

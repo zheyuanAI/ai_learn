@@ -11,12 +11,21 @@ import java.util.List;
 import java.util.UUID;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
 /**
  * 用户 Mapper 数据访问接口。
  */
 @Mapper
 public interface UserMapper extends BaseMapper<User> {
+
+    /**
+     * 锁定当前租户行，串行化可能移除活动管理员的操作。
+     * 入参：可信租户 ID；出参：存在且未删除的租户 ID，缺失时为 null；
+     * 流程：在调用方已有事务内获取行锁并保持到提交，再由调用方重新读取管理员数量。
+     */
+    @Select("SELECT id FROM auth_tenant WHERE id = #{tenantId} AND isdel = 0 FOR UPDATE")
+    UUID lockTenantForAdminMutation(@Param("tenantId") UUID tenantId);
 
     /**
      * 根据租户 ID 与用户名查找未删除的用户。

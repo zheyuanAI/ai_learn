@@ -12,6 +12,7 @@ import DomainView from "../views/DomainView.vue";
 import NotFoundView from "../views/NotFoundView.vue";
 import ForbiddenView from "../views/ForbiddenView.vue";
 import { useAuthStore } from "../stores/auth";
+import { hasAnyRoutePermission } from "./menuRouteMap";
 
 /**
  * 用途：构造旧地址到正式业务地址的重定向结果。
@@ -566,9 +567,9 @@ router.beforeEach(async (to, from, next) => {
   const requiredPermission = to.meta.requiredPermission as string | string[] | undefined;
   if (requiredPermission && isLoggedIn) {
     const userPerms = authStore.permissions || [];
-    const needed = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
-    const hasPermission = needed.some((perm) => userPerms.includes(perm));
-    if (!hasPermission && to.path !== "/forbidden") {
+    // 修改用途：复用菜单过滤的权限规范化和 :manage 覆盖语义，避免菜单可见性与直达页面访问不一致。
+    const canAccess = hasAnyRoutePermission(requiredPermission, userPerms);
+    if (!canAccess && to.path !== "/forbidden") {
       next({
         path: "/forbidden",
         query: {

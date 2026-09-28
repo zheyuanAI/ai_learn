@@ -9,7 +9,7 @@
       <div class="header-tags" style="display: flex; align-items: center; gap: 12px">
         <span class="font-mono text-muted">工单 ID: {{ workOrder?.id || id }}</span>
         <el-button
-          v-if="workOrder"
+          v-if="workOrder && hasPermission('trace:chain:view')"
           type="primary"
           link
           :icon="Search"
@@ -48,8 +48,9 @@
               />
             </div>
             <p class="product-line">
-              <strong>{{ workOrder.productName }}</strong>
-              <span class="spec font-mono text-muted">（{{ workOrder.productSpec || workOrder.productCode }}）</span>
+              <!-- 修改用途：工单 DTO 只提供产品 ID，名称未补充时显示真实身份，避免空括号。 -->
+              <strong>{{ workOrder.productName || workOrder.productId }}</strong>
+              <span v-if="workOrder.productSpec || workOrder.productCode" class="spec font-mono text-muted">（{{ workOrder.productSpec || workOrder.productCode }}）</span>
             </p>
           </div>
 
@@ -57,7 +58,7 @@
           <div class="banner-actions" style="display: flex; gap: 8px; flex-wrap: wrap">
             <!-- 去排产派工 (Released 状态快捷跳转) -->
             <el-button
-              v-if="workOrder.status === 'Released'"
+              v-if="workOrder.status === 'Released' && hasPermission('mes:dispatch:manage')"
               type="primary"
               title="前往生产派工页面创建工序派工"
               @click="router.push(`/mes/dispatch?workOrderId=${workOrder.id}`)"
@@ -67,7 +68,7 @@
 
             <!-- 办理成品入库 (已开工或已下达状态) -->
             <el-button
-              v-if="workOrder.status === 'InProgress' || workOrder.status === 'Released'"
+              v-if="(workOrder.status === 'InProgress' || workOrder.status === 'Released') && hasAnyPermission('mes:finished:receipt', 'mes:finished:confirm')"
               type="primary"
               plain
               title="前往产成品入库页面办理入库"
@@ -78,7 +79,7 @@
 
             <!-- 提交审核 -->
             <el-button
-              v-if="workOrder.status === 'Draft' || workOrder.status === 'Rejected'"
+              v-if="(workOrder.status === 'Draft' || workOrder.status === 'Rejected') && hasPermission('mes:workorder:submit')"
               type="primary"
               :disabled="!isActionAllowed('submit')"
               :title="getActionDisabledReason('submit') || '提交审核'"
@@ -88,7 +89,7 @@
             </el-button>
 
             <!-- 审批通过与驳回 -->
-            <template v-if="workOrder.status === 'PendingApproval'">
+            <template v-if="workOrder.status === 'PendingApproval' && hasPermission('mes:workorder:approve')">
               <el-button
                 type="success"
                 :disabled="!isActionAllowed('approve')"
@@ -109,7 +110,7 @@
 
             <!-- 正常完工 -->
             <el-button
-              v-if="workOrder.status === 'InProgress'"
+              v-if="workOrder.status === 'InProgress' && hasPermission('mes:workorder:complete')"
               type="success"
               :disabled="!isActionAllowed('complete')"
               :title="getActionDisabledReason('complete') || '正常完成工单'"
@@ -120,7 +121,7 @@
 
             <!-- 手工强制结案 -->
             <el-button
-              v-if="workOrder.status === 'Released' || workOrder.status === 'InProgress'"
+              v-if="(workOrder.status === 'Released' || workOrder.status === 'InProgress') && hasPermission('mes:workorder:complete')"
               type="info"
               plain
               :disabled="!isActionAllowed('manualComplete')"
@@ -205,7 +206,7 @@
               </el-table-column>
               <el-table-column label="工序步骤" min-width="160">
                 <template #default="{ row }">
-                  {{ row.operationName }} (#{{ row.operationNo }})
+                  {{ getOperationLabel(row) }}
                 </template>
               </el-table-column>
               <el-table-column label="派工数量" width="120" align="right">
@@ -220,7 +221,7 @@
               </el-table-column>
               <el-table-column label="绑定设备" min-width="160">
                 <template #default="{ row }">
-                  <span class="font-mono">{{ row.deviceName || row.deviceCode || "通用人工工位" }}</span>
+                  <span class="font-mono">{{ getDeviceLabel(row) }}</span>
                 </template>
               </el-table-column>
               <el-table-column label="派工状态" width="120" align="center">
@@ -242,7 +243,9 @@
                   <span class="font-mono highlight-code">{{ row.executionNo }}</span>
                 </template>
               </el-table-column>
-              <el-table-column prop="operationName" label="执行工序" min-width="160" />
+              <el-table-column label="执行工序" min-width="160">
+                <template #default="{ row }">{{ getOperationLabel(row) }}</template>
+              </el-table-column>
               <el-table-column label="执行人" width="130">
                 <template #default="{ row }">
                   {{ row.operatorName || row.operatorId }}
@@ -281,7 +284,8 @@
           </el-tab-pane>
 
           <!-- Tab 4: 领退料 -->
-          <el-tab-pane :label="`生产领料 / 退料 (${materialIssues.length + materialReturns.length})`" name="movement">
+          <!-- 修改用途：没有领退料查询权限时隐藏事实页签，不能把未查询显示为零记录。 -->
+          <el-tab-pane v-if="canReadMaterials" :label="`生产领料 / 退料 (${materialIssues.length + materialReturns.length})`" name="movement">
             <div class="movement-split" style="display: flex; gap: 16px; flex-wrap: wrap">
               <div class="split-card" style="flex: 1; min-width: 320px">
                 <h4 class="sub-title" style="margin-bottom: 10px; color: #f1f5f9">领料单 (Material Issues)</h4>
@@ -299,6 +303,14 @@
                   <el-table-column label="物料项数" width="110" align="right">
                     <template #default="{ row }">
                       {{ row.items?.length || 0 }} 项原料
+                    </template>
+                  </el-table-column>
+                  <!-- 修改用途：直接显示查询 DTO 的各明细数量，不把单据项数当作领料数量。 -->
+                  <el-table-column label="领料数量" min-width="120" align="right">
+                    <template #default="{ row }">
+                      <div v-for="item in row.items" :key="item.id || item.productId">
+                        <QuantityText :value="item.issueQty" :unit="item.uom || ''" />
+                      </div>
                     </template>
                   </el-table-column>
                   <el-table-column prop="confirmedAt" label="出库确认时间" width="150">
@@ -325,6 +337,14 @@
                   <el-table-column label="退料项数" width="110" align="right">
                     <template #default="{ row }">
                       {{ row.items?.length || 0 }} 项原料
+                    </template>
+                  </el-table-column>
+                  <!-- 修改用途：退料查询使用 returnQty，保持服务端原始数量，不自行推算。 -->
+                  <el-table-column label="退料数量" min-width="120" align="right">
+                    <template #default="{ row }">
+                      <div v-for="item in row.items" :key="item.id || item.productId">
+                        <QuantityText :value="item.returnQty" :unit="item.uom || ''" />
+                      </div>
                     </template>
                   </el-table-column>
                   <el-table-column prop="confirmedAt" label="退库确认时间" width="150">
@@ -440,7 +460,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from "vue";
+import { ref, reactive, computed, onMounted, watch } from "vue";
 import { ArrowLeft, Search } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { useCommand } from "@/composables/useCommand";
@@ -463,6 +483,7 @@ import type {
   OperationExecutionItem,
   FinishedGoodsReceiptItem,
 } from "../../types/manufacturing";
+import { usePermission } from "../../composables/usePermission";
 import {
   getWorkOrderDetail,
   getWorkOrders,
@@ -474,7 +495,11 @@ import {
   getDispatchOrders,
   getOperationExecutions,
   getFinishedGoodsReceipts,
+  getMaterialIssues,
+  getMaterialReturns,
+  getRoutingById,
 } from "../../api/manufacturing";
+import { getProductById } from "../../api/masterData";
 
 const props = withDefaults(
   defineProps<{
@@ -491,6 +516,9 @@ const emit = defineEmits<{
 
 const route = useRoute();
 const router = useRouter();
+const { hasPermission, hasAnyPermission } = usePermission();
+// 修改用途：与 ProductionFactController 的两个 GET 权限保持一致，独立于工单查看权限。
+const canReadMaterials = computed(() => hasAnyPermission("mes:material:requisition", "mes:material:confirm"));
 
 function handleBack() {
   emit("back");
@@ -519,6 +547,8 @@ const executions = ref<OperationExecutionItem[]>([]);
 const materialIssues = ref<any[]>([]);
 const materialReturns = ref<any[]>([]);
 const finishedReceipts = ref<FinishedGoodsReceiptItem[]>([]);
+// 修改用途：详情及名称补读共享请求世代，切换工单或重复刷新时旧响应不能覆盖当前事实。
+let loadGeneration = 0;
 
 const rejectModalVisible = ref(false);
 const rejectionReason = ref("");
@@ -570,40 +600,85 @@ function getActionDisabledReason(action: string): string | undefined {
 }
 
 /**
- * 加载工单详情以及全部关联单据
+ * 用途：读取工单及关联事实，并按已授权的主数据详情补充名称。
+ * 入参：当前 props.id；出参：更新页面状态，无返回数据；流程：读取扁平工单 DTO，
+ * 并行取得派工、执行、领退料与入库，仅当前请求世代可以提交页面状态；名称缺失时保留真实 ID。
  */
 async function loadAllData() {
+  const generation = ++loadGeneration;
+  const targetId = props.id;
+  const isCurrent = () => generation === loadGeneration && props.id === targetId;
   viewState.value = "loading";
   errorMessage.value = "";
   try {
-    const targetId = props.id;
     if (!targetId) {
+      workOrder.value = null;
       viewState.value = "empty";
       return;
     }
     const res = await getWorkOrderDetail(targetId);
-    workOrder.value = res.data || null;
+    if (!isCurrent()) return;
+    const order = res.data;
 
-    if (workOrder.value) {
-      const wid = workOrder.value.id as string;
-      const [dspRes, exeRes, fgRes] = await Promise.all([
+    if (order) {
+      const wid = order.id as string;
+      const [dspRes, exeRes, fgRes, issueRes, returnRes, productRes, routingRes] = await Promise.all([
         getDispatchOrders({ workOrderId: wid }),
         getOperationExecutions({ workOrderId: wid }),
         getFinishedGoodsReceipts(wid),
+        // 修改用途：没有关联事实权限时不请求接口，避免 403 使合法工单查询整体失败；对应页签同时隐藏。
+        canReadMaterials.value ? getMaterialIssues(wid) : Promise.resolve({ data: [] }),
+        canReadMaterials.value ? getMaterialReturns(wid) : Promise.resolve({ data: [] }),
+        // 修改用途：仅补读拥有查看权限的现有详情端点，目录不可用不伪造名称或阻断工单事实。
+        hasPermission("inv:product:view") ? getProductById(order.productId).catch(() => null) : Promise.resolve(null),
+        hasPermission("mes:routing:view") ? getRoutingById(order.routingId).catch(() => null) : Promise.resolve(null),
       ]);
-      dispatchOrders.value = dspRes.data?.records || [];
-      executions.value = exeRes.data?.records || [];
-      // 后端未提供领退料列表读取接口，页面不伪造历史事实。
+      if (!isCurrent()) return;
+      const product = productRes?.data;
+      const routing = routingRes?.data;
+      const operations = new Map((routing?.operations || []).map(operation => [operation.id, operation] as const));
+      // 修改用途：只按服务端工序 ID 关联路线明细，保留服务端已有名称和工序号，找不到时由模板显示 ID。
+      const withOperation = <T extends DispatchOrderItem | OperationExecutionItem>(row: T): T => {
+        const operation = operations.get(row.operationId);
+        return { ...row, operationName: row.operationName || operation?.operationName,
+          operationNo: row.operationNo ?? operation?.operationNo };
+      };
+      workOrder.value = { ...order, productName: product?.name || order.productName,
+        // 修改用途：Product 正式编码字段为 sku，不推断不存在的 code。
+        productSpec: product?.spec || order.productSpec, productCode: product?.sku || order.productCode,
+        routingCode: routing?.routingCode || order.routingCode };
+      dispatchOrders.value = (dspRes.data?.records || []).map(withOperation);
+      executions.value = (exeRes.data?.records || []).map(withOperation);
+      // 修改用途：复用已实现的指定工单领退料数组接口，查询失败进入错误态，不能伪装为零单据。
+      materialIssues.value = issueRes.data || [];
+      materialReturns.value = returnRes.data || [];
+      finishedReceipts.value = fgRes.data || [];
+    } else {
+      workOrder.value = null;
+      dispatchOrders.value = [];
+      executions.value = [];
       materialIssues.value = [];
       materialReturns.value = [];
-      finishedReceipts.value = fgRes.data || [];
+      finishedReceipts.value = [];
     }
 
     viewState.value = workOrder.value ? "ready" : "empty";
   } catch (err: any) {
+    if (!isCurrent()) return;
     errorMessage.value = err.message || "加载工单全景数据失败";
     viewState.value = "error";
   }
+}
+
+/** 用途：显示工序名称或真实 ID；入参为派工/执行行，返回标签；只在后端提供工序号时追加编号。 */
+function getOperationLabel(row: DispatchOrderItem | OperationExecutionItem): string {
+  const name = row.operationName || row.operationId;
+  return row.operationNo == null ? name : `${name} (#${row.operationNo})`;
+}
+
+/** 用途：显示真实设备绑定；入参为派工行，返回名称、编码或 ID；仅未提供设备 ID 时显示未绑定。 */
+function getDeviceLabel(row: DispatchOrderItem): string {
+  return row.deviceName || row.deviceCode || row.deviceId || "未绑定设备";
 }
 
 function promptAction(type: "submit" | "approve" | "complete", title: string, message: string) {
@@ -615,18 +690,20 @@ function promptAction(type: "submit" | "approve" | "complete", title: string, me
 
 async function executePromptAction() {
   if (!workOrder.value) return;
+  // 修改用途：只执行已有三种确认动作，未知动作不能默认触发工单完工。
+  if (!["submit", "approve", "complete"].includes(confirmState.actionType)) return;
   confirmState.loading = true;
   try {
     const wid = workOrder.value.id as string;
-    if (confirmState.actionType === "submit") {
-      await execute((key) => submitWorkOrder(wid, key), { onConflict: loadAllData });
-    } else if (confirmState.actionType === "approve") {
-      await execute((key) => approveWorkOrder(wid, key), { onConflict: loadAllData });
-    } else if (confirmState.actionType === "complete") {
-      await execute((key) => completeWorkOrder(wid, undefined, key), { onConflict: loadAllData });
-    }
-    confirmState.visible = false;
-    await loadAllData();
+    const actionType = confirmState.actionType;
+    const operation = (key: string) => actionType === "submit" ? submitWorkOrder(wid, key)
+      : actionType === "approve" ? approveWorkOrder(wid, key) : completeWorkOrder(wid, undefined, key);
+    await execute(async (key) => {
+      await operation(key);
+      // 修改用途：retry 成功恢复原工单，不关闭后来切换的工单确认弹窗。
+      if (workOrder.value?.id === wid && confirmState.actionType === actionType) confirmState.visible = false;
+      if (props.id === wid && workOrder.value?.id === wid) await loadAllData();
+    }, { onConflict: loadAllData });
   } catch (err: any) {
     ElMessage.error(`操作失败：${err.message}`);
   } finally {
@@ -641,13 +718,16 @@ function openRejectModal() {
 
 async function submitReject() {
   if (!workOrder.value || !rejectionReason.value.trim()) return;
-  const currentWorkOrder = workOrder.value;
+  // 修改用途：固定首次退回工单及原因，同键重试不读取后来选择的工单或表单。
+  const workOrderId = workOrder.value.id as string;
+  const reason = rejectionReason.value.trim();
   isSubmitting.value = true;
   try {
     await execute(async (key) => {
-      await rejectWorkOrder(currentWorkOrder.id as string, rejectionReason.value.trim(), key);
-      rejectModalVisible.value = false;
-      await loadAllData();
+      await rejectWorkOrder(workOrderId, reason, key);
+      // 修改用途：retry 成功只关闭原退回草稿，不覆盖另一个工单或新原因。
+      if (workOrder.value?.id === workOrderId && rejectionReason.value.trim() === reason) rejectModalVisible.value = false;
+      if (props.id === workOrderId && workOrder.value?.id === workOrderId) await loadAllData();
     }, { onConflict: loadAllData });
   } catch (err: any) {
     ElMessage.error(`退回失败：${err.message}`);
@@ -663,10 +743,16 @@ function openManualCompleteModal() {
 
 async function submitManualComplete() {
   if (!workOrder.value || !manualCompleteReason.value.trim()) return;
+  // 修改用途：固定首次结案的工单 ID 和原因，保持同键重试语义一致。
+  const workOrderId = workOrder.value.id as string;
+  const reason = manualCompleteReason.value.trim();
   try {
-    await execute((key) => manualCompleteWorkOrder(workOrder.value!.id as string, manualCompleteReason.value.trim(), key), { onConflict: loadAllData });
-    manualModalVisible.value = false;
-    await loadAllData();
+    await execute(async (key) => {
+      await manualCompleteWorkOrder(workOrderId, reason, key);
+      // 修改用途：retry 成功恢复原结案；用户已经换工单或编辑新原因时保留当前表单。
+      if (workOrder.value?.id === workOrderId && manualCompleteReason.value.trim() === reason) manualModalVisible.value = false;
+      if (props.id === workOrderId && workOrder.value?.id === workOrderId) await loadAllData();
+    }, { onConflict: loadAllData });
   } catch (err: any) {
     ElMessage.error(`结案失败：${err.message}`);
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }

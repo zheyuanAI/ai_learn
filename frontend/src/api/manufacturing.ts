@@ -324,13 +324,14 @@ export async function createOperationExecution(payload: any, idempotencyKey?: st
 /**
  * 开始工序执行
  * 接口路径：POST /api/operation-executions/{id}/start
+ * 入参：执行 ID、可选幂等键和首次事件时间；出参：服务端工序事实，时间省略时使用当前时间。
  */
-export async function startOperationExecution(id: string | number, idempotencyKey?: string): Promise<ApiResponse<OperationExecution>> {
+export async function startOperationExecution(id: string | number, idempotencyKey?: string, occurredAt?: string): Promise<ApiResponse<OperationExecution>> {
   return await request<OperationExecution>({
     url: `/api/operation-executions/${id}/start`,
     method: "POST",
-    // 修改用途：工序事件接口要求发生时间，页面动作统一提交当前客户端 ISO 时间。
-    data: { occurred_at: new Date().toISOString() },
+    // 修改用途：支持页面传入首次事件时间，同键重试保持请求摘要；旧调用方仍默认当前时间。
+    data: { occurred_at: occurredAt ?? new Date().toISOString() },
     headers: commandHeaders(idempotencyKey),
   });
 }
@@ -338,13 +339,14 @@ export async function startOperationExecution(id: string | number, idempotencyKe
 /**
  * 暂停工序执行
  * 接口路径：POST /api/operation-executions/{id}/pause
+ * 入参：执行 ID、原因、可选幂等键和首次事件时间；出参：服务端暂停后的工序事实。
  */
-export async function pauseOperationExecution(id: string | number, reason?: string, idempotencyKey?: string): Promise<ApiResponse<OperationExecution>> {
+export async function pauseOperationExecution(id: string | number, reason?: string, idempotencyKey?: string, occurredAt?: string): Promise<ApiResponse<OperationExecution>> {
   return await request<OperationExecution>({
     url: `/api/operation-executions/${id}/pause`,
     method: "POST",
-    // 修改用途：暂停与其他执行事件使用同一时间字段，避免后端按缺失时间拒绝。
-    data: { reason: reason || "", occurred_at: new Date().toISOString() },
+    // 修改用途：暂停事件复用首次时间与原因，避免同键重试产生不同请求摘要。
+    data: { reason: reason || "", occurred_at: occurredAt ?? new Date().toISOString() },
     headers: commandHeaders(idempotencyKey),
   });
 }
@@ -352,13 +354,14 @@ export async function pauseOperationExecution(id: string | number, reason?: stri
 /**
  * 恢复工序执行
  * 接口路径：POST /api/operation-executions/{id}/resume
+ * 入参：执行 ID、可选幂等键和首次事件时间；出参：服务端恢复后的工序事实。
  */
-export async function resumeOperationExecution(id: string | number, idempotencyKey?: string): Promise<ApiResponse<OperationExecution>> {
+export async function resumeOperationExecution(id: string | number, idempotencyKey?: string, occurredAt?: string): Promise<ApiResponse<OperationExecution>> {
   return await request<OperationExecution>({
     url: `/api/operation-executions/${id}/resume`,
     method: "POST",
-    // 修改用途：恢复事件补齐后端必需的发生时间。
-    data: { occurred_at: new Date().toISOString() },
+    // 修改用途：恢复事件复用首次时间，旧调用方仍默认当前时间。
+    data: { occurred_at: occurredAt ?? new Date().toISOString() },
     headers: commandHeaders(idempotencyKey),
   });
 }
@@ -366,13 +369,14 @@ export async function resumeOperationExecution(id: string | number, idempotencyK
 /**
  * 完工工序执行
  * 接口路径：POST /api/operation-executions/{id}/complete
+ * 入参：执行 ID、可选幂等键和首次事件时间；出参：服务端完成后的工序事实。
  */
-export async function completeOperationExecution(id: string | number, idempotencyKey?: string): Promise<ApiResponse<OperationExecution>> {
+export async function completeOperationExecution(id: string | number, idempotencyKey?: string, occurredAt?: string): Promise<ApiResponse<OperationExecution>> {
   return await request<OperationExecution>({
     url: `/api/operation-executions/${id}/complete`,
     method: "POST",
-    // 修改用途：完成事件补齐后端必需的发生时间。
-    data: { occurred_at: new Date().toISOString() },
+    // 修改用途：完成事件复用首次时间，旧调用方仍默认当前时间。
+    data: { occurred_at: occurredAt ?? new Date().toISOString() },
     headers: commandHeaders(idempotencyKey),
   });
 }

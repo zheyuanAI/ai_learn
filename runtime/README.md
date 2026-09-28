@@ -103,7 +103,9 @@ IOT_MQTT_ACL_FILE=<external-acl-file>
 
 ## Core / IoT dev 与 S7 Facts 联调
 
-`.run/CoreApplication.run.xml` 与 `.run/IotApplication.run.xml` 已显式选择 `dev` profile；Gateway 入口固定为 20001。`dev` profile 不保存 HMAC，S7 联调前必须在启动进程的运行环境同时设置以下变量，两个服务的 `S7` 密钥值必须一致：
+`.run/CoreApplication.run.xml` 与 `.run/IotApplication.run.xml` 已显式选择 `dev` profile，并共同加载被 Git 忽略的 `deploy/local/runtime.env`；Gateway 入口固定为 20001。该文件只保存非 AI 的本地业务联调配置，AI/OpenWebUI 未启动时仍可独立查询设备、告警和追溯 Facts。
+
+首次使用时复制 `deploy/local/runtime.env.example` 为 `deploy/local/runtime.env`，并把两个 `S7` 密钥替换为同一个随机值。`dev` profile 和共享运行配置均不提交真实 HMAC：
 
 ```text
 Core: CORE_FACTS_IOT_ENABLED=true
@@ -112,7 +114,7 @@ Core: CORE_FACTS_IOT_HMAC_SECRET=<runtime-only-s7-secret>
 IoT:  IOT_INTERNAL_S7_HMAC_SECRET=<runtime-only-s7-secret>
 ```
 
-IDEA 使用共享运行配置时，在 Core 与 IoT 各自的 Environment variables 中配置上述变量；不要把实际密钥写回 `.run`、`application-dev.yml` 或 README。缺少开关或密钥时，Core 不装配 S7 查询 Controller，IoT 内部 Facts 接口也会拒绝未签名调用，这是预期的 fail-closed 行为。
+IDEA 使用共享运行配置时无需再加载 `deploy/openwebui/windows.env`，也不需要启动 OpenWebUI。不要把实际密钥写回 `.run`、`application-dev.yml`、`runtime.env.example` 或 README。缺少开关或密钥时，Core 不装配 IoT Facts 适配器，IoT 内部 Facts 接口也会拒绝未签名调用，这是预期的 fail-closed 行为。
 
 PowerShell 手工启动示例（占位符必须替换，变量只存在于当前终端及其子进程）：
 

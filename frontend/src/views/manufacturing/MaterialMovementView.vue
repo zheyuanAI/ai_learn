@@ -9,7 +9,7 @@
     >
       <template #actions>
         <el-button
-          v-if="activeTab === 'issue'"
+          v-if="activeTab === 'issue' && hasPermission('mes:material:requisition')"
           type="primary"
           :icon="Plus"
           @click="openCreateIssueModal"
@@ -17,7 +17,7 @@
           新建领料申请单
         </el-button>
         <el-button
-          v-else
+          v-else-if="hasPermission('mes:material:requisition')"
           type="primary"
           :icon="Plus"
           @click="openCreateReturnModal"
@@ -131,7 +131,7 @@
       <template #actions="{ row }">
         <div class="action-btn-group">
           <el-button
-            v-if="row.status === 'Draft'"
+            v-if="row.status === 'Draft' && hasPermission('mes:material:confirm')"
             link
             type="primary"
             :disabled="!isActionAllowed(row, 'confirm')"
@@ -140,7 +140,7 @@
           >
             出库确认
           </el-button>
-          <span v-else class="text-muted font-xs">已完成扣减</span>
+          <span v-else-if="row.status === 'Confirmed'" class="text-muted font-xs">已完成扣减</span>
         </div>
       </template>
     </DataTable>
@@ -196,7 +196,7 @@
       <template #actions="{ row }">
         <div class="action-btn-group">
           <el-button
-            v-if="row.status === 'Draft'"
+            v-if="row.status === 'Draft' && hasPermission('mes:material:confirm')"
             link
             type="primary"
             :disabled="!isActionAllowed(row, 'confirm')"
@@ -205,7 +205,7 @@
           >
             退库确认
           </el-button>
-          <span v-else class="text-muted font-xs">已完成退入</span>
+          <span v-else-if="row.status === 'Confirmed'" class="text-muted font-xs">已完成退入</span>
         </div>
       </template>
     </DataTable>
@@ -534,8 +534,10 @@ import {
 } from "../../api/manufacturing";
 import { getProducts, getWarehouses, getLocations } from "../../api/masterData";
 import type { Product, Warehouse, Location } from "../../types/inventory";
+import { usePermission } from "../../composables/usePermission";
 
 const route = useRoute();
+const { hasPermission } = usePermission();
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 const activeTab = ref<"issue" | "return">("issue");
@@ -793,7 +795,8 @@ async function submitCreateIssue() {
     return;
   }
   try {
-    const created = await execute((key) => createMaterialIssue({
+    // 修改用途：首次领料关联、明细和超额原因固定，同键重试不读实时表单。
+    const requestPayload = {
       workOrderId: issueForm.workOrderId,
       items: [
         {
@@ -804,13 +807,17 @@ async function submitCreateIssue() {
         },
       ],
       overageReason: issueForm.overageReason || undefined,
-    }, key), { onConflict: loadData });
-    if (!created?.data?.id) {
-      throw new Error("服务端未返回 materialIssueId，已阻止继续确认领料");
-    }
-    createIssueModalVisible.value = false;
-    ElMessage.success("领料单已成功创建！可在领料单列表中执行出库确认。");
-    await loadData();
+    };
+    const originalForm = JSON.stringify(issueForm);
+    await execute(async (key) => {
+      const created = await createMaterialIssue(requestPayload, key);
+      if (!created?.data?.id) throw new Error("服务端未返回 materialIssueId，已阻止继续确认领料");
+      // 修改用途：retry 成功同样恢复领料列表，不能清除后来编辑的新草稿。
+      if (JSON.stringify(issueForm) === originalForm) createIssueModalVisible.value = false;
+      ElMessage.success("领料单已成功创建！可在领料单列表中执行出库确认。");
+      await loadData();
+      return created;
+    }, { onConflict: loadData });
   } catch (err: any) {
     ElMessage.error(`创建领料单失败：${err.message}`);
   }
@@ -838,7 +845,8 @@ async function submitCreateReturn() {
     return;
   }
   try {
-    const created = await execute((key) => createMaterialReturn({
+    // 修改用途：首次退料关联、明细和原因固定，同键重试不读实时表单。
+    const requestPayload = {
       workOrderId: returnForm.workOrderId,
       items: [
         {
@@ -849,13 +857,17 @@ async function submitCreateReturn() {
         },
       ],
       reason: returnForm.reason,
-    }, key), { onConflict: loadData });
-    if (!created?.data?.id) {
-      throw new Error("服务端未返回 materialReturnId，已阻止继续确认退料");
-    }
-    createReturnModalVisible.value = false;
-    ElMessage.success("退料单已成功创建！可在退料单列表中执行退库确认。");
-    await loadData();
+    };
+    const originalForm = JSON.stringify(returnForm);
+    await execute(async (key) => {
+      const created = await createMaterialReturn(requestPayload, key);
+      if (!created?.data?.id) throw new Error("服务端未返回 materialReturnId，已阻止继续确认退料");
+      // 修改用途：retry 成功同样恢复退料列表，不能清除后来编辑的新草稿。
+      if (JSON.stringify(returnForm) === originalForm) createReturnModalVisible.value = false;
+      ElMessage.success("退料单已成功创建！可在退料单列表中执行退库确认。");
+      await loadData();
+      return created;
+    }, { onConflict: loadData });
   } catch (err: any) {
     ElMessage.error(`创建退料单失败：${err.message}`);
   }
@@ -881,16 +893,19 @@ function promptConfirmReturn(item: MaterialReturnItem) {
 
 /** 执行出库/退库确认指令 */
 async function handleExecuteConfirm() {
+  // 修改用途：固定首次确认的领料或退料单 ID，重试不能改为另一个确认对象。
+  const targetId = confirmDialog.targetId;
+  const actionType = confirmDialog.type;
   confirmDialog.loading = true;
   try {
-    if (confirmDialog.type === "issue") {
-      await execute((key) => confirmMaterialIssue(confirmDialog.targetId, key), { onConflict: loadData });
-    } else {
-      await execute((key) => confirmMaterialReturn(confirmDialog.targetId, key), { onConflict: loadData });
-    }
-    confirmDialog.visible = false;
-    ElMessage.success("确认操作已成功完成！");
-    await loadData();
+    const operation = actionType === "issue" ? confirmMaterialIssue : confirmMaterialReturn;
+    await execute(async (key) => {
+      await operation(targetId, key);
+      // 修改用途：retry 成功也恢复事实，只关闭原领退料确认对象。
+      if (confirmDialog.targetId === targetId && confirmDialog.type === actionType) confirmDialog.visible = false;
+      ElMessage.success("确认操作已成功完成！");
+      await loadData();
+    }, { onConflict: loadData });
   } catch (err: any) {
     ElMessage.error(`确认失败：${err.message}`);
   } finally {

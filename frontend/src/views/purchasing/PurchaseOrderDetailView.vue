@@ -20,7 +20,7 @@
           </el-tag>
         </div>
         <el-button
-          v-if="order"
+          v-if="order && hasPermission('trace:chain:view')"
           type="primary"
           link
           :icon="Search"
@@ -54,7 +54,7 @@
         <div class="bar-buttons" style="display: inline-flex; gap: 8px; flex-wrap: wrap">
           <!-- 提交 -->
           <el-button
-            v-if="isActionEnabled('submit')"
+            v-if="isActionEnabled('submit') && hasPermission('pur:order:submit')"
             type="primary"
             :loading="actionLoading"
             @click="handleSubmitOrder"
@@ -64,7 +64,7 @@
 
           <!-- 审核 -->
           <el-button
-            v-if="isActionEnabled('approve')"
+            v-if="isActionEnabled('approve') && hasPermission('pur:order:approve')"
             type="primary"
             :loading="actionLoading"
             @click="handleApproveOrder"
@@ -84,7 +84,7 @@
 
           <!-- 上架 -->
           <el-button
-            v-if="isActionEnabled('putaway')"
+            v-if="isActionEnabled('putaway') && hasPermission('pur:putaway:confirm')"
             type="success"
             :loading="actionLoading"
             @click="isPutawayOpen = true"
@@ -93,8 +93,9 @@
           </el-button>
 
           <!-- 人工完成 -->
+          <!-- 修改用途：与后端 allowedActions 的 manualComplete 保持同名，确保已审核采购单可打开人工完成入口。 -->
           <el-button
-            v-if="isActionEnabled('complete')"
+            v-if="isActionEnabled('manualComplete') && hasPermission('pur:order:complete')"
             type="danger"
             :loading="actionLoading"
             @click="isCompleteDialogOpen = true"
@@ -108,19 +109,20 @@
       <el-descriptions :column="2" border style="margin-bottom: 20px">
         <el-descriptions-item label="供应商">
           <strong>{{ order.supplierName }}</strong>
-          <span style="color: #8ca2b8; margin-left: 6px">({{ order.supplierCode }})</span>
+          <span v-if="order.supplierCode" style="color: #8ca2b8; margin-left: 6px">({{ order.supplierCode }})</span>
         </el-descriptions-item>
         <el-descriptions-item label="计划到货日期">
           {{ order.expectedArrivalDate }}
-          <span style="color: #8ca2b8; margin-left: 6px">(采购员: {{ order.owner || order.createdBy }})</span>
+          <!-- 修改用途：缺少人员或库位事实只说明未提供，不暗示已完成订单仍有待办。 -->
+          <span style="color: #8ca2b8; margin-left: 6px">(采购员: {{ order.owner || order.createdBy || '未提供' }})</span>
         </el-descriptions-item>
         <el-descriptions-item label="质量隔离库位">
           <span v-if="order.qualityHoldLocationCode" class="loc-code">{{ order.qualityHoldLocationCode }}</span>
-          <span v-else class="text-muted text-sm">待到货分配</span>
+          <span v-else class="text-muted text-sm">未提供</span>
         </el-descriptions-item>
         <el-descriptions-item label="收货暂存过渡位">
           <span v-if="order.receivingStagingLocationCode" class="loc-code">{{ order.receivingStagingLocationCode }}</span>
-          <span v-else class="text-muted text-sm">待质检放行后分配</span>
+          <span v-else class="text-muted text-sm">未提供</span>
         </el-descriptions-item>
       </el-descriptions>
 
@@ -153,14 +155,17 @@
           </el-table-column>
           <el-table-column label="累计到货" width="90" align="right">
             <template #default="{ row }">
-              <QuantityText :value="row.arrivedQty" :unit="row.uom" />
+              <!-- 修改用途：未返回的累计事实不能被数量组件默认成 0，保留真实零值的展示。 -->
+              <QuantityText v-if="row.arrivedQty != null" :value="row.arrivedQty" :unit="row.uom" />
+              <span v-else class="text-muted">未提供</span>
             </template>
           </el-table-column>
           <el-table-column label="外观拒收" width="90" align="right">
             <template #default="{ row }">
-              <span :class="parseFloat(row.rejectedQty) > 0 ? 'text-danger' : ''">
+              <span v-if="row.rejectedQty != null" :class="parseFloat(row.rejectedQty) > 0 ? 'text-danger' : ''">
                 <QuantityText :value="row.rejectedQty" :unit="row.uom" />
               </span>
+              <span v-else class="text-muted">未提供</span>
             </template>
           </el-table-column>
           <el-table-column label="实际接收(QH)" width="110" align="right">
@@ -170,19 +175,22 @@
           </el-table-column>
           <el-table-column label="质检合格" width="90" align="right">
             <template #default="{ row }">
-              <span class="text-success">
+              <span v-if="row.qualifiedQty != null" class="text-success">
                 <QuantityText :value="row.qualifiedQty" :unit="row.uom" />
               </span>
+              <span v-else class="text-muted">未提供</span>
             </template>
           </el-table-column>
           <el-table-column label="放行移位(RS)" width="110" align="right">
             <template #default="{ row }">
-              <QuantityText :value="row.releaseExecutedQty" :unit="row.uom" />
+              <QuantityText v-if="row.releaseExecutedQty != null" :value="row.releaseExecutedQty" :unit="row.uom" />
+              <span v-else class="text-muted">未提供</span>
             </template>
           </el-table-column>
           <el-table-column label="已上架" width="80" align="right">
             <template #default="{ row }">
-              <QuantityText :value="row.putawayQty" :unit="row.uom" />
+              <QuantityText v-if="row.putawayQty != null" :value="row.putawayQty" :unit="row.uom" />
+              <span v-else class="text-muted">未提供</span>
             </template>
           </el-table-column>
           <el-table-column label="待收余量" width="90" align="right">
@@ -225,6 +233,7 @@
 
     <!-- 到货验收弹窗 -->
     <ReceiptConfirmView
+      ref="receiptConfirmView"
       v-model:visible="isReceiptConfirmOpen"
       :order="order"
       :submitting="actionLoading"
@@ -274,6 +283,7 @@ import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import ReceiptConfirmView from "./ReceiptConfirmView.vue";
 import type { ViewState } from "@/types/common";
 import type { PurchaseOrder } from "@/types/purchasing";
+import { getProductById, getSupplierById } from "@/api/masterData";
 import {
   getPurchaseOrderById,
   submitPurchaseOrder,
@@ -305,12 +315,15 @@ const emit = defineEmits<{
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");
 const order = ref<PurchaseOrder | null>(null);
+let detailRequestSequence = 0;
 const { execute, retry, isExecuting, canRetry, lastError } = useCommand();
 const actionLoading = ref(false);
 
 const isReceiptConfirmOpen = ref(false);
 const isPutawayOpen = ref(false);
 const isCompleteDialogOpen = ref(false);
+// 修改用途：读取实际收货子弹窗草稿，保护命令失败后重新编辑的表单。
+const receiptConfirmView = ref<{ getDraftSnapshot: () => string } | null>(null);
 const manualCompleteReason = ref("");
 
 watch(
@@ -319,6 +332,9 @@ watch(
     // 修改：合并 props 监听并立即执行，确保直达/刷新路由主动加载详情，列表抽屉仍可复用同一组件。
     if (orderId && visible) {
       void fetchDetail();
+    } else {
+      // 修改用途：关闭抽屉或清空订单时使在途详情失效，避免旧响应继续更新页面。
+      detailRequestSequence += 1;
     }
   },
   { immediate: true }
@@ -335,15 +351,49 @@ function detailLoadErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "网络请求异常";
 }
 
+/** 用途：查询当前可见订单；无入参、无返回值，仅最新请求可更新详情和错误状态。 */
 async function fetchDetail() {
-  if (!props.orderId) return;
+  const orderId = props.orderId;
+  if (!orderId || !props.visible) return;
+  // 修改用途：捕获订单和请求世代，防止切单及同单刷新时的慢响应覆盖最新事实。
+  const requestSequence = ++detailRequestSequence;
+  const isCurrentRequest = () => requestSequence === detailRequestSequence
+    && props.orderId === orderId && props.visible;
   viewState.value = "loading";
   errorMessage.value = "";
   try {
-    const res = await getPurchaseOrderById(props.orderId);
-    order.value = res.data;
+    const res = await getPurchaseOrderById(orderId);
+    if (!isCurrentRequest()) return;
+    // 修改用途：采购 DTO 只含主数据 ID，沿既有明细接口补名称，不推断不存在的履约累计字段。
+    const productIds = [...new Set(res.data.lines.map((line) => line.productId))];
+    const [supplierResults, productResults] = await Promise.all([
+      Promise.allSettled(res.data.supplierId ? [getSupplierById(res.data.supplierId)] : []),
+      Promise.allSettled(productIds.map((id) => getProductById(id))),
+    ]);
+    // 修改用途：主数据查询期间也可能切单、关闭或刷新，整个详情只允许最新世代写回。
+    if (!isCurrentRequest()) return;
+    const supplierResult = supplierResults[0];
+    const supplier = supplierResult?.status === "fulfilled" ? supplierResult.value.data : undefined;
+    const products = new Map(productResults.flatMap((result, index) =>
+      result.status === "fulfilled" ? [[productIds[index], result.value.data] as const] : []));
+    order.value = {
+      ...res.data,
+      // 修改用途：仅使用当前 Supplier DTO 的正式字段，缺名称仍显示订单返回的真实 ID。
+      supplierName: res.data.supplierName || supplier?.supplierName || res.data.supplierId,
+      supplierCode: res.data.supplierCode || supplier?.supplierCode,
+      lines: res.data.lines.map((line) => {
+        const product = products.get(line.productId);
+        return {
+          ...line,
+          sku: line.sku || product?.sku || line.productId,
+          productName: line.productName || product?.name || "名称不可用",
+          spec: line.spec || product?.spec,
+        };
+      }),
+    };
     viewState.value = "ready";
   } catch (err: any) {
+    if (!isCurrentRequest()) return;
     console.error("[PurchaseOrderDetailView] 获取失败:", err);
     errorMessage.value = detailLoadErrorMessage(err);
     viewState.value = "error";
@@ -402,11 +452,16 @@ function handleClose() {
 
 async function handleSubmitOrder() {
   if (!order.value) return;
+  // 修改用途：重试固定首次命令的订单，避免切换详情后同键提交另一订单。
+  const orderId = order.value.id;
   try {
-    await execute((key) => submitPurchaseOrder(order.value!.id, key), { onConflict: fetchDetail });
-    await fetchDetail();
-    ElMessage.success("采购订单提交成功！");
-    emit("refresh");
+    await execute(async (key) => {
+      await submitPurchaseOrder(orderId, key);
+      // 修改用途：retry 成功也复读原详情，切换订单后不覆盖当前页面。
+      if (props.orderId === orderId) await fetchDetail();
+      ElMessage.success("采购订单提交成功！");
+      emit("refresh");
+    }, { onConflict: fetchDetail });
   } catch (err: any) {
     ElMessage.error(err?.message || "提交失败");
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
@@ -414,11 +469,16 @@ async function handleSubmitOrder() {
 
 async function handleApproveOrder() {
   if (!order.value) return;
+  // 修改用途：同键重试始终审核首次选择的订单。
+  const orderId = order.value.id;
   try {
-    await execute((key) => approvePurchaseOrder(order.value!.id, key), { onConflict: fetchDetail });
-    await fetchDetail();
-    ElMessage.success("采购订单审核通过！");
-    emit("refresh");
+    await execute(async (key) => {
+      await approvePurchaseOrder(orderId, key);
+      // 修改用途：retry 成功也复读原详情，切换订单后不覆盖当前页面。
+      if (props.orderId === orderId) await fetchDetail();
+      ElMessage.success("采购订单审核通过！");
+      emit("refresh");
+    }, { onConflict: fetchDetail });
   } catch (err: any) {
     ElMessage.error(err?.message || "审核失败");
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }
@@ -426,12 +486,23 @@ async function handleApproveOrder() {
 
 async function handleConfirmReceipt(payload: any) {
   try {
-    const { receiptId: _ignoredClientId, ...requestPayload } = payload;
+    // 修改用途：按请求的 JSON 语义快照明细，表单编辑不得改变同键重试载荷。
+    const { receiptId: _ignoredClientId, ...requestPayload } = JSON.parse(JSON.stringify(payload));
+    const receiptOrderId = props.orderId;
+    const originalPayload = JSON.stringify(payload);
+    const originalDraft = receiptConfirmView.value?.getDraftSnapshot();
     // 修改：收货事实 ID由服务端按幂等键分配，客户端不能用订单号、订单行 ID或随机 UUID代替。
-    const receiptResponse = await execute((key) => confirmPurchaseReceiptWithServerId(requestPayload, key), { onConflict: fetchDetail });
-    isReceiptConfirmOpen.value = false;
-    await fetchDetail();
-    emit("refresh");
+    const receiptResponse = await execute(async (key) => {
+      const response = await confirmPurchaseReceiptWithServerId(requestPayload, key);
+      // 修改用途：retry 成功只关闭原收货表单并复读原订单，保留后续切换的详情与新稿。
+      if (props.orderId === receiptOrderId) {
+        if (JSON.stringify(payload) === originalPayload
+          && receiptConfirmView.value?.getDraftSnapshot() === originalDraft) isReceiptConfirmOpen.value = false;
+        await fetchDetail();
+      }
+      emit("refresh");
+      return response;
+    }, { onConflict: fetchDetail });
 
     // 修改用途：质检必须沿收货接口返回的独立 ID 继续，禁止把提交载荷或订单行 ID 当作收货事实。
     const persistedReceipt = receiptResponse?.data;
@@ -481,15 +552,23 @@ async function handleConfirmManualComplete() {
     ElMessage.warning("必须填写人工完成原因！");
     return;
   }
+  // 修改用途：冻结订单和完成原因，避免失败后编辑表单导致同键异载荷。
+  const orderId = order.value.id;
+  const requestPayload = { completionReason: manualCompleteReason.value };
   try {
-    await execute((key) => completePurchaseOrder(order.value!.id, {
-      completionReason: manualCompleteReason.value,
-    }, key), { onConflict: fetchDetail });
-    isCompleteDialogOpen.value = false;
-    manualCompleteReason.value = "";
-    ElMessage.success("采购订单已人工完成！");
-    await fetchDetail();
-    emit("refresh");
+    await execute(async (key) => {
+      await completePurchaseOrder(orderId, requestPayload, key);
+      // 修改用途：retry 成功恢复原结案，只清除仍属于首次订单和原因的表单。
+      if (props.orderId === orderId) {
+        if (order.value?.id === orderId && manualCompleteReason.value === requestPayload.completionReason) {
+          isCompleteDialogOpen.value = false;
+          manualCompleteReason.value = "";
+        }
+        await fetchDetail();
+      }
+      ElMessage.success("采购订单已人工完成！");
+      emit("refresh");
+    }, { onConflict: fetchDetail });
   } catch (err: any) {
     ElMessage.error(err?.message || "人工完成失败");
   } finally { /* useCommand 在 finally 中恢复 isExecuting。 */ }

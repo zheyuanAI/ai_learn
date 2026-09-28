@@ -376,7 +376,9 @@ test.describe.serial("阶段 0–9 真实黄金闭环事实验收", () => {
 async function loginAsPage(page: Page, username: string): Promise<void> {
   await page.goto(`${UI_BASE}/login`);
   await page.waitForLoadState("domcontentloaded");
-  await page.locator("#loginTenant, select[name='tenantCode']").first().selectOption(TENANT_CODE);
+  // 修改用途：登录页租户为 Element Plus 自定义下拉框，按可见选项选择，避免原生 selectOption 阻断末端页面复读。
+  await page.locator(".tech-select .el-select__wrapper").click();
+  await page.locator(".el-select-dropdown__item").filter({ hasText: TENANT_CODE }).click();
   await page.fill("#loginUsername, input[name='username']", username);
   await page.fill("#loginPassword, input[name='password']", PASSWORD);
   await page.click("button[type='submit']");

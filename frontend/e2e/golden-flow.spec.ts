@@ -54,9 +54,11 @@ async function loginAs(page: Page, username: string, password = DEFAULT_PASSWORD
   await page.waitForLoadState("domcontentloaded");
 
   // 选择/输入租户
-  const tenantSelect = page.locator("#loginTenant, select[name='tenantCode']");
-  await expect(tenantSelect.first()).toBeVisible();
-  await tenantSelect.first().selectOption(tenant);
+  // 修改用途：当前登录页使用 Element Plus 租户下拉框，选择可见选项而非调用原生 selectOption。
+  const tenantSelect = page.locator(".tech-select .el-select__wrapper");
+  await expect(tenantSelect).toBeVisible();
+  await tenantSelect.click();
+  await page.locator(".el-select-dropdown__item").filter({ hasText: tenant }).click();
 
   // 输入用户名与密码
   await page.fill("#loginUsername, input[name='username']", username);

@@ -30,6 +30,15 @@ async (page) => {
   const origin = getUrlOrigin(page.url());
   const results = [];
 
+  // 读取权限过滤后的真实侧边栏链接，供各角色复用同一套导航断言。
+  async function readVisibleMenuPaths() {
+    await page.goto(`${origin}/`);
+    await page.waitForTimeout(300);
+    return page.locator(".nav-list a").evaluateAll((links) =>
+      [...new Set(links.map((link) => `${new URL(link.href).pathname}${new URL(link.href).search}`))],
+    );
+  }
+
   async function check(id, title, action) {
     try {
       const detail = await action();
@@ -99,23 +108,47 @@ async (page) => {
 
     const results = [];
     for (const leaf of leaves) {
-      await page.goto(`${origin}${leaf.requestedPath}`, { waitUntil: "domcontentloaded" });
-      await page.waitForTimeout(150);
+      const apiResponses = [];
+      const onResponse = (response) => {
+        if (response.url().includes("/api/")) {
+          apiResponses.push({ url: response.url(), status: response.status() });
+        }
+      };
+      page.on("response", onResponse);
+      try {
+        await page.goto(`${origin}${leaf.requestedPath}`, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(300);
+      } finally {
+        page.off("response", onResponse);
+      }
       const finalPath = getUrlPathname(page.url());
       const bodyText = await page.locator("body").innerText().catch(() => "");
       const isForbidden = finalPath === "/forbidden" || /403|无权限|无权访问|没有操作权限/.test(bodyText);
-      const isNotFound = finalPath === "/404" || /404|页面不存在|未找到页面/.test(bodyText);
+      // 业务空状态也可能包含“未找到”，只以正式 404 路由判断页面不存在。
+      const isNotFound = finalPath === "/404";
       const result = finalPath === "/" ? "FAIL_SILENT_HOME" : isForbidden ? "FORBIDDEN" : isNotFound ? "NOT_FOUND" : "OK";
+      // AI 本轮明确不启动；这里只审计普通业务页面的接口不存在和服务端异常。
+      const unavailableApis = leaf.menuCode.startsWith("ai_")
+        ? []
+        : apiResponses.filter((item) => item.status === 404 || item.status >= 500);
       results.push({
         menuCode: leaf.menuCode,
         requestedPath: leaf.requestedPath,
         finalPath,
         result,
+        unavailableApis,
       });
     }
 
-    const silentHome = results.filter((item) => item.result === "FAIL_SILENT_HOME");
-    return { count: results.length, results, passed: silentHome.length === 0 };
+    const routeFailures = results.filter(
+      (item) => item.result === "FAIL_SILENT_HOME" || item.result === "NOT_FOUND",
+    );
+    const unavailableInterfaces = results.filter((item) => item.unavailableApis.length > 0);
+    return {
+      count: results.length,
+      results,
+      passed: routeFailures.length === 0 && unavailableInterfaces.length === 0,
+    };
   }
 
   // 登录后页面可能仍在等待用户画像和动态菜单，先等待非登录路由稳定。
@@ -126,16 +159,29 @@ async (page) => {
   await check("MENU_LEAVES", "动态菜单叶节点必须有明确落点", async () => {
     const report = await collectMenuLeaves();
     if (!report.passed) {
-      const failed = report.results.filter((item) => item.result === "FAIL_SILENT_HOME");
-      throw new Error(`菜单叶节点静默回首页：${JSON.stringify(failed)}`);
+      const failed = report.results.filter(
+        (item) =>
+          item.result === "FAIL_SILENT_HOME" ||
+          item.result === "NOT_FOUND" ||
+          item.unavailableApis.length > 0,
+      );
+      throw new Error(`菜单落点或普通业务接口异常：${JSON.stringify(failed)}`);
     }
     return report;
   });
 
   await check("F01", "采购菜单点击应进入正式采购订单页", async () => {
     await page.goto(`${origin}/`);
-    await page.getByRole("button", { name: /采购入库/ }).click();
-    await page.getByRole("link", { name: "采购订单", exact: true }).click();
+    const purchaseGroup = page.getByRole("button", { name: /采购入库/ });
+    if ((await purchaseGroup.count()) === 0) {
+      return { skipped: true, reason: "当前角色无采购页面权限，采购分组已隐藏" };
+    }
+    await purchaseGroup.click();
+    const purchaseOrderLink = page.getByRole("link", { name: "采购订单", exact: true });
+    if ((await purchaseOrderLink.count()) === 0) {
+      return { skipped: true, reason: "当前角色无采购订单查看权限" };
+    }
+    await purchaseOrderLink.click();
     await page.waitForTimeout(250);
 
     const actualPath = getUrlPathname(page.url());
@@ -145,7 +191,12 @@ async (page) => {
     return { actualPath };
   });
 
-  await check("F02", "看板七个接口不应返回接口不存在", async () => {
+  await check("F02", "看板七个接口必须完整可用", async () => {
+    const visibleMenuPaths = await readVisibleMenuPaths();
+    if (!visibleMenuPaths.includes("/dashboard")) {
+      return { skipped: true, reason: "当前角色无看板页面权限" };
+    }
+
     const responses = [];
     const onResponse = (response) => {
       if (response.url().includes("/api/dashboard/")) {
@@ -156,54 +207,67 @@ async (page) => {
     page.on("response", onResponse);
     try {
       await page.goto(`${origin}/dashboard`);
-      await page.waitForTimeout(1000);
+      // 前面的菜单巡检可能已把看板结果留在页面内存中；重载后再核对七个真实请求。
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(1200);
     } finally {
       page.off("response", onResponse);
     }
 
-    const notFound = responses.filter((item) => item.status === 404);
+    const failedResponses = responses.filter((item) => item.status >= 400);
     const expectedNames = ["inventory", "fulfillment", "manufacturing", "quality", "device", "alarms", "traceability"];
     const missingNames = expectedNames.filter(
       (name) => !responses.some((item) => item.url.includes(`/api/dashboard/${name}`)),
     );
-    if (notFound.length > 0 || missingNames.length > 0) {
+    if (failedResponses.length > 0 || missingNames.length > 0) {
       throw new Error(
-        `dashboard 404=${notFound.length}，缺少请求=${missingNames.join(",") || "无"}`,
+        `dashboard 失败响应=${JSON.stringify(failedResponses)}，缺少请求=${missingNames.join(",") || "无"}`,
       );
     }
     return { responseCount: responses.length };
   });
 
   await check("F11", "看板错误卡片不能标记为实时", async () => {
+    const visibleMenuPaths = await readVisibleMenuPaths();
+    if (!visibleMenuPaths.includes("/dashboard")) {
+      return { skipped: true, reason: "当前角色无看板页面权限" };
+    }
+    await page.goto(`${origin}/dashboard`);
+    await page.waitForTimeout(1000);
+
     // 修改：错误、陈旧和明确成功的卡片必须使用互斥状态，防止错误结果冒充实时事实。
-    const errorCards = await page.locator(".card-error-body").count();
+    const errorCardContainers = page.locator(".summary-card-container").filter({
+      has: page.locator(".card-error-body"),
+    });
+    const errorCards = await errorCardContainers.count();
     const liveBadges = await page.locator(".live-badge").count();
     const unavailableBadges = await page.locator(".unavailable-badge").count();
-    if (errorCards > 0 && liveBadges > 0) {
-      throw new Error(`存在 ${errorCards} 个错误卡片，却显示 ${liveBadges} 个“实时”标记`);
-    }
-    if (errorCards > 0 && unavailableBadges < errorCards) {
-      throw new Error(`错误卡片 ${errorCards} 个，但“不可用”标记仅 ${unavailableBadges} 个`);
+    for (let index = 0; index < errorCards; index += 1) {
+      const errorCard = errorCardContainers.nth(index);
+      if ((await errorCard.locator(".live-badge").count()) > 0) {
+        throw new Error(`第 ${index + 1} 个错误卡片错误显示“实时”标记`);
+      }
+      if ((await errorCard.locator(".unavailable-badge").count()) === 0) {
+        throw new Error(`第 ${index + 1} 个错误卡片缺少“不可用”标记`);
+      }
     }
     return { errorCards, liveBadges, unavailableBadges };
   });
 
-  await check("F03", "无派工权限时不应展示创建入口", async () => {
-    await page.goto(`${origin}/mes/dispatch`);
-    await page.waitForTimeout(700);
-
-    const bodyText = await page.locator("body").innerText();
-    const denied = bodyText.includes("没有操作权限");
-    const createButton = page.getByRole("button", { name: /新建派工单/ });
-    const createButtonVisible = (await createButton.count()) > 0 && (await createButton.first().isVisible());
-
-    if (!denied) {
-      throw new Error("tenant.admin 未得到预期的派工读取/写入拒绝态");
+  await check("F03", "侧边栏展示的页面必须均可访问", async () => {
+    const visibleMenuPaths = await readVisibleMenuPaths();
+    const forbiddenMenuPaths = [];
+    for (const menuPath of visibleMenuPaths) {
+      await page.goto(`${origin}${menuPath}`);
+      await page.waitForTimeout(250);
+      if (getUrlPathname(page.url()) === "/forbidden") {
+        forbiddenMenuPaths.push(menuPath);
+      }
     }
-    if (createButtonVisible) {
-      throw new Error("403 无权限页面仍显示“新建派工单”按钮");
+    if (forbiddenMenuPaths.length > 0) {
+      throw new Error(`仍展示点击后进入 403 的菜单：${forbiddenMenuPaths.join(",")}`);
     }
-    return { denied, createButtonVisible };
+    return { visibleMenuCount: visibleMenuPaths.length, forbiddenMenuCount: 0 };
   });
 
   return {

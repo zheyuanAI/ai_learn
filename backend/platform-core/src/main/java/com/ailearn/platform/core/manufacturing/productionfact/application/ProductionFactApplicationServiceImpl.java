@@ -64,6 +64,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -189,13 +190,22 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
                     if (issue.status() != MaterialDocumentStatus.Draft) {
                         throw error(ProductionFactErrorCode.MES_FACT_001, "领料单不是 Draft 状态");
                     }
+                    // 修改用途：固定本次各行批次后预锁全集合；计划扣减账本保留同物料多行逐次选批的原规则。
+                    Map<UUID, InventoryDimension> dimensions = new LinkedHashMap<>();
+                    Map<InventoryDimension, BigDecimal> plannedDecreases = new HashMap<>();
+                    for (MaterialIssueLine line : issue.lines()) {
+                        InventoryDimension dimension = new InventoryDimension(line.productId(), line.warehouseId(),
+                                line.locationId(), resolveAvailableLot(actor.tenantId(), line.productId(),
+                                        line.warehouseId(), line.locationId(), line.issueQty(), plannedDecreases));
+                        dimensions.put(line.id(), dimension);
+                        plannedDecreases.merge(dimension, line.issueQty(), BigDecimal::add);
+                    }
+                    inventoryCommandService.lockBalances(dimensions.values());
                     List<UUID> transactionIds = new ArrayList<>();
                     for (MaterialIssueLine line : issue.lines()) {
                         InventoryMutationResult result = inventoryCommandService.decrease(
                                 new InventoryDecreaseCommand(decreaseMetadata(actor, issue.id(), line.id(),
-                                idempotencyKey), new InventoryDimension(line.productId(), line.warehouseId(),
-                                        line.locationId(), resolveAvailableLot(actor.tenantId(), line.productId(),
-                                                line.warehouseId(), line.locationId(), line.issueQty())), line.issueQty()));
+                                idempotencyKey), dimensions.get(line.id()), line.issueQty()));
                         transactionIds.add(requiredTransaction(result, ProductionFactErrorCode.MES_MAT_001));
                     }
                     UUID operationId = operationId("issue", issue.id());
@@ -274,14 +284,20 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
                             throw error(ProductionFactErrorCode.MES_MAT_002, "确认时退料数量超过已领未退数量");
                         }
                     }
+                    // 修改用途：所有退料明细在首次增加前统一预锁，批次使用与原命令相同的目标选择规则。
+                    Map<UUID, InventoryDimension> dimensions = new LinkedHashMap<>();
+                    for (MaterialReturnLine line : value.lines()) {
+                        dimensions.put(line.id(), new InventoryDimension(line.productId(), line.warehouseId(),
+                                line.locationId(), resolveExistingLot(actor.tenantId(), line.productId(),
+                                        line.warehouseId(), line.locationId())));
+                    }
+                    inventoryCommandService.lockBalances(dimensions.values());
                     List<UUID> transactionIds = new ArrayList<>();
                     for (MaterialReturnLine line : value.lines()) {
                         InventoryMutationResult result = inventoryCommandService.increase(
                                 new InventoryIncreaseCommand(increaseMetadata(actor, value.id(), line.id(),
                                         idempotencyKey, "MATERIAL_RETURN", "MATERIAL_RETURN"),
-                                        new InventoryDimension(line.productId(), line.warehouseId(), line.locationId(),
-                                                resolveExistingLot(actor.tenantId(), line.productId(), line.warehouseId(),
-                                                        line.locationId())),
+                                        dimensions.get(line.id()),
                                         line.returnQty()));
                         transactionIds.add(requiredTransaction(result, ProductionFactErrorCode.MES_MAT_002));
                     }
@@ -860,11 +876,11 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
 
     /**
      * 选择可完整承载本次领料数量的单一批次。
-     * 入参：可信租户、产品、仓库、库位和数量；出参：规范化批次号；流程：查询余额、校验可用量并稳定选择最大批次。
+     * 入参：可信租户、产品、仓库、库位、数量和前行计划扣减；出参：规范化批次号；流程：查询余额、扣除计划量并稳定选择最大可用批次。
      * focused 测试未注入查询端口时保留无批次维度，生产装配始终使用 PostgreSQL 查询端口。
      */
     private String resolveAvailableLot(UUID tenantId, UUID productId, UUID warehouseId, UUID locationId,
-                                       BigDecimal quantity) {
+                                       BigDecimal quantity, Map<InventoryDimension, BigDecimal> plannedDecreases) {
         if (inventoryQueryService == null) {
             return "";
         }
@@ -873,10 +889,13 @@ public class ProductionFactApplicationServiceImpl implements ProductionFactAppli
         if (page == null || page.content() == null) {
             throw error(ProductionFactErrorCode.MES_MAT_001, "领料来源库存查询不可用");
         }
+        // 修改用途：扣除本单前面明细已计划使用的数量，避免预锁前重复选中已被计划耗尽的批次。
+        java.util.function.Function<InventoryBalance, BigDecimal> remaining = balance -> balance.availableQty()
+                .subtract(plannedDecreases.getOrDefault(balance.dimension(), BigDecimal.ZERO));
         return page.content().stream()
                 .filter(balance -> balance != null && balance.dimension() != null
-                        && balance.availableQty().compareTo(quantity) >= 0)
-                .sorted(Comparator.comparing(InventoryBalance::availableQty).reversed()
+                        && remaining.apply(balance).compareTo(quantity) >= 0)
+                .sorted(Comparator.comparing(remaining).reversed()
                         .thenComparing(balance -> balance.dimension().normalizedLotNo()))
                 .map(balance -> balance.dimension().normalizedLotNo())
                 .findFirst()

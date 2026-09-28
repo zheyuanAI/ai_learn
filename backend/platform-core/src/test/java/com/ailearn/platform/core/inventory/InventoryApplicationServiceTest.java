@@ -479,6 +479,46 @@ class InventoryApplicationServiceTest {
     }
 
     /**
+     * 用途：验证多命令预锁只使用可信身份，并在全部库位校验通过后一次委托稳定集合锁。
+     * 入参：无；出参：无；流程：给出反序及重复维度，验证去重后没有先取单行锁。
+     */
+    @Test
+    void prelockValidatesAllLocationsAndDelegatesCompleteSet() {
+        InventoryDimension first = dimension("10000000-0000-0000-0000-000000000021");
+        InventoryDimension second = dimension("10000000-0000-0000-0000-000000000022");
+        activeLocation(first, LocationType.Storage);
+        activeLocation(second, LocationType.ShippingStaging);
+
+        service.lockBalances(List.of(second, first, second));
+
+        verify(repository).lockBalancesInStableOrder(TENANT_A, List.of(second, first), USER_ID);
+        verify(repository, never()).lockOrCreateBalance(any(), any(), any());
+    }
+
+    /** 入参：无；出参：无；流程：第二个库位无效时，不能提前创建或锁定第一个维度余额。 */
+    @Test
+    void invalidPrelockLocationRejectsBeforeAnyBalanceLock() {
+        InventoryDimension valid = dimension("10000000-0000-0000-0000-000000000023");
+        InventoryDimension invalid = dimension("10000000-0000-0000-0000-000000000024");
+        activeLocation(valid, LocationType.Storage);
+
+        assertThrows(InventoryException.class, () -> service.lockBalances(List.of(valid, invalid)));
+
+        verify(repository, never()).lockBalancesInStableOrder(any(), any(), any());
+        verify(repository, never()).lockOrCreateBalance(any(), any(), any());
+    }
+
+    /** 入参：无；出参：无；流程：集合含空维度时整体拒绝，禁止Repository过滤空元素后部分执行。 */
+    @Test
+    void nullPrelockDimensionRejectsWholeCollection() {
+        assertThrows(com.ailearn.platform.shared.exception.ValidationException.class,
+                () -> service.lockBalances(java.util.Arrays.asList(
+                        dimension("10000000-0000-0000-0000-000000000025"), null)));
+
+        verify(repository, never()).lockBalancesInStableOrder(any(), any(), any());
+    }
+
+    /**
      * 构造指定载荷摘要的命令元数据，用于验证同幂等键的载荷冲突。
      *
      * @param key 幂等键

@@ -7,11 +7,19 @@ import com.ailearn.platform.shared.idempotency.InMemoryIdempotencyStorage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -114,5 +122,58 @@ class ContextHolderAndIdempotencyTest {
                 Duration.ofMinutes(1), "hash-1").isPresent());
         assertTrue(storage.tryAcquireClaim("inventory:decrease", "same-key", tenantId,
                 Duration.ofMinutes(1), "hash-2").isPresent());
+    }
+
+    /**
+     * 用途：验证清理过期记录不能删除并发请求的新 claim；无业务入参或出参。
+     * 流程：暂停已读取旧记录的查询，建立新占用，再释放旧查询并校验新 token 仍可完成。
+     */
+    @Test
+    @DisplayName("过期查询不能清理并发建立的新 claim")
+    void expiredReadCannotRemoveReplacementClaim() throws Exception {
+        InMemoryIdempotencyStorage storage = new InMemoryIdempotencyStorage();
+        CountDownLatch oldRecordRead = new CountDownLatch(1);
+        CountDownLatch replacementAcquired = new CountDownLatch(1);
+        AtomicBoolean pauseFirstRead = new AtomicBoolean(true);
+        ConcurrentHashMap<String, IdempotentRecord> records = new ConcurrentHashMap<>() {
+            /** 读取首个快照后等待新占用建立，固定旧查询与新 claim 的交错顺序。 */
+            @Override
+            public IdempotentRecord get(Object key) {
+                IdempotentRecord snapshot = super.get(key);
+                if (pauseFirstRead.compareAndSet(true, false)) {
+                    oldRecordRead.countDown();
+                    try {
+                        assertTrue(replacementAcquired.await(5, TimeUnit.SECONDS), "新 claim 未按时建立");
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                        throw new AssertionError("交错测试被中断", exception);
+                    }
+                }
+                return snapshot;
+            }
+        };
+        ReflectionTestUtils.setField(storage, "storage", records);
+        UUID tenantId = UUID.randomUUID();
+        String operation = "inventory:increase";
+        String key = "expired-read-key";
+        assertTrue(storage.tryAcquireClaim(operation, key, tenantId, Duration.ofSeconds(-1), "old-hash")
+                .isPresent());
+        ExecutorService reader = Executors.newSingleThreadExecutor();
+        try {
+            Future<Optional<IdempotentRecord>> expiredRead = reader.submit(
+                    () -> storage.getRecord(operation, key, tenantId));
+            assertTrue(oldRecordRead.await(5, TimeUnit.SECONDS), "旧记录未按时读取");
+            IdempotencyClaim replacement = storage.tryAcquireClaim(operation, key, tenantId,
+                    Duration.ofMinutes(1), "new-hash").orElseThrow();
+            replacementAcquired.countDown();
+            assertTrue(expiredRead.get(5, TimeUnit.SECONDS).isEmpty());
+            IdempotentRecord retained = storage.getRecord(operation, key, tenantId).orElseThrow();
+            assertEquals(replacement.token(), retained.getClaimToken());
+            assertTrue(storage.complete(operation, key, tenantId, replacement.token(),
+                    "new-response", Duration.ofMinutes(1)));
+        } finally {
+            replacementAcquired.countDown();
+            reader.shutdownNow();
+        }
     }
 }

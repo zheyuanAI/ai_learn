@@ -50,8 +50,9 @@
               <td class="font-mono text-muted text-xs">{{ wr.reportTime ? wr.reportTime.substring(0, 19).replace('T', ' ') : '-' }}</td>
               <td class="text-muted text-xs">{{ wr.remark || '-' }}</td>
               <td style="text-align: center;">
-                <el-button
-                  size="small"
+                  <el-button
+                    v-if="hasPermission('mes:quality:inspect')"
+                    size="small"
                   type="primary"
                   plain
                   @click="openCreateInspection(wr)"
@@ -125,8 +126,8 @@
               <td style="text-align: center;">
                 <div class="action-cell">
                   <!-- 录入质检结果 (Draft -> Passed/Failed) -->
-                  <el-button
-                    v-if="ins.status === 'Draft' || !ins.result"
+                    <el-button
+                      v-if="(ins.status === 'Draft' || !ins.result) && hasPermission('mes:quality:inspect')"
                     size="small"
                     type="primary"
                     plain
@@ -136,8 +137,8 @@
                   </el-button>
 
                   <!-- 关闭 Failed 质检 (disposition) -->
-                  <el-button
-                    v-if="ins.result === 'Failed' && !ins.disposition"
+                    <el-button
+                      v-if="ins.result === 'Failed' && !ins.disposition && hasPermission('mes:quality:inspect')"
                     size="small"
                     type="warning"
                     plain
@@ -191,6 +192,7 @@
         <span class="dialog-footer">
           <el-button @click="createModalVisible = false">取消</el-button>
           <el-button
+            v-if="hasPermission('mes:quality:inspect')"
             type="primary"
             :loading="submitting"
             @click="submitCreateInspection"
@@ -234,6 +236,7 @@
         <span class="dialog-footer">
           <el-button @click="submitModalVisible = false">取消</el-button>
           <el-button
+            v-if="hasPermission('mes:quality:inspect')"
             type="primary"
             :loading="submitting"
             @click="submitResult"
@@ -266,6 +269,7 @@
         <span class="dialog-footer">
           <el-button @click="closeModalVisible = false">取消</el-button>
           <el-button
+            v-if="hasPermission('mes:quality:inspect')"
             type="primary"
             :loading="submitting"
             @click="submitClose"
@@ -295,10 +299,12 @@ import {
   submitQualityInspection,
   closeQualityInspection,
 } from "@/api/manufacturing";
+import { usePermission } from "@/composables/usePermission";
 
 const props = defineProps<{
   workOrderId: string | number;
 }>();
+const { hasPermission } = usePermission();
 
 const emit = defineEmits<{
   (e: "refresh"): void;
@@ -387,22 +393,27 @@ function openCreateInspection(report: any) {
 /** 提交创建质检单 */
 async function submitCreateInspection() {
   if (!selectedReport.value) return;
-  const report = selectedReport.value;
+  // 修改用途：创建检验时固定首次报工关联及样本字段，编辑表单不改变同键重试。
+  const requestPayload = {
+    workReportId: selectedReport.value.id,
+    inspectionNo: createForm.inspectionNo || `INS-${Date.now().toString().slice(-6)}`,
+    inspectionType: createForm.inspectionType,
+    sampleQty: createForm.sampleQty,
+  };
+  const originalForm = JSON.stringify(createForm);
   submitting.value = true;
   try {
-    const created = await execute((key) => createQualityInspection({
-      workReportId: report.id,
-      inspectionNo: createForm.inspectionNo,
-      inspectionType: createForm.inspectionType,
-      sampleQty: createForm.sampleQty,
-    }, key), { onConflict: loadData });
-    if (!created?.data?.id) {
-      throw new Error("服务端未返回 inspection_id，已阻止继续办理质检结果");
-    }
-    createModalVisible.value = false;
-    ElMessage.success("质检单创建成功！");
-    await loadData();
-    emit("refresh");
+    await execute(async (key) => {
+      const created = await createQualityInspection(requestPayload, key);
+      if (!created?.data?.id) throw new Error("服务端未返回 inspection_id，已阻止继续办理质检结果");
+      // 修改用途：retry 成功刷新质量事实，只关闭仍对应首次报工与表单的弹窗。
+      if (selectedReport.value?.id === requestPayload.workReportId
+        && JSON.stringify(createForm) === originalForm) createModalVisible.value = false;
+      ElMessage.success("质检单创建成功！");
+      await loadData();
+      emit("refresh");
+      return created;
+    }, { onConflict: loadData });
   } catch (err: any) {
     ElMessage.error(`创建质检单失败：${err?.message || err}`);
   } finally {
@@ -422,18 +433,25 @@ function openSubmitModal(ins: any) {
 /** 提交质检评定结论 */
 async function submitResult() {
   if (!selectedInspection.value) return;
-  const inspection = selectedInspection.value;
+  // 修改用途：固定首次检验 ID 及评定字段，同键重试不读变化后的选中项与结果表单。
+  const inspectionId = selectedInspection.value.id;
+  const requestPayload = {
+    result: submitForm.result,
+    qualifiedQty: submitForm.qualifiedQty,
+    defectQty: submitForm.defectQty,
+  };
+  const originalForm = JSON.stringify(submitForm);
   submitting.value = true;
   try {
-    await execute((key) => submitQualityInspection(inspection.id, {
-      result: submitForm.result,
-      qualifiedQty: submitForm.qualifiedQty,
-      defectQty: submitForm.defectQty,
-    }, key), { onConflict: loadData });
-    submitModalVisible.value = false;
-    ElMessage.success("质检结论评定成功！");
-    await loadData();
-    emit("refresh");
+    await execute(async (key) => {
+      await submitQualityInspection(inspectionId, requestPayload, key);
+      // 修改用途：retry 成功只关闭原检验评定，不清除新选中检验的表单。
+      if (selectedInspection.value?.id === inspectionId
+        && JSON.stringify(submitForm) === originalForm) submitModalVisible.value = false;
+      ElMessage.success("质检结论评定成功！");
+      await loadData();
+      emit("refresh");
+    }, { onConflict: loadData });
   } catch (err: any) {
     ElMessage.error(`提交质检结论失败：${err?.message || err}`);
   } finally {
@@ -451,14 +469,19 @@ function openCloseModal(ins: any) {
 /** 提交不良品处置闭环 */
 async function submitClose() {
   if (!selectedInspection.value) return;
-  const inspection = selectedInspection.value;
+  // 修改用途：固定首次关闭处置的检验 ID 与处置类型，保持同键重试语义一致。
+  const inspectionId = selectedInspection.value.id;
+  const disposition = closeDisposition.value;
   submitting.value = true;
   try {
-    await execute((key) => closeQualityInspection(inspection.id, closeDisposition.value, key), { onConflict: loadData });
-    closeModalVisible.value = false;
-    ElMessage.success("不良品处置闭环已完成！");
-    await loadData();
-    emit("refresh");
+    await execute(async (key) => {
+      await closeQualityInspection(inspectionId, disposition, key);
+      // 修改用途：retry 成功只关闭原检验处置，不覆盖后来选择的对象或处置方式。
+      if (selectedInspection.value?.id === inspectionId && closeDisposition.value === disposition) closeModalVisible.value = false;
+      ElMessage.success("不良品处置闭环已完成！");
+      await loadData();
+      emit("refresh");
+    }, { onConflict: loadData });
   } catch (err: any) {
     ElMessage.error(`关闭处置失败：${err?.message || err}`);
   } finally {

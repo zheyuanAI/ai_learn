@@ -401,8 +401,8 @@ function initParticles() {
 }
 
 onMounted(() => {
-  // 检查 URL 是否带 401 会话失效标记
-  if (route.query.reason === "401" || !authStore.isSessionValid) {
+  // 修改用途：正常退出也会清除会话，只有请求拦截器明确携带的 401 标记才提示被顶替或过期。
+  if (route.query.reason === "401") {
     show401Alert.value = true;
   }
 

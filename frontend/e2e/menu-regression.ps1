@@ -67,7 +67,12 @@ try {
     Invoke-QuietPlaywrightCli @("state-load", $resolvedStateFile)
     Invoke-QuietPlaywrightCli @("goto", "$baseUrl/")
   } else {
-    Invoke-QuietPlaywrightCli @("select", "#loginTenant", $tenantCode)
+    # 登录页使用 Element Plus 自定义下拉框，不能调用只适用于原生 select 的 selectOption。
+    # 默认租户已由页面选中；切换其他租户时展开下拉框并点击对应选项。
+    if ($tenantCode -ne "tenant_demo_a") {
+      Invoke-QuietPlaywrightCli @("click", "#loginTenant")
+      Invoke-QuietPlaywrightCli @("click", ".el-select-dropdown__item:has-text('$tenantCode')")
+    }
     Invoke-QuietPlaywrightCli @("fill", "#loginUsername", $username)
     # CLI 输出被抑制；密码只在当前子进程参数和页面内存中短暂存在，不写入报告或仓库。
     Invoke-QuietPlaywrightCli @("fill", "#loginPassword", $password)
@@ -94,6 +99,9 @@ try {
     if ($item.id -eq "MENU_LEAVES" -and $item.detail.results) {
       foreach ($leaf in $item.detail.results) {
         Write-Output ("  menuCode={0}; requestedPath={1}; finalPath={2}; result={3}" -f $leaf.menuCode, $leaf.requestedPath, $leaf.finalPath, $leaf.result)
+        foreach ($failure in $leaf.unavailableApis) {
+          Write-Output ("    apiStatus={0}; url={1}" -f $failure.status, $failure.url)
+        }
       }
     }
   }

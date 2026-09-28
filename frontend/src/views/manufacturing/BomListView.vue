@@ -96,6 +96,7 @@
             查看明细
           </el-button>
           <el-button
+            v-if="hasPermission('mes:bom:manage')"
             type="danger"
             link
             size="small"

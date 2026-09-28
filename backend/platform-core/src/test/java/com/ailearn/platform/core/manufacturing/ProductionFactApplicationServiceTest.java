@@ -129,6 +129,17 @@ class ProductionFactApplicationServiceTest {
         assertEquals(1, returnResult.inventoryTransactionIds().size());
         verify(inventoryCommandService, times(1)).decrease(any());
         verify(inventoryCommandService, times(1)).increase(any());
+        // 修改用途：领料和退料各自在首个库存写前预锁完整维度，不能因工单串行锁而遗漏跨工单余额锁序。
+        var locks = org.mockito.ArgumentCaptor.forClass(java.util.Collection.class);
+        var commandOrder = org.mockito.Mockito.inOrder(inventoryCommandService);
+        commandOrder.verify(inventoryCommandService).lockBalances(locks.capture());
+        commandOrder.verify(inventoryCommandService).decrease(any());
+        commandOrder.verify(inventoryCommandService).lockBalances(locks.capture());
+        commandOrder.verify(inventoryCommandService).increase(any());
+        var expected = java.util.Set.of(new com.ailearn.platform.core.inventory.domain.InventoryDimension(
+                PRODUCT_ID, WAREHOUSE_ID, LOCATION_ID, ""));
+        assertEquals(expected, new java.util.HashSet<>(locks.getAllValues().getFirst()));
+        assertEquals(expected, new java.util.HashSet<>(locks.getAllValues().getLast()));
     }
 
     /** Draft 退料在创建后若被其他单据耗尽可退量，确认时必须再次拒绝，不能产生库存增加。 */

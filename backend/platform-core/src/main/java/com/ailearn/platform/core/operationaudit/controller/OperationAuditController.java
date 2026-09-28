@@ -27,11 +27,15 @@ public class OperationAuditController {
     }
 
     /**
-     * 用途：查询指定销售订单的账号操作时间线。
+     * 用途：查询指定销售或采购订单的账号操作时间线。
      * 入参：实体类型、实体 UUID、可选时间范围和条数；出参：现有审计领域记录；流程：补充可信租户后调用应用服务。
      */
     @GetMapping
-    @PreAuthorize("hasAuthority('sales:order:view')")
+    // 修改：按对象领域检查原有查看权限，不能用销售权限读取采购记录。
+    @PreAuthorize("(#entityType != null and #entityType.trim().equalsIgnoreCase('SALES_ORDER') "
+            + "and hasAuthority('sales:order:view')) or "
+            + "(#entityType != null and #entityType.trim().equalsIgnoreCase('PURCHASE_ORDER') "
+            + "and hasAuthority('pur:order:view'))")
     public ApiResponse<List<OperationAuditEntry>> query(
             @RequestParam(name = "entity_type") String entityType,
             @RequestParam(name = "entity_id") UUID entityId,
@@ -41,8 +45,8 @@ public class OperationAuditController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime occurredTo,
             @RequestParam(name = "limit", defaultValue = "50") int limit) {
         String normalizedType = entityType == null ? "" : entityType.trim().toUpperCase(Locale.ROOT);
-        if (!"SALES_ORDER".equals(normalizedType)) {
-            throw new IllegalArgumentException("当前操作审计只支持 SALES_ORDER");
+        if (!"SALES_ORDER".equals(normalizedType) && !"PURCHASE_ORDER".equals(normalizedType)) {
+            throw new IllegalArgumentException("当前操作审计只支持 SALES_ORDER 或 PURCHASE_ORDER");
         }
         return ApiResponse.success(applicationService.query(new OperationAuditQuery(
                 TenantContextHolder.requireTenantId(), normalizedType, entityId,

@@ -95,7 +95,8 @@ class CorePostgresMigrationTest {
                                     + "WHERE table_schema='public' AND table_name='" + table + "'"),
                             "缺少 Core 表: " + table);
                 }
-                assertEquals(11, scalarInt(connection,
+                // 修改用途：V11 为采购订单行累计查询增加索引，迁移总数随 Core 版本同步更新。
+                assertEquals(12, scalarInt(connection,
                         "SELECT COUNT(*) FROM core_flyway_schema_history WHERE success = TRUE"));
                 assertEquals(1, scalarInt(connection,
                         "SELECT COUNT(*) FROM pg_constraint "

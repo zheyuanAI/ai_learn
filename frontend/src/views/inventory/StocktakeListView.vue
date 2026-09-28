@@ -7,7 +7,12 @@
       description="页面状态流转：未盘点 -> 盘点中 -> 已确认并调整。未盘点生成盘点范围并冻结系统数量快照；盘点中录入实盘数量与差异原因；确认并调整后按【实盘数量 - 系统数量】生成调整流水并更新余额。"
     >
       <template #actions>
-        <el-button type="primary" :icon="Plus" @click="isCreateVisible = true">
+        <el-button
+          v-if="hasAllPermissions('inv:stocktake:create', 'inv:stocktake:start')"
+          type="primary"
+          :icon="Plus"
+          @click="isCreateVisible = true"
+        >
           新建盘点任务
         </el-button>
       </template>
@@ -48,7 +53,13 @@
       description="当前未发现盘点任务，您可以点击右上角发起新的盘点计划并冻结快照。"
     >
       <template #action>
-        <el-button type="primary" size="small" :icon="Plus" @click="isCreateVisible = true">
+        <el-button
+          v-if="hasAllPermissions('inv:stocktake:create', 'inv:stocktake:start')"
+          type="primary"
+          size="small"
+          :icon="Plus"
+          @click="isCreateVisible = true"
+        >
           立即新建盘点
         </el-button>
       </template>
@@ -170,6 +181,9 @@ import {
   startStocktake,
   confirmStocktake,
 } from "@/api/inventory";
+import { usePermission } from "@/composables/usePermission";
+
+const { hasAllPermissions } = usePermission();
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");

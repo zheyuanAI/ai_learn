@@ -10,6 +10,15 @@ package com.ailearn.platform.core.inventory.application;
 public interface InventoryCommandService {
 
     /**
+     * 在调用方已有事务内预锁本次所有库存维度，避免多步命令按不同顺序取得余额锁。
+     * 入参：完整维度集合；无出参；流程：校验可信租户、用户和全部库位，再去重并按稳定键一次性加锁。
+     * 调用方必须在首次库存写前调用，后续命令仍自行校验数量、版本、幂等和预留归属。
+     *
+     * @param dimensions 本次业务事务会访问的全部库存维度
+     */
+    void lockBalances(java.util.Collection<com.ailearn.platform.core.inventory.domain.InventoryDimension> dimensions);
+
+    /**
      * 在库存命令事务内锁定并校验余额版本；盘点零差异确认也必须经过该入口，避免绕过余额行锁。
      * focused mock 未实现时可返回 null，由调用方回退到查询端口；生产 InventoryApplicationService 返回已锁定余额。
      *

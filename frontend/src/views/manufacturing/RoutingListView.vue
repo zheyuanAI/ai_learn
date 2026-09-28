@@ -91,6 +91,7 @@
             查看工序
           </el-button>
           <el-button
+            v-if="hasPermission('mes:routing:manage')"
             type="danger"
             link
             size="small"

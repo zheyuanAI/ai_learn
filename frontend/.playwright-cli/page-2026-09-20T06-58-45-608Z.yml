@@ -1,0 +1,68 @@
+- generic [active] [ref=f6e1]:
+  - generic [ref=f6e100]:
+    - complementary [ref=f6e101]:
+      - generic [ref=f6e102]:
+        - heading "制造与仓储协同执行平台" [level=1] [ref=f6e103]
+        - paragraph [ref=f6e104]: 一期壳层按黄金业务闭环组织；动态挂载当前角色授权菜单。
+      - navigation [ref=f6e105]:
+        - link "📊 控制台看板" [ref=f6e106] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=f6e107]:
+            - generic [ref=f6e108]: 📊
+            - strong [ref=f6e110]: 控制台看板
+        - button "📦 主数据管理 ▼" [ref=f6e112] [cursor=pointer]:
+          - generic [ref=f6e113]:
+            - generic [ref=f6e114]: 📦
+            - strong [ref=f6e116]: 主数据管理
+          - generic [ref=f6e117]: ▼
+        - button "🛒 采购入库 ▼" [ref=f6e119] [cursor=pointer]:
+          - generic [ref=f6e120]:
+            - generic [ref=f6e121]: 🛒
+            - strong [ref=f6e123]: 采购入库
+          - generic [ref=f6e124]: ▼
+        - link "🗺️ 厂区二维地图" [ref=f6e125] [cursor=pointer]:
+          - /url: /gis/site-maps
+          - generic [ref=f6e126]:
+            - generic [ref=f6e127]: 🗺️
+            - strong [ref=f6e129]: 厂区二维地图
+        - button "🤖 智能助手与追溯 ▼" [ref=f6e131] [cursor=pointer]:
+          - generic [ref=f6e132]:
+            - generic [ref=f6e133]: 🤖
+            - strong [ref=f6e135]: 智能助手与追溯
+          - generic [ref=f6e136]: ▼
+      - generic [ref=f6e137]: 系统认证状态：在线
+    - generic [ref=f6e140]:
+      - banner [ref=f6e141]:
+        - generic [ref=f6e142]:
+          - generic [ref=f6e143]: 智造协同 / 工作空间
+          - generic [ref=f6e144]: 🏢 tenant_demo_a
+          - navigation "面包屑" [ref=f6e146]:
+            - generic [ref=f6e147]:
+              - link "首页" [ref=f6e148]
+              - text: /
+            - link "一期总览" [ref=f6e150]
+        - generic [ref=f6e151]:
+          - button "👤 陈采购 purchase.agent" [ref=f6e153] [cursor=pointer]:
+            - generic [ref=f6e154]: 👤
+            - generic [ref=f6e155]:
+              - generic [ref=f6e156]: 陈采购
+              - generic [ref=f6e157]: purchase.agent
+          - button "退出登录" [ref=f6e158] [cursor=pointer]:
+            - generic [aria-hidden] [ref=f6e160]: ➔
+      - main [ref=f6e161]:
+        - generic [ref=f6e162]:
+          - paragraph [ref=f6e163]: Phase 1 Target Design
+          - heading "围绕一条黄金业务闭环推进" [level=2] [ref=f6e164]
+          - paragraph [ref=f6e165]: 销售需求通过人工来源关系连接生产与采购，再贯通收货、上架、领退料、工序执行、成品入库、库存预留、拣货和发货。这里仅展示一期目标与导航，不代表业务功能已经实现。
+        - generic [ref=f6e166]:
+          - article [ref=f6e167]:
+            - heading "业务主线" [level=3] [ref=f6e168]
+            - paragraph [ref=f6e169]: 销售行 -> 生产工单 -> 采购来源 -> 制造执行 -> 销售交付。
+          - article [ref=f6e170]:
+            - heading "事实边界" [level=3] [ref=f6e171]
+            - paragraph [ref=f6e172]: 预留不扣实物，上架与拣货只移位，发货才扣减总库存；遥测、状态与告警分离。
+          - article [ref=f6e173]:
+            - heading "展示边界" [level=3] [ref=f6e174]
+            - paragraph [ref=f6e175]: 二维地图、看板、追溯与 AI 均只读，不建立第二套事实来源。
+  - alert [ref=f6e176]:
+    - paragraph [ref=f6e180]: 登录成功！当前身份：陈采购，正在进入系统...

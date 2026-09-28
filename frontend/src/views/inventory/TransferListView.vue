@@ -7,7 +7,12 @@
       description="在同一事务中扣减来源库位、增加目标库位，企业总实物库存保持不变。来源库位可用库存必须充足，调拨失败严禁产生单边库存事实。"
     >
       <template #actions>
-        <el-button type="primary" :icon="Plus" @click="openCreateModal">
+        <el-button
+          v-if="hasPermission('inv:transfer:create')"
+          type="primary"
+          :icon="Plus"
+          @click="openCreateModal"
+        >
           发起库位调拨
         </el-button>
       </template>
@@ -47,7 +52,13 @@
       description="当前未查询到任何库位调拨单据，您可以点击右上角发起新的调拨任务。"
     >
       <template #action>
-        <el-button type="primary" size="small" :icon="Plus" @click="openCreateModal">
+        <el-button
+          v-if="hasPermission('inv:transfer:create')"
+          type="primary"
+          size="small"
+          :icon="Plus"
+          @click="openCreateModal"
+        >
           立即发起调拨
         </el-button>
       </template>
@@ -99,7 +110,7 @@
           详情
         </el-button>
         <el-button
-          v-if="row.status === 'Draft'"
+          v-if="row.status === 'Draft' && hasPermission('inv:transfer:confirm')"
           type="success"
           link
           size="small"
@@ -191,6 +202,9 @@ import type { ViewState } from "@/types/common";
 import type { TransferOrder, Product, Location } from "@/types/inventory";
 import { getLocations, getProducts } from "@/api/masterData";
 import { getTransfers, createTransfer, confirmTransfer } from "@/api/inventory";
+import { usePermission } from "@/composables/usePermission";
+
+const { hasPermission } = usePermission();
 
 const viewState = ref<ViewState>("loading");
 const errorMessage = ref("");

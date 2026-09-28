@@ -1,10 +1,14 @@
 package com.ailearn.platform.iot.alarm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.doThrow;
 
 import com.ailearn.platform.iot.alarm.application.AlarmApplicationServiceImpl;
 import com.ailearn.platform.iot.alarm.domain.AlarmFact;
@@ -19,6 +23,7 @@ import com.ailearn.platform.iot.telemetry.application.TelemetryCredentialContext
 import com.ailearn.platform.iot.telemetry.application.TelemetryIngestionCommand;
 import com.ailearn.platform.iot.telemetry.application.TelemetryMetric;
 import com.ailearn.platform.shared.context.RequestContextHolder;
+import com.ailearn.platform.shared.exception.ServiceUnavailableException;
 import com.ailearn.platform.shared.idempotency.InMemoryIdempotencyStorage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
@@ -130,20 +135,33 @@ class AlarmApplicationServiceTest {
         assertThrows(AlarmException.class, () -> service.ack(alarmId, "二次确认", "ack-5"));
     }
 
-    /** Core 自动补链失败时不能回滚已保存的 IoT 告警事实，后续由补链任务重试。 */
+    /** 修改用途：本地入队失败必须传播给摄取事务，防止返回成功后遗留无法补链的告警。 */
     @Test
-    void contextLinkFailureDoesNotRollbackAlarmFact() {
+    void enqueueFailureIsPropagatedForMessageRedelivery() {
         AlarmContextLinkApplicationService contextLink = Mockito.mock(AlarmContextLinkApplicationService.class);
-        when(contextLink.link(eq(TENANT_ID), any(UUID.class)))
-                .thenThrow(new RuntimeException("Core unavailable"));
+        ServiceUnavailableException unavailable = new ServiceUnavailableException("本地任务数据库不可用");
+        doThrow(unavailable).when(contextLink).enqueue(eq(TENANT_ID), any(UUID.class));
         service = new AlarmApplicationServiceImpl(repository, ruleFactsPort,
                 new IotIdempotencyExecutor(new InMemoryIdempotencyStorage(),
                         new ObjectMapper().findAndRegisterModules()), null, contextLink);
 
-        service.onTelemetryAccepted(command("m-9", BASE_TIME, "11"), null);
+        assertSame(unavailable, assertThrows(ServiceUnavailableException.class,
+                () -> service.onTelemetryAccepted(command("m-9", BASE_TIME, "11"), null)));
+    }
 
-        assertEquals(AlarmStatus.Triggered,
-                repository.findActive(TENANT_ID, DEVICE_ID, RULE_ID).orElseThrow().status());
+    /** 遥测触发告警时只允许本地入队，不能在事实保存链上同步执行 Core 补链。 */
+    @Test
+    void triggeredAlarmDoesNotLinkContextImmediately() {
+        AlarmContextLinkApplicationService contextLink = Mockito.mock(AlarmContextLinkApplicationService.class);
+        service = new AlarmApplicationServiceImpl(repository, ruleFactsPort,
+                new IotIdempotencyExecutor(new InMemoryIdempotencyStorage(),
+                        new ObjectMapper().findAndRegisterModules()), null, contextLink);
+
+        service.onTelemetryAccepted(command("m-deferred", BASE_TIME, "11"), null);
+
+        UUID alarmId = repository.findActive(TENANT_ID, DEVICE_ID, RULE_ID).orElseThrow().id();
+        verify(contextLink).enqueue(TENANT_ID, alarmId);
+        verify(contextLink, never()).link(any(UUID.class), any(UUID.class));
     }
 
     private AlarmRule rule() {

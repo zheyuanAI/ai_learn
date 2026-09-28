@@ -267,6 +267,8 @@ public class StocktakeApplicationServiceImpl implements StocktakeApplicationServ
             throw new StocktakeException(StocktakeErrorCode.ST_001, "只有盘点中单据允许确认");
         }
         Map<UUID, StocktakeCountLineRequest> requestByLine = validateCountRequest(request, order.lines());
+        // 修改用途：在任何单行版本校验或差异调整前预锁整个快照，避免不同盘点/调拨按反序持有余额锁。
+        inventoryCommandService.lockBalances(order.lines().stream().map(StocktakeLine::dimension).toList());
         List<StocktakeLine> confirmedLines = new ArrayList<>();
         List<UUID> transactionIds = new ArrayList<>();
         for (StocktakeLine line : order.lines()) {

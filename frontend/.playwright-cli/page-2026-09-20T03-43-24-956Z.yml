@@ -1,0 +1,78 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e94]:
+    - complementary [ref=e95]:
+      - generic [ref=e96]:
+        - heading "制造与仓储协同执行平台" [level=1] [ref=e97]
+        - paragraph [ref=e98]: 一期壳层按黄金业务闭环组织；动态挂载当前角色授权菜单。
+      - navigation [ref=e99]:
+        - link "📊 控制台看板" [ref=e100] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=e101]:
+            - generic [ref=e102]: 📊
+            - strong [ref=e104]: 控制台看板
+        - button "📦 主数据管理 ▼" [ref=e106] [cursor=pointer]:
+          - generic [ref=e107]:
+            - generic [ref=e108]: 📦
+            - strong [ref=e110]: 主数据管理
+          - generic [ref=e111]: ▼
+        - button "🛒 采购入库 ▼" [ref=e113] [cursor=pointer]:
+          - generic [ref=e114]:
+            - generic [ref=e115]: 🛒
+            - strong [ref=e117]: 采购入库
+          - generic [ref=e118]: ▼
+        - button "🏬 销售出库 ▼" [ref=e120] [cursor=pointer]:
+          - generic [ref=e121]:
+            - generic [ref=e122]: 🏬
+            - strong [ref=e124]: 销售出库
+          - generic [ref=e125]: ▼
+        - button "⚙️ 制造执行 ▼" [ref=e127] [cursor=pointer]:
+          - generic [ref=e128]:
+            - generic [ref=e129]: ⚙️
+            - strong [ref=e131]: 制造执行
+          - generic [ref=e132]: ▼
+        - link "🗺️ 厂区二维地图" [ref=e133] [cursor=pointer]:
+          - /url: /gis/site-maps
+          - generic [ref=e134]:
+            - generic [ref=e135]: 🗺️
+            - strong [ref=e137]: 厂区二维地图
+        - button "🤖 智能助手与追溯 ▼" [ref=e139] [cursor=pointer]:
+          - generic [ref=e140]:
+            - generic [ref=e141]: 🤖
+            - strong [ref=e143]: 智能助手与追溯
+          - generic [ref=e144]: ▼
+      - generic [ref=e145]: 系统认证状态：在线
+    - generic [ref=e148]:
+      - banner [ref=e149]:
+        - generic [ref=e150]:
+          - generic [ref=e151]: 智造协同 / 工作空间
+          - generic [ref=e152]: 🏢 tenant_demo_a
+          - navigation "面包屑" [ref=e154]:
+            - generic [ref=e155]:
+              - link "首页" [ref=e156]
+              - text: /
+            - link "供需与仓储" [ref=e158]
+        - generic [ref=e159]:
+          - button "👤 王库管 warehouse.operator" [ref=e161] [cursor=pointer]:
+            - generic [ref=e162]: 👤
+            - generic [ref=e163]:
+              - generic [ref=e164]: 王库管
+              - generic [ref=e165]: warehouse.operator
+          - button "退出登录" [ref=e166] [cursor=pointer]:
+            - generic [aria-hidden] [ref=e168]: ➔
+      - main [ref=e169]:
+        - generic [ref=e170]:
+          - paragraph [ref=e171]: Domain Ready
+          - heading "供需与仓储" [level=2] [ref=e172]
+          - paragraph [ref=e173]: 销售需求、生产工单与采购来源人工关联；收货进入暂存位，上架与拣货只移位，销售预留后由发货扣减实物库存。
+        - generic [ref=e174]:
+          - article [ref=e175]:
+            - heading "Spec 目录" [level=3] [ref=e176]
+            - paragraph [ref=e177]: docs/specs/10-erp-wms
+          - article [ref=e178]:
+            - heading "原型基线" [level=3] [ref=e179]
+            - paragraph [ref=e180]: docs/prototype/pages/purchase-inbound.html / sales-outbound.html
+        - article [ref=e182]:
+          - heading "开发提示" [level=3] [ref=e183]
+          - paragraph [ref=e184]: 先接列表查询和详情查询，再补写接口；所有写接口默认要幂等、租户过滤和权限校验。
+  - alert [ref=e185]:
+    - paragraph [ref=e189]: 登录成功！当前身份：王库管，正在进入系统...

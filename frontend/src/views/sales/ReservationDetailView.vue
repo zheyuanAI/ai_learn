@@ -138,6 +138,12 @@ const isReleaseDialogOpen = ref(false);
 const activeLineToRelease = ref<SalesOrderLine | null>(null);
 const releaseReason = ref("人工调整释放未拣预留恢复可用库存");
 
+/** 用途：向父页提供释放草稿快照；无入参，返回选中行、原因和确认框状态，用于防止旧重试关闭新处置。 */
+function getDraftSnapshot(): string {
+  return JSON.stringify({ lineId: activeLineToRelease.value?.id, reason: releaseReason.value, visible: isReleaseDialogOpen.value });
+}
+defineExpose({ getDraftSnapshot });
+
 const releaseDialogMessage = computed(() => {
   if (!activeLineToRelease.value) return "";
   return `确认释放物料 ${activeLineToRelease.value.sku} 的未拣预留数量 ${activeLineToRelease.value.unpickedQty} ${activeLineToRelease.value.uom} 吗？释放后对应数量恢复为仓库可用库存，实物数量不变。`;

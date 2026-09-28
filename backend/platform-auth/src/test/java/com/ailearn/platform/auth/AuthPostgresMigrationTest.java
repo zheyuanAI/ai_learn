@@ -4,7 +4,10 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
@@ -15,6 +18,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationVersion;
@@ -95,7 +99,8 @@ class AuthPostgresMigrationTest {
 
             try (Connection connection = DriverManager.getConnection(jdbcUrl, adminUsername, adminPassword)) {
                 assertConnectedDatabase(connection, databaseName);
-                assertMigrationHistory(connection, "auth_flyway_schema_history", 9, "9");
+                // 修改：迁移事实源已到 V14，真实迁移验收需覆盖当前全部版本。
+                assertMigrationHistory(connection, "auth_flyway_schema_history", 14, "14");
                 assertMenuSchemaAndTenantData(connection);
                 assertDefaultAdminStillHasMenus(connection);
                 assertTenantAdminCanManageProductAndWarehouse(connection);
@@ -141,7 +146,8 @@ class AuthPostgresMigrationTest {
             try (Connection connection = DriverManager.getConnection(jdbcUrl, adminUsername, adminPassword)) {
                 assertConnectedDatabase(connection, databaseName);
                 assertHistoryRowsEqual(sharedHistoryBefore, readHistoryRows(connection, "flyway_schema_history"));
-                assertMigrationHistory(connection, "auth_flyway_schema_history", 9, "9");
+                // 修改：历史 V1–V4 接管后同样必须迁移到当前 V14。
+                assertMigrationHistory(connection, "auth_flyway_schema_history", 14, "14");
                 assertEquals(1, scalarInt(connection,
                         "SELECT COUNT(*) FROM auth_flyway_schema_history "
                                 + "WHERE version = '5' AND script = 'V5__menu_tenant_isolation_and_visible_status.sql' "
@@ -213,13 +219,29 @@ class AuthPostgresMigrationTest {
         assertFalse(Files.exists(deletedSchema), "schema-pg.sql 已无运行时或测试调用方，应删除");
 
         List<Path> references = new ArrayList<>();
-        try (var paths = Files.walk(repositoryRoot)) {
-            paths.filter(Files::isRegularFile)
-                    .filter(path -> !path.startsWith(repositoryRoot.resolve(".git")))
-                    .filter(path -> !path.endsWith("AuthPostgresMigrationTest.java"))
-                    .filter(path -> !path.toString().contains("\\target\\"))
-                    .forEach(path -> collectSchemaPgReferences(path, references));
-        }
+        // 修改用途：只检查项目源文件和配置，跳过依赖、工具链及生成目录，避免读入本地数据库和大体积二进制。
+        // 通过目录剪枝兼容 Windows/Linux，保留废弃脚本不存在及源文件无引用的原有断言。
+        Set<String> generatedDirectories = Set.of(".git", "target", "node_modules", "dist", ".playwright-cli", "test-results");
+        Files.walkFileTree(repositoryRoot, new SimpleFileVisitor<>() {
+            /** 用途：进入目录前剪枝；入参为目录与属性，返回是否继续；源目录完整保留。 */
+            @Override
+            public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
+                String name = directory.getFileName().toString();
+                boolean localRuntime = repositoryRoot.equals(directory.getParent())
+                        && Set.of("runtime", "output", "tmp").contains(name);
+                return generatedDirectories.contains(name) || localRuntime
+                        ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+            }
+
+            /** 用途：检查源文件引用；入参为文件与属性，返回继续；排除本测试自身的断言文本。 */
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+                if (attributes.isRegularFile() && !file.endsWith("AuthPostgresMigrationTest.java")) {
+                    collectSchemaPgReferences(file, references);
+                }
+                return FileVisitResult.CONTINUE;
+            }
+        });
         assertTrue(references.isEmpty(), "schema-pg.sql 不应再被引用: " + references);
     }
 
@@ -247,7 +269,10 @@ class AuthPostgresMigrationTest {
      */
     private static void assertMigrationHistory(Connection connection, String tableName, int versionCount,
                                                String maxVersion) throws SQLException {
-        String sql = "SELECT COUNT(*), COALESCE(MAX(version), '') FROM " + tableName + " WHERE success = TRUE";
+        // 修改：Flyway version 是文本，MAX 会将 V9 排在 V14 后；按安装顺序取得最终成功迁移，保留版本数校验。
+        String sql = "SELECT COUNT(*), COALESCE((SELECT version FROM " + tableName
+                + " WHERE success = TRUE ORDER BY installed_rank DESC LIMIT 1), '') FROM "
+                + tableName + " WHERE success = TRUE";
         try (Statement statement = connection.createStatement(); ResultSet resultSet = statement.executeQuery(sql)) {
             assertTrue(resultSet.next());
             assertEquals(versionCount, resultSet.getInt(1));

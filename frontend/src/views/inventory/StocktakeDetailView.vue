@@ -65,6 +65,7 @@
                 v-if="stocktake.status === 'Counting'"
                 v-model="row.countedQty"
                 size="small"
+                :disabled="!canConfirm"
                 @input="onCountedChange(row)"
               />
               <QuantityText v-else :value="row.countedQty" :unit="row.uom" />
@@ -83,6 +84,7 @@
                 v-if="stocktake.status === 'Counting'"
                 v-model="row.varianceReason"
                 size="small"
+                :disabled="!canConfirm"
                 :placeholder="parseFloat(row.varianceQty || '0') !== 0 ? '必须填写差异原因' : '无差异可留空'"
               />
               <span v-else class="reason-text">{{ row.varianceReason || '-' }}</span>
@@ -125,6 +127,9 @@ import StatusBadge from "@/components/common/StatusBadge.vue";
 import QuantityText from "@/components/common/QuantityText.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import { type StocktakeOrder, type StocktakeLine, stringSub } from "@/types/inventory";
+import { usePermission } from "@/composables/usePermission";
+
+const { hasPermission } = usePermission();
 
 const props = withDefaults(
   defineProps<{
@@ -150,7 +155,7 @@ const editableLines = ref<StocktakeLine[]>([]);
 const isConfirmOpen = ref(false);
 const canConfirm = computed(() => props.stocktake?.allowedActions?.some(
   (action) => action.action === "confirm" && action.enabled,
-) ?? false);
+) === true && hasPermission("inv:stocktake:confirm"));
 const allowedActionText = computed(() => {
   const actions = props.stocktake?.allowedActions || [];
   return actions.length === 0 ? "无" : actions

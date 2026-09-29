@@ -140,7 +140,7 @@ public interface InventoryBalanceMapper {
                                          @Param("locationId") UUID locationId,
                                          @Param("lotNo") String lotNo,
                                          @Param("limit") int limit,
-                                         @Param("offset") int offset);
+                                         @Param("offset") long offset);
 
     /**
      * 统计余额查询总数。

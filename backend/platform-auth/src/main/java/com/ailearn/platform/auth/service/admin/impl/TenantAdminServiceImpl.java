@@ -87,6 +87,10 @@ public class TenantAdminServiceImpl implements TenantAdminService {
         UUID tenantId = TenantContextHolder.requireTenantId();
         String currentUsername = UserContextHolder.getUsername();
 
+        // 修改用途：停用前先与登录共用租户行锁，避免撤销快照后旧登录再发布有效 JTI。
+        if (!tenantId.equals(userMapper.lockTenantForAdminMutation(tenantId))) {
+            throw new NotFoundException("当前租户不存在或已被删除");
+        }
         Tenant tenant = tenantMapper.selectById(tenantId);
         if (tenant == null || tenant.getIsdel() != 0) {
             log.warn("[更新租户失败] 租户不存在: tenantId={}", tenantId);

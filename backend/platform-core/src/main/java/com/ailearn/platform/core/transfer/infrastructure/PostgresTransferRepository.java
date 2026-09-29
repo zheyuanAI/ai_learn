@@ -76,7 +76,7 @@ public class PostgresTransferRepository implements TransferRepository {
      * 入参：可信租户、零基分页和白名单筛选；出参：当前页及总数；流程：先读表头，再按表头逐单读取明细。
      */
     @Override
-    public TransferPage findPage(UUID tenantId, int offset, int limit, String status, String keyword) {
+    public TransferPage findPage(UUID tenantId, long offset, int limit, String status, String keyword) {
         return database(() -> {
             List<TransferOrder> orders = mapper.findPage(tenantId, offset, limit, status, keyword).stream()
                     .map(row -> toOrder(row, mapper.findLines(tenantId, row.getId())))

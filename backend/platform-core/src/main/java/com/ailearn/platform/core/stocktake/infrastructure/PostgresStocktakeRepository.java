@@ -65,7 +65,7 @@ public class PostgresStocktakeRepository implements StocktakeRepository {
      * 入参：可信租户、零基分页和白名单筛选；出参：当前页及总数；流程：读取表头后读取每单快照明细。
      */
     @Override
-    public StocktakePage findPage(UUID tenantId, int offset, int limit, String status, String keyword) {
+    public StocktakePage findPage(UUID tenantId, long offset, int limit, String status, String keyword) {
         return database(() -> {
             List<StocktakeOrder> orders = mapper.findPage(tenantId, offset, limit, status, keyword).stream()
                     .map(row -> toOrder(row, mapper.findLines(tenantId, row.getId())))

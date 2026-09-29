@@ -154,9 +154,10 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
         // 设置响应头中的 Request-Id
         exchange.getResponse().getHeaders().set(HeaderConstants.X_REQUEST_ID, finalRequestId);
 
-        // 2. 跨域预检 OPTIONS 请求直接放行
+        // 2. 修改用途：OPTIONS 可免认证，但非预检请求也可能转发下游，须先清理伪造身份/权限 Header。
         if (HttpMethod.OPTIONS.equals(request.getMethod())) {
-            return chain.filter(exchange);
+            ServerHttpRequest sanitizedRequest = sanitizeClientContextHeaders(request, finalRequestId);
+            return chain.filter(exchange.mutate().request(sanitizedRequest).build());
         }
 
         // 3. Open WebUI 不携带用户 JWT；先由唯一白名单和短期上下文恢复原用户，再走现有下游权限链。

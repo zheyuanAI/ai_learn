@@ -75,11 +75,16 @@ public interface UserSessionMapper extends BaseMapper<UserSession> {
     /**
      * 根据 JTI 显式撤销指定会话（用于主动注销）。
      *
-     * @param jti           JWT 唯一标识
-     * @param revokedAt     撤销时间戳
+     * 修改用途：按当前租户、用户和会话 JTI 精确撤销，避免迟到的旧请求撤销新会话。
+     * @param tenantId 当前租户 ID
+     * @param userId 当前用户 ID
+     * @param jti JWT 唯一标识
+     * @param revokedAt 撤销时间戳
      * @param revokedReason 撤销原因
      * @return 更新行数
      */
-    @Update("UPDATE auth_session SET status = 'REVOKED', revoked_at = #{revokedAt}, revoked_reason = #{revokedReason} WHERE jti = #{jti} AND status = 'ACTIVE'")
-    int revokeByJti(@Param("jti") String jti, @Param("revokedAt") LocalDateTime revokedAt, @Param("revokedReason") String revokedReason);
+    @Update("UPDATE auth_session SET status = 'REVOKED', revoked_at = #{revokedAt}, revoked_reason = #{revokedReason} WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND jti = #{jti} AND status = 'ACTIVE'")
+    int revokeByJti(@Param("tenantId") UUID tenantId, @Param("userId") UUID userId,
+                    @Param("jti") String jti, @Param("revokedAt") LocalDateTime revokedAt,
+                    @Param("revokedReason") String revokedReason);
 }

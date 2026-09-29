@@ -141,6 +141,8 @@ public class MenuAdminServiceImpl implements MenuAdminService {
     @Transactional(rollbackFor = Exception.class)
     public MenuAdminNodeVo createMenu(MenuCreateRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
+        // 修改原因：创建子菜单与删除父菜单共用同一租户锁，防止检查后出现悬空父节点。
+        lockTenantForMenuHierarchyMutation(tenantId);
 
         // 1. 父节点存在性及租户校验
         if (request.getParentId() != null) {
@@ -199,6 +201,8 @@ public class MenuAdminServiceImpl implements MenuAdminService {
     @Transactional(rollbackFor = Exception.class)
     public MenuAdminNodeVo updateMenu(UUID menuId, MenuUpdateRequest request) {
         UUID tenantId = TenantContextHolder.requireTenantId();
+        // 修改原因：同租户改父级必须先锁租户行再读树，避免 A→B 与 B→A 同时通过防环校验。
+        lockTenantForMenuHierarchyMutation(tenantId);
         Menu menu = menuMapper.selectById(menuId);
         if (menu == null || menu.getIsdel() != 0 || !tenantId.equals(menu.getTenantId())) {
             throw new NotFoundException("菜单不存在或已被删除");
@@ -293,6 +297,8 @@ public class MenuAdminServiceImpl implements MenuAdminService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteMenu(UUID menuId) {
         UUID tenantId = TenantContextHolder.requireTenantId();
+        // 修改原因：删除前锁定租户，串行化子节点创建、改父级与依赖检查。
+        lockTenantForMenuHierarchyMutation(tenantId);
         Menu menu = menuMapper.selectById(menuId);
         if (menu == null || menu.getIsdel() != 0 || !tenantId.equals(menu.getTenantId())) {
             throw new NotFoundException("菜单不存在或已被删除");
@@ -337,6 +343,18 @@ public class MenuAdminServiceImpl implements MenuAdminService {
             throw new NotFoundException("角色不存在或不属于当前租户");
         }
         return menuMapper.findMenuIdsByRoleId(roleId);
+    }
+
+    /**
+     * 在菜单层级写事务中锁定当前租户行。
+     * 入参为可信租户 ID；无返回值；流程为复用用户管理的租户行锁，并在租户失效时拒绝写入。
+     *
+     * @param tenantId 当前租户 ID
+     */
+    private void lockTenantForMenuHierarchyMutation(UUID tenantId) {
+        if (!tenantId.equals(userMapper.lockTenantForAdminMutation(tenantId))) {
+            throw new NotFoundException("租户不存在或已删除");
+        }
     }
 
     /**

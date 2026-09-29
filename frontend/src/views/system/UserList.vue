@@ -425,6 +425,8 @@ const errorMessage = ref("");
 const userList = ref<UserItem[]>([]);
 const allRoles = ref<RoleItem[]>([]);
 const totalCount = ref(0);
+// 修改用途：仅允许最后一次用户列表查询更新页面，避免旧页响应覆盖当前页。
+let userListRequestId = 0;
 
 // 查询过滤参数
 const queryParams = reactive<UserQueryParams>({
@@ -511,6 +513,8 @@ async function fetchAllRoles() {
 }
 
 async function fetchUserList() {
+  // 修改用途：请求顺序以发起时序为准，过期成功或失败响应都不能影响当前页。
+  const requestId = ++userListRequestId;
   isLoading.value = true;
   errorMessage.value = "";
   try {
@@ -524,6 +528,7 @@ async function fetchUserList() {
       roleId: queryParams.roleId || undefined,
     });
 
+    if (requestId !== userListRequestId) return;
     if (res.data) {
       if (Array.isArray(res.data)) {
         userList.value = res.data;
@@ -535,10 +540,11 @@ async function fetchUserList() {
       }
     }
   } catch (err: any) {
+    if (requestId !== userListRequestId) return;
     errorMessage.value = err.message || "无法拉取用户列表";
     ElMessage.error(`拉取用户列表失败：${err.message}`);
   } finally {
-    isLoading.value = false;
+    if (requestId === userListRequestId) isLoading.value = false;
   }
 }
 

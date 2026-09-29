@@ -178,6 +178,17 @@ public class PostgresIotRepository implements DeviceProfileRepository, DeviceRep
                 """, this::deviceRow, tenantId, id).stream().findFirst());
     }
 
+    /** 创建凭证时锁定设备行；同事务内校验 Active 后插入凭证，与并发停用操作串行化。 */
+    @Override
+    public Optional<Device> findDeviceByIdForUpdate(UUID tenantId, UUID id) {
+        return db(() -> jdbc.query("""
+                SELECT id, tenant_id, device_code, device_name, device_profile_id, protocol_type,
+                       lifecycle_status, work_center_id, area_id, map_point_id, created_by, created_at,
+                       updated_by, updated_at
+                  FROM iot_device WHERE tenant_id = ? AND id = ? AND isdel = 0 FOR UPDATE
+                """, this::deviceRow, tenantId, id).stream().findFirst());
+    }
+
     @Override
     public Optional<Device> findByCode(UUID tenantId, String deviceCode) {
         return db(() -> jdbc.query("""

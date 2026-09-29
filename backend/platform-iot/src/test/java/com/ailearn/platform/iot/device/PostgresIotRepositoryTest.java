@@ -1,9 +1,12 @@
 package com.ailearn.platform.iot.device;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.ailearn.platform.iot.device.infrastructure.PostgresIotRepository;
 import com.ailearn.platform.iot.profile.domain.DeviceProfile;
@@ -14,6 +17,7 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -29,6 +33,21 @@ class PostgresIotRepositoryTest {
 
     @Mock
     private JdbcTemplate jdbc;
+
+    /** 验证凭证创建使用租户限定的 FOR UPDATE 行锁，防止读取到并发停用前的设备状态。 */
+    @Test
+    void credentialCreationLocksTenantDeviceRow() {
+        UUID deviceId = UUID.randomUUID();
+        when(jdbc.query(anyString(), any(RowMapper.class), org.mockito.ArgumentMatchers.eq(TENANT_ID),
+                org.mockito.ArgumentMatchers.eq(deviceId))).thenReturn(List.of());
+
+        assertTrue(new PostgresIotRepository(jdbc).findDeviceByIdForUpdate(TENANT_ID, deviceId).isEmpty());
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbc).query(sql.capture(), any(RowMapper.class), org.mockito.ArgumentMatchers.eq(TENANT_ID),
+                org.mockito.ArgumentMatchers.eq(deviceId));
+        assertTrue(sql.getValue().contains("tenant_id = ? AND id = ? AND isdel = 0 FOR UPDATE"));
+    }
 
     @Test
     void profilePageLoadsMetricWhitelistFromDatabase() {

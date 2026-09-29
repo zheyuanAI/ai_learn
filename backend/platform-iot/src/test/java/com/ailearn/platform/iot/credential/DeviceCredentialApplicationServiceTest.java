@@ -117,6 +117,7 @@ class DeviceCredentialApplicationServiceTest {
         CredentialCreatedView created = service.create(DEVICE_ID, new com.ailearn.platform.iot.credential.dto.CredentialCreateRequest(),
                 "credential-revoke");
         DeviceCredential active = stored.get();
+        when(deviceRepository.findDeviceById(TENANT_ID, DEVICE_ID)).thenReturn(Optional.of(activeDevice(TENANT_ID)));
         DeviceCredential revoked = new DeviceCredential(active.id(), active.tenantId(), active.deviceId(),
                 active.credentialReference(), active.secretHash(), active.secretSalt(), CredentialStatus.Revoked,
                 active.createdBy(), active.createdAt(), USER_ID, NOW);
@@ -158,9 +159,26 @@ class DeviceCredentialApplicationServiceTest {
         assertThrows(IotException.class, () -> service.verifyReference("ambiguous"));
     }
 
+    /** 验证先通过带锁读取判断设备生命周期；若并发停用已提交，则不得生成凭证。 */
+    @Test
+    void disabledDeviceObservedAfterLockCannotReceiveNewCredential() {
+        Device active = activeDevice(TENANT_ID);
+        Device disabled = new Device(active.id(), active.tenantId(), active.deviceCode(), active.deviceName(),
+                active.deviceProfileId(), active.protocolType(), DeviceLifecycleStatus.Disabled,
+                active.workCenterId(), active.areaId(), active.mapPointId(), USER_ID, NOW, USER_ID, NOW);
+        when(deviceRepository.findDeviceByIdForUpdate(TENANT_ID, DEVICE_ID)).thenReturn(Optional.of(disabled));
+
+        assertThrows(IotException.class, () -> service.create(DEVICE_ID,
+                new com.ailearn.platform.iot.credential.dto.CredentialCreateRequest(), "credential-disabled-race"));
+
+        verify(deviceRepository).findDeviceByIdForUpdate(TENANT_ID, DEVICE_ID);
+        verify(deviceRepository, never()).findDeviceById(TENANT_ID, DEVICE_ID);
+        verify(repository, never()).insert(any(DeviceCredential.class));
+    }
+
     @Test
     void credentialManagementDoesNotFallBackToAResourceFromAnotherTenant() {
-        when(deviceRepository.findDeviceById(TENANT_ID, DEVICE_ID)).thenReturn(Optional.empty());
+        when(deviceRepository.findDeviceByIdForUpdate(TENANT_ID, DEVICE_ID)).thenReturn(Optional.empty());
 
         IotException exception = assertThrows(IotException.class,
                 () -> service.create(DEVICE_ID, new com.ailearn.platform.iot.credential.dto.CredentialCreateRequest(),
@@ -176,7 +194,7 @@ class DeviceCredentialApplicationServiceTest {
     }
 
     private void stubActiveDeviceAndInsert() {
-        when(deviceRepository.findDeviceById(TENANT_ID, DEVICE_ID)).thenReturn(Optional.of(activeDevice(TENANT_ID)));
+        when(deviceRepository.findDeviceByIdForUpdate(TENANT_ID, DEVICE_ID)).thenReturn(Optional.of(activeDevice(TENANT_ID)));
         when(repository.insert(any(DeviceCredential.class))).thenAnswer(invocation -> {
             DeviceCredential credential = invocation.getArgument(0);
             stored.set(credential);

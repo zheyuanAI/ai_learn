@@ -87,6 +87,20 @@ class AlarmApplicationServiceTest {
         assertEquals(recovered.ackedAt(), completed.ackedAt());
     }
 
+    /**
+     * 用途：验证超大合法页码不会因偏移溢出而错误返回第一页告警。
+     * 入参：已有一条告警、最大 int 页码与最大页大小；出参：空记录页及真实总数。
+     */
+    @Test
+    void largePageDoesNotReturnFirstPageAgain() {
+        service.onTelemetryAccepted(command("m-large-page", BASE_TIME, "11"), null);
+
+        var page = service.page(null, null, null, null, null, null, Integer.MAX_VALUE, 100);
+
+        assertEquals(0, page.records().size());
+        assertEquals(1, page.total());
+    }
+
     @Test
     void recoveryBeforeAckKeepsRecoveryTimeAndThenAckCompletes() {
         service.onTelemetryAccepted(command("m-4", BASE_TIME, "11"), null);

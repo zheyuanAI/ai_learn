@@ -31,13 +31,13 @@ public interface TransferRepository {
      * 查询当前租户的调拨分页；实现必须在表头和统计 SQL 中同时带租户与逻辑删除条件。
      *
      * @param tenantId 可信租户
-     * @param offset 零基偏移量
+     * @param offset 零基偏移量；使用 long 承载合法大页码，避免计算溢出
      * @param limit 当前页大小
      * @param status 可选状态
      * @param keyword 可选调拨单号关键词
      * @return 当前页聚合和总数
      */
-    TransferPage findPage(UUID tenantId, int offset, int limit, String status, String keyword);
+    TransferPage findPage(UUID tenantId, long offset, int limit, String status, String keyword);
 
     /**
      * 用版本条件将草稿推进为已确认。

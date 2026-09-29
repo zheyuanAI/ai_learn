@@ -257,6 +257,8 @@ public class SalesOrderApplicationServiceImpl implements SalesOrderApplicationSe
     private SalesOrderView updateInternal(UUID id, SalesOrderSaveRequest request, Actor actor,
                                           String idempotencyKey) {
         SalesOrder order = findOrder(actor.tenantId(), id);
+        // 修改用途：更新草稿同创建时一样校验客户归属及启用状态，防止写入跨租户或停用客户引用。
+        validateCustomer(actor.tenantId(), request.getCustomerId());
         List<SalesOrderLine> lines = buildLines(request.getLines(), actor.tenantId());
         SalesOrder updated = order.draftUpdated(request.getCustomerId(), request.getPlannedShipDate(),
                 normalizeRemark(request.getRemark()), lines, actor.userId(), OffsetDateTime.now(ZoneOffset.UTC));

@@ -154,7 +154,7 @@ public interface InventoryReservationMapper {
                                              @Param("locationId") UUID locationId,
                                              @Param("lotNo") String lotNo,
                                              @Param("limit") int limit,
-                                             @Param("offset") int offset);
+                                             @Param("offset") long offset);
 
     /**
      * 统计预留总数。

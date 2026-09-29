@@ -62,6 +62,12 @@ public interface SessionCacheService {
     void removeActiveSession(UUID tenantId, UUID userId);
 
     /**
+     * 仅当当前活跃 JTI 与请求的 JTI 一致时，原子撤销会话和该会话的授权缓存。
+     * 入参为可信租户、用户和当前请求 JTI；返回是否真正撤销；流程为比较后同时删除会话、权限和菜单快照。
+     */
+    boolean removeSessionAndAuthCacheIfMatches(UUID tenantId, UUID userId, String jti);
+
+    /**
      * 读取用户功能权限点缓存。
      *
      * @param tenantId 租户 ID

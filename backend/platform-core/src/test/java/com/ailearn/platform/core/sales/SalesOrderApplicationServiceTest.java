@@ -270,6 +270,29 @@ class SalesOrderApplicationServiceTest {
                 () -> strictService.create(saveRequest("SO-AUDIT-FAIL", "1"), "sales-audit-fail-1"));
     }
 
+    /**
+     * 用途：验证修改草稿不能写入跨租户或停用的客户引用。
+     * 入参：模拟当前租户不可见及已停用的客户查询结果；出参：两次更新均被拒绝。
+     * 流程：先读取当前租户草稿，再分别替换客户查询响应并确认订单不持久化。
+     */
+    @Test
+    void updateDraftRejectsCrossTenantAndInactiveCustomers() {
+        SalesOrder draft = order(SalesOrderStatus.Draft, line("10", "0", "0", "0"), 0);
+        when(repository.findById(TENANT_A, ORDER_ID)).thenReturn(Optional.of(draft));
+        when(customerRepository.findById(TENANT_A, CUSTOMER_ID)).thenReturn(Optional.empty());
+
+        assertThrows(SalesOrderException.class,
+                () -> service.update(ORDER_ID, saveRequest("SO-001", "12"), "sales-update-cross-tenant-1"));
+
+        Customer inactive = customer();
+        inactive.setStatus("DISABLED");
+        when(customerRepository.findById(TENANT_A, CUSTOMER_ID)).thenReturn(Optional.of(inactive));
+        assertThrows(SalesOrderException.class,
+                () -> service.update(ORDER_ID, saveRequest("SO-001", "12"), "sales-update-inactive-1"));
+        verify(repository, never()).update(any(SalesOrder.class), any(Long.class));
+        assertTrue(auditCommands.isEmpty());
+    }
+
     /** 修改 Draft 成功时记录固定字段摘要，不保存原始请求体。 */
     @Test
     void updateDraftRecordsStructuredAudit() {

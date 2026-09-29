@@ -3,6 +3,7 @@ package com.ailearn.platform.core.transfer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -19,10 +20,12 @@ import com.ailearn.platform.core.masterdata.domain.port.WarehouseReferencePort;
 import com.ailearn.platform.core.transfer.application.TransferApplicationServiceImpl;
 import com.ailearn.platform.core.transfer.domain.TransferLine;
 import com.ailearn.platform.core.transfer.domain.TransferOrder;
+import com.ailearn.platform.core.transfer.domain.TransferPage;
 import com.ailearn.platform.core.transfer.domain.TransferRepository;
 import com.ailearn.platform.core.transfer.domain.TransferStatus;
 import com.ailearn.platform.core.transfer.dto.TransferCreateRequest;
 import com.ailearn.platform.core.transfer.dto.TransferLineRequest;
+import com.ailearn.platform.core.transfer.dto.TransferPageQuery;
 import com.ailearn.platform.core.transfer.dto.TransferView;
 import com.ailearn.platform.shared.context.RequestContextHolder;
 import com.ailearn.platform.shared.context.TenantContextHolder;
@@ -127,6 +130,25 @@ class TransferApplicationServiceTest {
         assertThrows(ValidationException.class, () -> service.create(request, "transfer-invalid-1"));
 
         verify(repository, never()).insert(any(TransferOrder.class));
+    }
+
+    /**
+     * 用途：验证极大页码不会把调拨分页偏移量算成负数。
+     * 入参：最大 int 页码和 1000 条页大小；出参：仓储端口收到未截断的 long 偏移量。
+     */
+    @Test
+    void largePageDoesNotOverflowOffset() {
+        TransferPageQuery query = new TransferPageQuery();
+        query.setPage(Integer.MAX_VALUE);
+        query.setSize(1000);
+        when(repository.findPage(eq(TENANT_A), anyLong(), eq(1000), eq(null), eq(null)))
+                .thenReturn(new TransferPage(List.of(), 0));
+
+        service.page(query);
+
+        ArgumentCaptor<Long> offset = ArgumentCaptor.forClass(Long.class);
+        verify(repository).findPage(eq(TENANT_A), offset.capture(), eq(1000), eq(null), eq(null));
+        assertEquals(2_147_483_646_000L, offset.getValue());
     }
 
     @Test

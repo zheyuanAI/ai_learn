@@ -198,8 +198,9 @@ public class ManufacturingFoundationServiceImpl implements ManufacturingFoundati
      * 构造基础事实分页结果；入参为已过滤集合和规范化查询，出参包含总数及总页数。
      */
     private <T> MasterDataPageResult<T> page(List<T> values, ManufacturingPageQuery query) {
-        int from = Math.min((query.getPage() - 1) * query.getSize(), values.size());
-        int to = Math.min(from + query.getSize(), values.size());
+        // 修改用途：偏移以 long 计算，避免极大页码的 int 乘法溢出后误返回已有记录。
+        int from = (int) Math.min(((long) query.getPage() - 1) * query.getSize(), values.size());
+        int to = (int) Math.min((long) from + query.getSize(), values.size());
         return new MasterDataPageResult<>(values.subList(from, to), values.size(),
                 query.getPage(), query.getSize());
     }

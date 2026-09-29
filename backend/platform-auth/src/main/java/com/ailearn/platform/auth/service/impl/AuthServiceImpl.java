@@ -103,7 +103,12 @@ public class AuthServiceImpl implements AuthService {
             log.warn("[登录失败] 租户不存在: tenantCode={}", request.getTenantCode());
             throw new NotFoundException("指定租户不存在: " + request.getTenantCode());
         }
-        if (!"ACTIVE".equalsIgnoreCase(tenant.getStatus())) {
+        // 修改用途：登录发布 Redis JTI 前与租户停用共用行锁，等待并发停用提交后重新读取状态。
+        if (!tenant.getId().equals(userMapper.lockTenantForAdminMutation(tenant.getId()))) {
+            throw new AuthException("所属租户已失效，禁止登录");
+        }
+        tenant = tenantMapper.selectById(tenant.getId());
+        if (tenant == null || tenant.getIsdel() != 0 || !"ACTIVE".equalsIgnoreCase(tenant.getStatus())) {
             log.warn("[登录失败] 租户已停用: tenantCode={}", request.getTenantCode());
             throw new AuthException("所属租户已停用，禁止登录");
         }
@@ -202,21 +207,18 @@ public class AuthServiceImpl implements AuthService {
     }
 
     /**
-     * 注销指定租户下用户的全部活跃会话，并同步清除 Redis 中的会话与授权缓存。
-     * 调用方应传入当前可信会话上下文；数据库会话事实和缓存清理均失败时交由统一异常边界处理，不返回部分成功状态。
+     * 修改用途：只注销当前请求已验证的会话；迟到的旧请求不得清除并发登录的新会话。
+     * 入参：可信用户、租户及请求 JTI；出参：无；流程：精确撤销数据库会话，再原子比较 JTI 并移除 Redis 会话与权限缓存。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void logout(UUID userId, UUID tenantId) {
+    public void logout(UUID userId, UUID tenantId, String jti) {
+        if (jti == null || jti.isBlank()) {
+            throw new AuthException("会话标识缺失，禁止注销");
+        }
         log.info("[注销登录] userId={}, tenantId={}", userId, tenantId);
-        LocalDateTime now = LocalDateTime.now();
-
-        // 1. 废弃数据库中活跃会话
-        userSessionMapper.revokeActiveSessions(tenantId, userId, now, "LOGOUT");
-
-        // 2. 清除 Redis 活跃会话与缓存
-        sessionCacheService.removeActiveSession(tenantId, userId);
-        sessionCacheService.evictUserAuthCache(tenantId, userId);
+        userSessionMapper.revokeByJti(tenantId, userId, jti, LocalDateTime.now(), "LOGOUT");
+        sessionCacheService.removeSessionAndAuthCacheIfMatches(tenantId, userId, jti);
     }
 
     /**

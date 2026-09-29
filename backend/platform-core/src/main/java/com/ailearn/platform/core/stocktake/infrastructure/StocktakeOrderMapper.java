@@ -64,7 +64,7 @@ public interface StocktakeOrderMapper {
             """)
     @ResultMap("stocktakeOrderRowMap")
     List<StocktakeOrderRow> findPage(@Param("tenantId") UUID tenantId,
-                                     @Param("offset") int offset,
+                                     @Param("offset") long offset,
                                      @Param("limit") int limit,
                                      @Param("status") String status,
                                      @Param("keyword") String keyword);

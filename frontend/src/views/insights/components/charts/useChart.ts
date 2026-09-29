@@ -7,13 +7,24 @@
  */
 
 import { shallowRef, onMounted, onUnmounted, type Ref } from "vue";
-import * as echarts from "echarts";
+import type { EChartsOption, EChartsType } from "echarts";
+import * as echarts from "echarts/core";
+import { BarChart, GaugeChart, PieChart, RadarChart } from "echarts/charts";
+import { GridComponent, LegendComponent, RadarComponent, TooltipComponent } from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
+
+// 修改用途：只注册当前七个看板图表实际使用的类型与组件，降低首次进入看板时的脚本体积。
+echarts.use([
+  BarChart, GaugeChart, PieChart, RadarChart,
+  GridComponent, LegendComponent, RadarComponent, TooltipComponent,
+  CanvasRenderer,
+]);
 
 export function useChart(
   containerRef: Ref<HTMLElement | null>,
-  getOption: () => echarts.EChartsOption
+  getOption: () => EChartsOption
 ) {
-  const chartInstance = shallowRef<echarts.ECharts | null>(null);
+  const chartInstance = shallowRef<EChartsType | null>(null);
   let resizeObserver: ResizeObserver | null = null;
 
   const initChart = () => {

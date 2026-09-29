@@ -13,6 +13,22 @@ describe("useCommand", () => {
     await expect(first).resolves.toBe("ok");
   });
 
+  it("执行中拒绝手动重置幂等键", async () => {
+    // 用途：验证未完成命令无法被重置后并发重放；入参为挂起的命令，出参为执行状态与原键断言。
+    const command = useCommand();
+    const originalKey = command.idempotencyKey.value;
+    let resolveFirst!: (value: string) => void;
+    const first = command.execute(() => new Promise<string>((resolve) => { resolveFirst = resolve; }));
+
+    expect(() => command.reset()).toThrow("命令正在执行中");
+    expect(command.isExecuting.value).toBe(true);
+    expect(command.idempotencyKey.value).toBe(originalKey);
+    await expect(command.execute(async () => "duplicate")).rejects.toThrow("命令正在执行中");
+
+    resolveFirst("ok");
+    await expect(first).resolves.toBe("ok");
+  });
+
   it("503 后复用同一幂等键重试，成功后换新键", async () => {
     const command = useCommand();
     const keys: string[] = [];

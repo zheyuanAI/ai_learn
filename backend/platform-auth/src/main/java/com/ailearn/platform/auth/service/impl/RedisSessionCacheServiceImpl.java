@@ -19,6 +19,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 /**
@@ -38,6 +39,11 @@ public class RedisSessionCacheServiceImpl implements SessionCacheService {
     private static final String KEY_PREFIX_SESSION = "auth:session:";
     private static final String KEY_PREFIX_PERMS = "auth:perms:";
     private static final String KEY_PREFIX_MENUS = "auth:menus:";
+    // 修改用途：注销仅能删除当前请求的 JTI，比较与删除必须在 Redis 内一次完成，不能先 GET 再 DELETE。
+    private static final DefaultRedisScript<Long> REMOVE_IF_MATCHES = new DefaultRedisScript<>(
+            "if redis.call('GET', KEYS[1]) == ARGV[1] then "
+                    + "redis.call('DEL', KEYS[1], KEYS[2], KEYS[3]); return 1 "
+                    + "else return 0 end", Long.class);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -163,6 +169,29 @@ public class RedisSessionCacheServiceImpl implements SessionCacheService {
         } catch (Exception e) {
             log.error("[Redis删除会话失败] key={}, error={}", buildSessionKey(tenantId, userId), e.getMessage());
             throw new ServiceUnavailableException("会话服务暂时不可用，请稍后重试", e);
+        }
+    }
+
+    /**
+     * 用途：注销时仅撤销当前请求的会话和缓存，避免迟到的旧注销清除新登录授权。
+     * 入参：可信租户、用户和请求 JTI；出参：是否成功撤销当前活跃会话。
+     * 流程：通过 Redis 脚本原子比较 JTI，并一次性删除会话、权限和菜单键。
+     */
+    @Override
+    public boolean removeSessionAndAuthCacheIfMatches(UUID tenantId, UUID userId, String jti) {
+        try {
+            Long removed = redisTemplate.execute(REMOVE_IF_MATCHES,
+                    List.of(buildSessionKey(tenantId, userId), buildPermsKey(tenantId, userId),
+                            buildMenusKey(tenantId, userId)), jti);
+            if (removed == null) {
+                throw new ServiceUnavailableException("会话服务暂时不可用，请稍后重试");
+            }
+            return removed == 1L;
+        } catch (ServiceUnavailableException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.error("[Redis条件注销失败] tenantId={}, userId={}, error={}", tenantId, userId, ex.getMessage());
+            throw new ServiceUnavailableException("会话服务暂时不可用，请稍后重试", ex);
         }
     }
 

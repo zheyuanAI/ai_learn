@@ -215,7 +215,7 @@ public class PostgresTelemetryStore implements TelemetryDeduplicationPort, Telem
                     ON CONFLICT (tenant_id, device_id) DO UPDATE
                        SET online_status = EXCLUDED.online_status,
                            running_status = EXCLUDED.running_status,
-                           alarm_status = EXCLUDED.alarm_status,
+                           -- 修改用途：保留告警写入口的当前快照，不用摄取前读取的旧告警状态覆盖并发更新。
                            last_seen_at = EXCLUDED.last_seen_at,
                            last_message_key = EXCLUDED.last_message_key,
                            last_source_at = EXCLUDED.last_source_at,

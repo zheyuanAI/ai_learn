@@ -77,7 +77,7 @@ public class InMemoryAlarmRepository implements AlarmRepository {
     @Override
     public synchronized List<AlarmFact> findPage(UUID tenantId, UUID deviceId, AlarmStatus status, String alarmLevel,
                                                  OffsetDateTime from, OffsetDateTime to, String contextStatus,
-                                                 int offset, int limit) {
+                                                 long offset, int limit) {
         List<AlarmFact> filtered = records.values().stream()
                 .filter(fact -> fact.tenantId().equals(tenantId))
                 .filter(fact -> deviceId == null || fact.deviceId().equals(deviceId))
@@ -88,8 +88,10 @@ public class InMemoryAlarmRepository implements AlarmRepository {
                 .filter(fact -> contextStatus == null || contextStatus.equals(fact.contextStatus()))
                 .sorted(Comparator.comparing(AlarmFact::triggeredAt).reversed())
                 .toList();
-        int start = Math.min(Math.max(0, offset), filtered.size());
-        return new ArrayList<>(filtered.subList(start, Math.min(filtered.size(), start + Math.max(0, limit))));
+        // 修改用途：先用 long 限定大页码，再转换为集合索引；超出总数时返回空页。
+        int start = (int) Math.min(Math.max(0L, offset), filtered.size());
+        int end = (int) Math.min((long) filtered.size(), (long) start + Math.max(0, limit));
+        return new ArrayList<>(filtered.subList(start, end));
     }
 
     @Override

@@ -28,13 +28,14 @@ public interface AuthService {
     /**
      * 用户注销登出。
      * <p>
-     * 废弃数据库活跃会话记录并清除 Redis 会话与权限缓存。
+     * 修改用途：仅撤销当前请求 JTI 对应的数据库记录及匹配的 Redis 会话与权限缓存，不影响后登录的新会话。
      * </p>
      *
      * @param userId   当前登录用户 ID
      * @param tenantId 当前登录租户 ID
+     * @param jti 当前请求已验证的会话 JTI
      */
-    void logout(UUID userId, UUID tenantId);
+    void logout(UUID userId, UUID tenantId, String jti);
 
     /**
      * 获取当前登录用户的全量个人信息、角色与功能权限点集合。

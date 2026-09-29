@@ -9,6 +9,7 @@ import com.ailearn.platform.auth.domain.vo.LoginResponse;
 import com.ailearn.platform.auth.domain.vo.MenuNodeVo;
 import com.ailearn.platform.auth.domain.vo.UserProfileVo;
 import com.ailearn.platform.auth.security.jwt.JwtTokenService;
+import com.ailearn.platform.auth.service.AuthService;
 import com.ailearn.platform.shared.api.ApiResponse;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -77,6 +78,9 @@ public class AuthIntegrationTest {
 
     @Autowired
     private com.ailearn.platform.auth.service.SessionCacheService sessionCacheService;
+
+    @Autowired
+    private AuthService authService;
 
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
@@ -387,6 +391,26 @@ public class AuthIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
+    }
+
+    /**
+     * 用途：验证旧注销请求在认证后被新登录抢先完成时，不会撤销新设备会话。
+     * 入参：同账号先后签发的旧、新 JTI；出参：新 Token 仍能访问受保护接口。
+     * 流程：两次登录后直接续执行已通过过滤器的旧注销服务调用，再检查会话和权限缓存。
+     */
+    @Test
+    @DisplayName("迟到的旧注销不能撤销后登录的新会话")
+    void testDelayedLogoutPreservesNewSession() throws Exception {
+        LoginResponse oldSession = doLogin("DEFAULT", "sales.liu", "123456");
+        LoginResponse newSession = doLogin("DEFAULT", "sales.liu", "123456");
+        authService.logout(oldSession.getUser().getUserId(), oldSession.getUser().getTenantId(), oldSession.getJti());
+
+        assertEquals(newSession.getJti(), sessionCacheService.getActiveSessionJti(
+                newSession.getUser().getTenantId(), newSession.getUser().getUserId()));
+        assertNotNull(sessionCacheService.getCachedPermissions(
+                newSession.getUser().getTenantId(), newSession.getUser().getUserId()));
+        mockMvc.perform(get("/api/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + newSession.getToken()))
+                .andExpect(status().isOk());
     }
 
     @Test

@@ -117,7 +117,7 @@ public interface InventoryTransactionMapper {
                                              @Param("occurredFrom") java.time.OffsetDateTime occurredFrom,
                                              @Param("occurredTo") java.time.OffsetDateTime occurredTo,
                                              @Param("limit") int limit,
-                                             @Param("offset") int offset);
+                                             @Param("offset") long offset);
 
     /**
      * 统计流水查询总数。

@@ -57,7 +57,7 @@ public class AuthController {
     /**
      * 用户注销接口。
      * <p>
-     * 撤销当前用户的活跃会话记录并清除 Redis 缓存。
+     * 修改用途：只撤销请求已验证的 JTI；若并发产生新登录，不清除新设备会话及权限缓存。
      * </p>
      *
      * @return 成功响应
@@ -67,7 +67,7 @@ public class AuthController {
     public ApiResponse<Void> logout() {
         UUID userId = UserContextHolder.requireUserId();
         UUID tenantId = TenantContextHolder.requireTenantId();
-        authService.logout(userId, tenantId);
+        authService.logout(userId, tenantId, UserContextHolder.getSessionId());
         return ApiResponse.success("注销成功", null);
     }
 

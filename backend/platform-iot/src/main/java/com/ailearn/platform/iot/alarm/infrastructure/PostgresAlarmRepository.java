@@ -115,7 +115,7 @@ public class PostgresAlarmRepository implements AlarmRepository {
     @Override
     public List<AlarmFact> findPage(UUID tenantId, UUID deviceId, AlarmStatus status, String alarmLevel,
                                     OffsetDateTime from, OffsetDateTime to, String contextStatus,
-                                    int offset, int limit) {
+                                    long offset, int limit) {
         Query query = query(tenantId, deviceId, status, alarmLevel, from, to, contextStatus);
         // query() 只负责拼接 FROM/WHERE 条件；分页查询必须补齐 SELECT 列，避免把 FROM 片段直接交给 JDBC。
         String sql = """

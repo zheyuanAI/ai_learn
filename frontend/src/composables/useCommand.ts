@@ -66,7 +66,8 @@ export function useCommand() {
 
     try {
       const result = await fn(idempotencyKey.value);
-      // 命令成功，自动准备下一个命令
+      // 修改用途：命令真正完成后才允许重置，避免执行期间的手动 reset 放开重复提交。
+      isExecuting.value = false;
       reset();
       return result;
     } catch (error: any) {
@@ -126,10 +127,15 @@ export function useCommand() {
    * 在用户明确开始新的业务操作或放弃重试时调用。
    */
   function reset() {
+    // 修改用途：执行中的命令结果尚不确定，禁止更换幂等键或清除防重复提交标记。
+    if (isExecuting.value) {
+      throw new Error("命令正在执行中，不能重置");
+    }
     idempotencyKey.value = generateIdempotencyKey();
     lastError.value = null;
     canRetry.value = false;
-    isExecuting.value = false;
+    retryOperation = null;
+    retryOptions = undefined;
   }
 
   return {

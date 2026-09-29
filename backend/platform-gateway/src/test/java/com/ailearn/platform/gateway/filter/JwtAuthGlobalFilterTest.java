@@ -140,6 +140,32 @@ class JwtAuthGlobalFilterTest {
     }
 
     @Test
+    @DisplayName("普通 OPTIONS 放行时不得向下游透传客户端伪造的身份及权限 Header")
+    void testOptionsRequestSanitizesClientContextHeaders() {
+        // 非 CORS 预检 OPTIONS 仍可沿网关路由转发，不允许绕过入口可信身份边界。
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest
+                .method(org.springframework.http.HttpMethod.OPTIONS, "/api/core/purchase-orders")
+                .header(HeaderConstants.X_REQUEST_ID, "req-options-1")
+                .header(HeaderConstants.X_USER_ID, "forged-user")
+                .header(HeaderConstants.X_TENANT_ID, "forged-tenant")
+                .header(HeaderConstants.X_AUTHORITIES, "ROLE_ADMIN")
+                .header(HeaderConstants.X_SESSION_ID, "forged-jti")
+                .build());
+        when(filterChain.filter(any(ServerWebExchange.class))).thenReturn(Mono.empty());
+
+        StepVerifier.create(filter.filter(exchange, filterChain)).verifyComplete();
+
+        ArgumentCaptor<ServerWebExchange> captor = ArgumentCaptor.forClass(ServerWebExchange.class);
+        verify(filterChain).filter(captor.capture());
+        HttpHeaders forwarded = captor.getValue().getRequest().getHeaders();
+        assertNull(forwarded.getFirst(HeaderConstants.X_USER_ID));
+        assertNull(forwarded.getFirst(HeaderConstants.X_TENANT_ID));
+        assertNull(forwarded.getFirst(HeaderConstants.X_AUTHORITIES));
+        assertNull(forwarded.getFirst(HeaderConstants.X_SESSION_ID));
+        assertEquals("req-options-1", forwarded.getFirst(HeaderConstants.X_REQUEST_ID));
+    }
+
+    @Test
     @DisplayName("测试用例2：白名单接口直接放行并透传 Request-Id")
     void testWhitelistEndpointDirectlyPassesThrough() {
         MockServerHttpRequest request = MockServerHttpRequest

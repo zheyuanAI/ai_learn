@@ -150,7 +150,8 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
     public MasterDataPageResult<TransferView> page(TransferPageQuery query) {
         Actor actor = actor();
         TransferPageQuery normalized = query == null ? new TransferPageQuery() : query.normalized();
-        int offset = (normalized.getPage() - 1) * normalized.getSize();
+        // 修改用途：使用 long 计算大页码偏移，避免 int 乘法溢出后向数据库传入负 OFFSET。
+        long offset = ((long) normalized.getPage() - 1) * normalized.getSize();
         TransferPage page = repository.findPage(actor.tenantId(), offset, normalized.getSize(),
                 normalized.getStatus() == null ? null : normalized.getStatus().name(), normalized.getKeyword());
         List<TransferView> views = page.records().stream()

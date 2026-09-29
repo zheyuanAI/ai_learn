@@ -267,14 +267,13 @@ function onUsernameInput() {
 
 /**
  * 快捷选择 6 类演示角色
- * 中文注释：点击预设角色芯片，秒级填入对应的系统用户名与演示密码 123456，同时点亮对应芯片
+ * 修改用途：快捷选择只填入用户名，不在前端提供、展示或覆盖任何演示密码；密码须由用户自行输入。
  */
 function quickSelectRole(username: string) {
   formData.username = username;
-  formData.password = "123456";
   authStore.isSessionValid = true;
   show401Alert.value = false;
-  showToast(`已选择角色：${ROLE_PRESETS[username]?.roleName || username}，已自动填入用户名及演示密码 123456`);
+  showToast(`已选择角色：${ROLE_PRESETS[username]?.roleName || username}，请输入密码后登录`);
 }
 
 /**

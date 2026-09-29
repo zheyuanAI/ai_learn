@@ -3,6 +3,7 @@ package com.ailearn.platform.core.stocktake;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -23,11 +24,13 @@ import com.ailearn.platform.core.masterdata.domain.port.WarehouseReferencePort;
 import com.ailearn.platform.core.stocktake.application.StocktakeApplicationServiceImpl;
 import com.ailearn.platform.core.stocktake.domain.StocktakeLine;
 import com.ailearn.platform.core.stocktake.domain.StocktakeOrder;
+import com.ailearn.platform.core.stocktake.domain.StocktakePage;
 import com.ailearn.platform.core.stocktake.domain.StocktakeRepository;
 import com.ailearn.platform.core.stocktake.domain.StocktakeStatus;
 import com.ailearn.platform.core.stocktake.dto.StocktakeConfirmRequest;
 import com.ailearn.platform.core.stocktake.dto.StocktakeCountLineRequest;
 import com.ailearn.platform.core.stocktake.dto.StocktakeCreateRequest;
+import com.ailearn.platform.core.stocktake.dto.StocktakePageQuery;
 import com.ailearn.platform.core.stocktake.dto.StocktakeView;
 import com.ailearn.platform.core.stocktake.exception.StocktakeException;
 import com.ailearn.platform.core.inventory.exception.InventoryException;
@@ -120,6 +123,25 @@ class StocktakeApplicationServiceTest {
         assertEquals("NotStarted", result.getStatus());
         assertEquals(1, result.getAllowedActions().size());
         assertEquals("start", result.getAllowedActions().getFirst().getAction());
+    }
+
+    /**
+     * 用途：验证极大页码不会让盘点分页偏移量溢出。
+     * 入参：最大 int 页码与 1000 条页大小；出参：仓储端口收到未截断的 long 偏移量。
+     */
+    @Test
+    void largePageDoesNotOverflowOffset() {
+        StocktakePageQuery query = new StocktakePageQuery();
+        query.setPage(Integer.MAX_VALUE);
+        query.setSize(1000);
+        when(repository.findPage(eq(TENANT_A), anyLong(), eq(1000), eq(null), eq(null)))
+                .thenReturn(new StocktakePage(List.of(), 0));
+
+        service.page(query);
+
+        ArgumentCaptor<Long> offset = ArgumentCaptor.forClass(Long.class);
+        verify(repository).findPage(eq(TENANT_A), offset.capture(), eq(1000), eq(null), eq(null));
+        assertEquals(2_147_483_646_000L, offset.getValue());
     }
 
     @Test

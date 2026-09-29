@@ -131,8 +131,9 @@ public class DispatchApplicationServiceImpl implements DispatchApplicationServic
                 .filter(value -> normalized.getStatus() == null
                         || normalized.getStatus().equalsIgnoreCase(value.status().name()))
                 .toList();
-        int from = Math.min((normalized.getPage() - 1) * normalized.getSize(), filtered.size());
-        int to = Math.min(from + normalized.getSize(), filtered.size());
+        // 修改用途：先用 long 计算大页码偏移，避免 int 乘法回绕后误返回第一页。
+        int from = (int) Math.min(((long) normalized.getPage() - 1) * normalized.getSize(), filtered.size());
+        int to = (int) Math.min((long) from + normalized.getSize(), filtered.size());
         // 修改用途：列表不再直接暴露内部派工聚合，统一返回页面字段和服务端动作能力。
         List<DispatchOrderView> views = filtered.subList(from, to).stream()
                 .map(DispatchOrderView::from)

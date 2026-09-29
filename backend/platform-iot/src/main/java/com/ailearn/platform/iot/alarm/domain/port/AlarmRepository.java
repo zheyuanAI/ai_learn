@@ -48,7 +48,7 @@ public interface AlarmRepository {
 
     List<AlarmFact> findPage(UUID tenantId, UUID deviceId, AlarmStatus status, String alarmLevel,
                              OffsetDateTime from, OffsetDateTime to, String contextStatus,
-                             int offset, int limit);
+                             long offset, int limit);
 
     long count(UUID tenantId, UUID deviceId, AlarmStatus status, String alarmLevel,
                OffsetDateTime from, OffsetDateTime to, String contextStatus);

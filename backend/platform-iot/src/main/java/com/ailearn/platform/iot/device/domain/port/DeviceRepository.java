@@ -12,6 +12,8 @@ public interface DeviceRepository {
     boolean existsDeviceByCode(UUID tenantId, String deviceCode);
     Device insert(Device device);
     Optional<Device> findDeviceById(UUID tenantId, UUID id);
+    /** 创建凭证前锁定租户内设备，防止生命周期并发变更使停用设备获得新凭证。 */
+    Optional<Device> findDeviceByIdForUpdate(UUID tenantId, UUID id);
     Optional<Device> findByCode(UUID tenantId, String deviceCode);
     List<Device> findPage(UUID tenantId, String code, DeviceLifecycleStatus status, int offset, int limit);
     long count(UUID tenantId, String code, DeviceLifecycleStatus status);

@@ -188,7 +188,8 @@ public class StocktakeApplicationServiceImpl implements StocktakeApplicationServ
     public MasterDataPageResult<StocktakeView> page(StocktakePageQuery query) {
         Actor actor = actor();
         StocktakePageQuery normalized = query == null ? new StocktakePageQuery() : query.normalized();
-        int offset = (normalized.getPage() - 1) * normalized.getSize();
+        // 修改用途：使用 long 计算合法大页码，避免负 OFFSET 影响盘点查询。
+        long offset = ((long) normalized.getPage() - 1) * normalized.getSize();
         StocktakePage page = repository.findPage(actor.tenantId(), offset, normalized.getSize(),
                 normalized.getStatus() == null ? null : normalized.getStatus().name(), normalized.getKeyword());
         List<StocktakeView> views = page.records().stream()

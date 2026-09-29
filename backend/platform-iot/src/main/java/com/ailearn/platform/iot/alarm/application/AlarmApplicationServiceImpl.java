@@ -197,7 +197,8 @@ public class AlarmApplicationServiceImpl implements AlarmApplicationService, Tel
         if (from != null && to != null && from.isAfter(to)) {
             throw new IllegalArgumentException("date_from 不能晚于 date_to");
         }
-        int offset = (page - 1) * size;
+        // 修改用途：告警大页码使用 long 偏移，避免溢出后错误重读第一页。
+        long offset = ((long) page - 1) * size;
         List<AlarmView> records = alarmRepository.findPage(tenantId, deviceId, status, normalize(alarmLevel),
                         from, to, normalize(contextStatus), offset, size).stream()
                 .map(AlarmView::from).toList();

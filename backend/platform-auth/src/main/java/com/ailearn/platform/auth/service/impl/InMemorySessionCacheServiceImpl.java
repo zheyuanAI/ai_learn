@@ -120,6 +120,27 @@ public class InMemorySessionCacheServiceImpl implements SessionCacheService {
     }
 
     /**
+     * 用途：在测试替身中仅注销匹配的当前 JTI，迟到的旧注销不清理新会话。
+     * 入参：租户、用户及请求 JTI；出参：是否真正撤销。
+     * 流程：在会话键的原子 compute 中比较并同步移除对应权限、菜单快照。
+     */
+    @Override
+    public boolean removeSessionAndAuthCacheIfMatches(UUID tenantId, UUID userId, String jti) {
+        String key = buildKey(tenantId, userId);
+        boolean[] removed = {false};
+        sessionStore.computeIfPresent(key, (ignored, entry) -> {
+            if (entry.isExpired() || !entry.value.equals(jti)) {
+                return entry;
+            }
+            permsStore.remove(key);
+            menusStore.remove(key);
+            removed[0] = true;
+            return null;
+        });
+        return removed[0];
+    }
+
+    /**
      * 读取测试用权限快照；过期和缺失均返回 null，由上层回源重建。
      *
      * @param tenantId 租户 ID

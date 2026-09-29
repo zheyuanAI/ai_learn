@@ -380,7 +380,8 @@ public class PostgresInventoryRepository implements InventoryRepository {
     @Override
     public InventoryBalancePage queryBalances(UUID tenantId, InventoryBalanceQuery query) {
         return database(() -> {
-            int offset = (query.page() - 1) * query.size();
+            // 修改用途：用 long 保留合法大页码偏移，避免余额查询向数据库传入负 OFFSET。
+            long offset = ((long) query.page() - 1) * query.size();
             List<InventoryBalance> content = balanceMapper.selectPage(tenantId, query.productId(),
                             query.warehouseId(), query.locationId(), query.normalizedLotNo(),
                             query.size(), offset)
@@ -401,7 +402,8 @@ public class PostgresInventoryRepository implements InventoryRepository {
     @Override
     public InventoryReservationPage queryReservations(UUID tenantId, InventoryReservationQuery query) {
         return database(() -> {
-            int offset = (query.page() - 1) * query.size();
+            // 修改用途：用 long 保留合法大页码偏移，避免预留查询向数据库传入负 OFFSET。
+            long offset = ((long) query.page() - 1) * query.size();
             List<InventoryReservationView> content = reservationMapper.selectPage(tenantId,
                             query.reservationId(), query.sourceType(), query.sourceId(), query.sourceLineId(),
                             query.status(), query.productId(), query.warehouseId(), query.locationId(),
@@ -431,7 +433,8 @@ public class PostgresInventoryRepository implements InventoryRepository {
     @Override
     public InventoryTransactionPage queryTransactions(UUID tenantId, InventoryTransactionQuery query) {
         return database(() -> {
-            int offset = (query.page() - 1) * query.size();
+            // 修改用途：用 long 保留合法大页码偏移，避免流水查询向数据库传入负 OFFSET。
+            long offset = ((long) query.page() - 1) * query.size();
             List<InventoryTransaction> content = transactionMapper.selectPage(tenantId,
                             query.transactionType(), query.sourceType(), query.sourceId(), query.sourceLineId(),
                             query.productId(), query.warehouseId(), query.locationId(), query.normalizedLotNo(),

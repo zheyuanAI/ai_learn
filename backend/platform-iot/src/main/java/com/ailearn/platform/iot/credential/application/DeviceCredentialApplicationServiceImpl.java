@@ -65,7 +65,10 @@ public class DeviceCredentialApplicationServiceImpl implements DeviceCredentialA
         String hash = digest(new CreatePayload(deviceId, normalizedRequest));
         return idempotency.execute("iot:credential:create", tenantId, idempotencyKey, hash,
                 CredentialCreatedView.class, () -> {
-                    Device device = requireDevice(tenantId, deviceId);
+                    // 修改：事务内先锁定设备行，再校验生命周期并创建凭证，阻止并发停用后的凭证签发。
+                    Device device = deviceRepository.findDeviceByIdForUpdate(tenantId, deviceId)
+                            .filter(found -> tenantId.equals(found.tenantId()))
+                            .orElseThrow(() -> new IotException(IotErrorCode.DEVICE_INVALID, "设备不存在或不属于当前租户"));
                     if (device.lifecycleStatus() != DeviceLifecycleStatus.Active) {
                         throw new IotException(IotErrorCode.DEVICE_INVALID, "已停用设备不能创建接入凭证");
                     }

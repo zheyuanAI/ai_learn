@@ -161,7 +161,8 @@ service.interceptors.request.use(
     return config;
   },
   (error) => {
-    console.error("[Request Interceptor Error]:", error);
+    // 修改用途：请求配置异常只记录摘要，避免原始错误对象中的认证头进入控制台日志。
+    console.error("[Request Interceptor Error]:", error instanceof Error ? error.message : "请求配置失败");
     return Promise.reject(error);
   }
 );
@@ -223,39 +224,36 @@ service.interceptors.response.use(
     const requestId = readRequestId(responseData, error.response?.headers) || readRequestId(undefined, error.config?.headers);
     const businessCode = responseData && typeof responseData === "object" ? (responseData.code || 0) : 0;
 
-    let message = "网络请求失败，请检查网络或后端服务状态";
+    // 修改用途：先保留后端明确说明；响应体没有有效文案时再按实际 HTTP 状态生成提示。
+    let message = typeof responseData?.message === "string" ? responseData.message.trim() : "";
     let retryable = false;
-
-    if (responseData && typeof responseData === "object" && responseData.message) {
-      message = responseData.message;
-    }
 
     switch (status) {
       case 401:
-        message = message || "未授权或当前会话已在其他终端登录 (401)";
+        message ||= "未授权或当前会话已在其他终端登录 (401)";
         handleUnauthorized(message);
         break;
       case 403:
-        message = message || "抱歉，您没有权限执行此操作 (403)";
+        message ||= "抱歉，您没有权限执行此操作 (403)";
         // 403 不可重试，权限不足需要联系管理员
         break;
       case 404:
-        message = message || "请求的接口资源不存在 (404)";
+        message ||= "请求的接口资源不存在 (404)";
         break;
       case 409:
         // 409 冲突：操作可能已执行，提示用户刷新查看结果
-        message = message || "操作冲突：该命令可能已执行成功，请刷新页面查看最新状态 (409)";
+        message ||= "操作冲突：该命令可能已执行成功，请刷新页面查看最新状态 (409)";
         break;
       case 422:
-        message = message || "请求参数校验失败，请检查输入 (422)";
+        message ||= "请求参数校验失败，请检查输入 (422)";
         break;
       case 500:
-        message = message || "后端服务异常，请稍后重试 (500)";
+        message ||= "后端服务异常，请稍后重试 (500)";
         break;
       case 502:
       case 503:
         // 502/503 可重试：服务暂不可用，结果可能不确定
-        message = message || "后端服务暂不可用，请稍后重试 (503)";
+        message ||= `后端服务暂不可用，请稍后重试 (${status})`;
         retryable = true;
         break;
       default:
@@ -267,11 +265,14 @@ service.interceptors.response.use(
           // 网络错误：结果不确定
           message = "无法连接至后端网关服务，操作结果不确定 (Network Error)";
           retryable = true;
+        } else {
+          message ||= status ? `请求失败 (HTTP ${status})` : "网络请求失败，请检查网络或后端服务状态";
         }
         break;
     }
 
-    console.error(`[HTTP Error ${status || "UNKNOWN"}]:`, message, `requestId=${requestId}`, error);
+    // 修改用途：仅记录状态、说明与请求号；Axios 原始错误可能包含 Authorization 等敏感请求头。
+    console.error(`[HTTP Error ${status || "UNKNOWN"}]:`, message, `requestId=${requestId}`);
     return Promise.reject(new ApiError({
       message,
       httpStatus: status,

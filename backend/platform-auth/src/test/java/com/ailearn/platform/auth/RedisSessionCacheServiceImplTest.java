@@ -4,16 +4,21 @@ import com.ailearn.platform.auth.service.impl.RedisSessionCacheServiceImpl;
 import com.ailearn.platform.shared.exception.ServiceUnavailableException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -23,6 +28,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -143,6 +150,29 @@ class RedisSessionCacheServiceImplTest {
 
         assertThrows(ServiceUnavailableException.class,
                 () -> cacheService.evictUserAuthCache(tenantId, userId));
+    }
+
+    /**
+     * 用途：验证注销使用一次 Redis 脚本比较 JTI 并删除三个绑定键，旧会话不触碰新会话缓存。
+     * 入参：脚本返回匹配与不匹配结果；出参：仅匹配时返回成功。
+     * 流程：模拟 Redis 执行结果并核对键顺序和请求 JTI。
+     */
+    @Test
+    @DisplayName("条件注销必须使用会话 JTI 原子比较并删除授权缓存")
+    void shouldRemoveSessionOnlyWhenJtiMatches() {
+        String sessionKey = "auth:session:" + tenantId + ":" + userId;
+        String permsKey = "auth:perms:" + tenantId + ":" + userId;
+        String menusKey = "auth:menus:" + tenantId + ":" + userId;
+        List<String> keys = List.of(sessionKey, permsKey, menusKey);
+        when(redisTemplate.execute(any(RedisScript.class), eq(keys), eq("old-jti"))).thenReturn(0L);
+        when(redisTemplate.execute(any(RedisScript.class), eq(keys), eq("current-jti"))).thenReturn(1L);
+
+        assertFalse(cacheService.removeSessionAndAuthCacheIfMatches(tenantId, userId, "old-jti"));
+        assertTrue(cacheService.removeSessionAndAuthCacheIfMatches(tenantId, userId, "current-jti"));
+        ArgumentCaptor<RedisScript> script = ArgumentCaptor.forClass(RedisScript.class);
+        verify(redisTemplate, times(2)).execute(script.capture(), eq(keys), anyString());
+        assertTrue(script.getValue().getScriptAsString().contains("redis.call('GET', KEYS[1]) == ARGV[1]"));
+        assertTrue(script.getValue().getScriptAsString().contains("redis.call('DEL', KEYS[1], KEYS[2], KEYS[3])"));
     }
 
     /**
